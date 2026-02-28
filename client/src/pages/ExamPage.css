@@ -1,0 +1,48 @@
+.exam-prestart,
+.exam-result {
+    max-width: 500px;
+    margin: 100px auto;
+    text-align: center;
+}
+
+.score-badge {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--clr-success);
+    margin: var(--sp-6) 0;
+}
+
+.exam-workspace {
+    padding: var(--sp-8);
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.exam-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: var(--clr-bg);
+    padding: var(--sp-4) 0;
+    border-bottom: 2px solid var(--clr-border);
+    margin-bottom: var(--sp-8);
+    z-index: 10;
+}
+
+.timer {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--clr-warning);
+}
+
+.exam-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-10);
+}
+
+.exam-task-card {
+    padding: var(--sp-6);
+}

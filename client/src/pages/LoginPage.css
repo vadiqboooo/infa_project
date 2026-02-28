@@ -1,0 +1,27 @@
+.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: var(--clr-bg);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+
+.login-card h1 {
+    margin-bottom: var(--sp-2);
+}
+
+.login-card p {
+    color: var(--clr-text-muted);
+    margin-bottom: var(--sp-8);
+}
+
+.tg-container {
+    display: flex;
+    justify-content: center;
+}

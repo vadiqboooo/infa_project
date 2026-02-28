@@ -1,0 +1,30 @@
+.answer-section {
+    margin-top: var(--sp-6);
+}
+
+.answer-label {
+    display: block;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--clr-text-muted);
+    margin-bottom: var(--sp-2);
+}
+
+.pair-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+}
+
+.table-grid {
+    display: grid;
+    gap: var(--sp-2);
+    background: var(--clr-border);
+    padding: var(--sp-1);
+    border-radius: var(--radius-sm);
+}
+
+.table-input {
+    text-align: center;
+    border-radius: 0;
+}
