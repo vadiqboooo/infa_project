@@ -15,6 +15,10 @@ class TopicNav(BaseModel):
     id: int
     title: str
     order_index: int
+    category: str = "tutorial"
     tasks: list[TaskNav] = []
+    exam_id: int | None = None
+    latest_score: float | None = None
+    max_score: int | None = None
 
     model_config = {"from_attributes": True}

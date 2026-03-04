@@ -22,6 +22,7 @@ async def get_navigation(
     db: AsyncSession = Depends(get_db),
 ):
     """Return sidebar navigation tree: topics → tasks with user progress."""
+    # Загружаем темы с задачами (сортировка определена в модели)
     result = await db.execute(
         select(Topic).options(selectinload(Topic.tasks)).order_by(Topic.order_index)
     )
@@ -35,6 +36,27 @@ async def get_navigation(
         p.task_id: p.status.value for p in prog_result.scalars().all()
     }
 
+    # Fetch latest exam attempts
+    from app.models.exam import Exam
+    from app.models.exam_attempt import ExamAttempt
+
+    attempts_query = await db.execute(
+        select(ExamAttempt, Exam)
+        .join(Exam, Exam.id == ExamAttempt.exam_id)
+        .where(ExamAttempt.user_id == user.id)
+        .order_by(ExamAttempt.finished_at.desc())
+    )
+    # Map topic_id -> (score, total_tasks, exam_id)
+    exam_map = {}
+    for attempt, exam in attempts_query.all():
+        if exam.topic_id not in exam_map:
+            # First one is the latest due to order_by
+            exam_map[exam.topic_id] = {
+                "score": attempt.score,
+                "max_score": len(exam.tasks) if exam.tasks else 0,
+                "exam_id": exam.id
+            }
+
     nav: list[TopicNav] = []
     for topic in topics:
         tasks_nav = [
@@ -45,11 +67,18 @@ async def get_navigation(
             )
             for t in topic.tasks
         ]
+        
+        exam_data = exam_map.get(topic.id, {})
+        
         nav.append(TopicNav(
             id=topic.id,
             title=topic.title,
             order_index=topic.order_index,
+            category=topic.category,
             tasks=tasks_nav,
+            exam_id=exam_data.get("exam_id"),
+            latest_score=exam_data.get("score"),
+            max_score=exam_data.get("max_score"),
         ))
     return nav
 

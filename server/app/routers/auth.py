@@ -10,11 +10,34 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.auth import TelegramAuthData, TokenResponse
+from app.schemas.auth import TelegramAuthData, TokenResponse, UserSchema, UserUpdate
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/me", response_model=UserSchema)
+async def get_me(user: User = Depends(get_current_user)):
+    """Return currently authenticated user's profile."""
+    return user
+
+
+@router.put("/me", response_model=UserSchema)
+async def update_me(
+    body: UserUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update user's personal details (real name)."""
+    if body.first_name_real is not None:
+        user.first_name_real = body.first_name_real
+    if body.last_name_real is not None:
+        user.last_name_real = body.last_name_real
+    
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 def _verify_telegram_hash(data: TelegramAuthData) -> bool:

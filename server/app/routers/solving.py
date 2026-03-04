@@ -29,26 +29,56 @@ def _answers_equal(correct: dict | None, given: AnswerIn) -> bool:
     expected = correct.get("val")
     user_val = given.val
 
-    if isinstance(expected, (int, float)) and isinstance(user_val, (int, float)):
-        return abs(float(expected) - float(user_val)) < 1e-9
+    if expected is None or user_val is None:
+        return False
 
+    # Helper to convert anything to float if possible
+    def to_float(v):
+        try:
+            if isinstance(v, str):
+                return float(v.replace(",", ".").strip())
+            return float(v)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    # 1. Comparison for single values (number or text)
+    if not isinstance(expected, list) and not isinstance(user_val, list):
+        # Try numeric comparison first
+        f_exp = to_float(expected)
+        f_user = to_float(user_val)
+        if f_exp is not None and f_user is not None:
+            return abs(f_exp - f_user) < 1e-9
+        
+        # Fallback to string comparison
+        return str(expected).strip().lower() == str(user_val).strip().lower()
+
+    # 2. Comparison for lists (pair or table)
     if isinstance(expected, list) and isinstance(user_val, list):
         if len(expected) != len(user_val):
             return False
-        # could be pair or table
-        if expected and isinstance(expected[0], list):
-            # table
+        
+        if len(expected) == 0:
+            return True
+
+        # Check if it's a table (list of lists)
+        if isinstance(expected[0], list):
             for row_e, row_u in zip(expected, user_val):
                 if not isinstance(row_u, list) or len(row_e) != len(row_u):
                     return False
                 for a, b in zip(row_e, row_u):
-                    if abs(float(a) - float(b)) >= 1e-9:
+                    fa, fb = to_float(a), to_float(b)
+                    if fa is not None and fb is not None:
+                        if abs(fa - fb) >= 1e-9: return False
+                    elif str(a).strip().lower() != str(b).strip().lower():
                         return False
             return True
         else:
-            # pair
+            # It's a pair or simple list
             for a, b in zip(expected, user_val):
-                if abs(float(a) - float(b)) >= 1e-9:
+                fa, fb = to_float(a), to_float(b)
+                if fa is not None and fb is not None:
+                    if abs(fa - fb) >= 1e-9: return False
+                elif str(a).strip().lower() != str(b).strip().lower():
                     return False
             return True
 
@@ -124,11 +154,20 @@ async def check_answer(
 
 # ── AI Assist ─────────────────────────────────────────────────
 
-SYSTEM_PROMPT = (
-    "Ты — образовательный ассистент. Помогай ученику разобраться в задаче, "
-    "задавай наводящие вопросы. НИКОГДА не давай прямой ответ. "
-    "Подсказывай шаг за шагом."
-)
+SYSTEM_PROMPT = """Ты — образовательный ассистент для школьников и студентов.
+
+Твоя задача:
+- Помогать разобраться в задаче, задавая наводящие вопросы
+- Объяснять концепции простым языком
+- Давать подсказки шаг за шагом
+- НИКОГДА не давать прямой числовой ответ
+
+Стиль общения:
+- Дружелюбный и поддерживающий
+- Краткие ответы (2-4 предложения)
+- Используй примеры и аналогии
+
+Отвечай на русском языке."""
 
 
 @router.post("/{task_id}/ai-assist", response_model=AIAssistResponse)
@@ -175,17 +214,53 @@ async def ai_assist(
     # Call LLM API
     try:
         async with httpx.AsyncClient(timeout=60) as client:
+            # OpenRouter требует дополнительные заголовки
+            headers = {
+                "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",  # Для OpenRouter
+                "X-Title": "Edu Platform",  # Для OpenRouter
+            }
+
+            payload = {
+                "model": settings.LLM_MODEL,
+                "messages": messages,
+            }
+
+            print(f"[AI] Запрос к {settings.LLM_BASE_URL}/chat/completions")
+            print(f"[AI] Модель: {settings.LLM_MODEL}")
+
             resp = await client.post(
                 f"{settings.LLM_BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.LLM_API_KEY}"},
-                json={"model": settings.LLM_MODEL, "messages": messages},
+                headers=headers,
+                json=payload,
             )
-            resp.raise_for_status()
-            ai_text = resp.json()["choices"][0]["message"]["content"]
-    except Exception as exc:
+
+            print(f"[AI] Статус: {resp.status_code}")
+
+            if resp.status_code != 200:
+                error_text = resp.text
+                print(f"[AI] Ошибка: {error_text}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"LLM API вернул {resp.status_code}: {error_text}",
+                )
+
+            data = resp.json()
+            ai_text = data["choices"][0]["message"]["content"]
+            print(f"[AI] Ответ получен: {len(ai_text)} символов")
+
+    except httpx.HTTPError as exc:
+        print(f"[AI] HTTP ошибка: {exc}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"LLM request failed: {exc}",
+            detail=f"Ошибка подключения к LLM API: {str(exc)}",
+        )
+    except Exception as exc:
+        print(f"[AI] Неожиданная ошибка: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Ошибка обработки ответа LLM: {str(exc)}",
         )
 
     # Save to log

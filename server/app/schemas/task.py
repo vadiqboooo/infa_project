@@ -49,8 +49,9 @@ class AnswerIn(BaseModel):
       single_number → {"val": 3.14}
       pair          → {"val": [1.0, 2.0]}
       table         → {"val": [[1, 2], [3, 4]]}
+      text          → {"val": "xwyz"}
     """
-    val: float | list[float] | list[list[float]]
+    val: float | list[float] | list[list[float]] | str
 
 
 class CheckResult(BaseModel):
