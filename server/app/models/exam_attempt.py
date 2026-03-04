@@ -16,6 +16,7 @@ class ExamAttempt(Base):
     exam_id: Mapped[int] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    primary_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # relationships

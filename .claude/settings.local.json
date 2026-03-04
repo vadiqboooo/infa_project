@@ -4,7 +4,17 @@
       "Bash(python3:*)",
       "Bash(python:*)",
       "Bash(ls:*)",
-      "WebFetch(domain:kompege.ru)"
+      "WebFetch(domain:kompege.ru)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "mcp__figma-remote-mcp__get_metadata",
+      "mcp__figma-remote-mcp__whoami",
+      "Bash(npm install:*)",
+      "Bash(grep:*)",
+      "Bash(npx vite)"
     ]
   }
 }

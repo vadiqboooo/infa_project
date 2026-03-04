@@ -1,80 +1,135 @@
-import React from "react";
-import { useNavigation } from "../hooks/useApi";
-import type { TaskNav, TopicNav } from "../api/types";
-import "./Sidebar.css";
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, BookOpen, ClipboardList, FileText, GraduationCap, Settings, ShieldCheck, LogOut } from 'lucide-react';
+import { clsx } from 'clsx';
+import { ProfileModal } from './ProfileModal';
+import { useAuth } from '../context/AuthContext';
 
-interface Props {
-    selectedTopicId: number | null;
-    onSelectTopic: (topic: TopicNav) => void;
-    mode: "tutorial" | "practice";
-    onToggleMode: () => void;
-}
+export function Sidebar() {
+  const location = useLocation();
+  const [showProfile, setShowProfile] = useState(false);
+  const { user, logout } = useAuth();
 
-function topicProgress(tasks: TaskNav[]): { solved: number; total: number; pct: number } {
-    const total = tasks.length;
-    const solved = tasks.filter((t) => t.status === "solved").length;
-    return { solved, total, pct: total > 0 ? Math.round((solved / total) * 100) : 0 };
-}
+  const links = [
+    { icon: Home, label: 'Главная', path: '/dashboard' },
+    { icon: BookOpen, label: 'Разбор', path: '/tasks' },
+    { icon: ClipboardList, label: 'Домашняя работа', path: '/homework' },
+    { icon: FileText, label: 'Варианты', path: '/exams' },
+  ];
 
-export default function Sidebar({ selectedTopicId, onSelectTopic, mode, onToggleMode }: Props) {
-    const { data: topics, isLoading } = useNavigation();
+  const isActive = (path: string) => {
+    if (path === '/dashboard')
+      return location.pathname === '/dashboard' || location.pathname === '/';
+    if (path === '/tasks')
+      return location.pathname === '/tasks' || location.pathname.startsWith('/task/');
+    if (path === '/exam')
+      return location.pathname === '/exam' || location.pathname.startsWith('/exam/');
+    return location.pathname.startsWith(path);
+  };
 
-    if (isLoading) {
-        return (
-            <aside className="sidebar">
-                <div className="sidebar-header">
-                    <div className="skeleton skeleton-title" style={{ width: "80%" }} />
-                </div>
-                <div className="sidebar-content">
-                    {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="skeleton skeleton-text" style={{ margin: "0.75rem 1rem" }} />
-                    ))}
-                </div>
-            </aside>
-        );
-    }
+  const isAdmin = user?.role === 'admin';
 
-    return (
-        <aside className="sidebar">
-            <div className="sidebar-header">
-                <h2 className="sidebar-title">Темы</h2>
-                <div className="mode-toggle">
-                    <span className={mode === "tutorial" ? "active" : ""}>Разбор</span>
-                    <button className={`toggle-btn ${mode}`} onClick={onToggleMode}>
-                        <div className="toggle-thumb" />
-                    </button>
-                    <span className={mode === "practice" ? "active" : ""}>Практика</span>
-                </div>
-            </div>
+  return (
+    <>
+      <div className="flex flex-col h-screen w-60 bg-white border-r border-gray-200 shrink-0">
+        {/* Logo / Brand */}
+        <div className="p-5 flex items-center gap-3">
+          <div className="w-9 h-9 bg-[#3F8C62] rounded-xl flex items-center justify-center text-white">
+            <GraduationCap size={20} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-gray-900 leading-tight">Информатика</span>
+            <span className="text-[11px] text-gray-400 leading-tight">Подготовка к ЕГЭ</span>
+          </div>
+        </div>
 
-            <nav className="sidebar-content">
-                {topics?.map((topic) => {
-                    const { solved, total, pct } = topicProgress(topic.tasks);
-                    const isActive = selectedTopicId === topic.id;
-                    return (
-                        <div
-                            key={topic.id}
-                            className={`topic-item ${isActive ? "active" : ""}`}
-                            onClick={() => onSelectTopic(topic)}
-                        >
-                            <div className="topic-item-top">
-                                <span className="topic-item-title">{topic.title}</span>
-                                <span className="topic-item-pct">{pct}%</span>
-                            </div>
-                            <div className="topic-progress-track">
-                                <div
-                                    className="topic-progress-fill"
-                                    style={{ width: `${pct}%` }}
-                                />
-                            </div>
-                            <span className="topic-item-sub">{solved} / {total} решено</span>
-                        </div>
-                    );
-                })}
-                {topics?.length === 0 && (
-                    <p className="sidebar-empty">Нет тем. Добавьте их в админке.</p>
+        <nav className="flex-1 px-3 space-y-1 mt-2">
+          {links.map((link) => {
+            const active = isActive(link.path);
+            return (
+              <Link
+                key={link.label}
+                to={link.path}
+                className={clsx(
+                  'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors',
+                  active
+                    ? 'bg-[#3F8C62] text-white font-medium'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 )}
-            </nav>
-        </aside>
-    );
+              >
+                <link.icon size={18} />
+                <span>{link.label}</span>
+              </Link>
+            );
+          })}
+
+          {/* Admin link */}
+          {isAdmin && (
+            <>
+              <div className="h-px bg-gray-100 my-2 mx-2" />
+              <Link
+                to="/admin"
+                className={clsx(
+                  'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors',
+                  location.pathname.startsWith('/admin')
+                    ? 'bg-[#3F8C62] text-white font-medium'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <ShieldCheck size={18} />
+                <span>Админ-панель</span>
+              </Link>
+            </>
+          )}
+        </nav>
+
+        {/* User card */}
+        <div className="p-3 space-y-2">
+          <div
+            onClick={() => setShowProfile(true)}
+            className={clsx(
+              'flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors cursor-pointer group',
+              showProfile
+                ? 'bg-[#3F8C62]/10 ring-1 ring-[#3F8C62]/20'
+                : 'bg-gray-50 hover:bg-gray-100'
+            )}
+          >
+            <div className="relative shrink-0">
+              {user?.photo_url ? (
+                <img src={user.photo_url} alt={user.first_name || ''} className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3F8C62] to-[#2D6B4A] flex items-center justify-center text-white text-sm font-bold">
+                  {user?.first_name?.charAt(0) || 'U'}
+                </div>
+              )}
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>
+              <p className="text-[11px] text-[#3F8C62] truncate leading-tight">Онлайн</p>
+            </div>
+            <Settings
+              size={16}
+              className={clsx(
+                'transition-colors shrink-0',
+                showProfile
+                  ? 'text-[#3F8C62]'
+                  : 'text-gray-300 group-hover:text-gray-500'
+              )}
+            />
+          </div>
+
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            <LogOut size={18} />
+            <span>Выйти</span>
+          </button>
+        </div>
+      </div>
+
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+    </>
+  );
 }

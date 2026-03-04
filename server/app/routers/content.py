@@ -53,6 +53,7 @@ async def get_navigation(
             # First one is the latest due to order_by
             exam_map[exam.topic_id] = {
                 "score": attempt.score,
+                "primary_score": attempt.primary_score,
                 "max_score": len(exam.tasks) if exam.tasks else 0,
                 "exam_id": exam.id
             }
@@ -63,7 +64,9 @@ async def get_navigation(
             TaskNav(
                 id=t.id,
                 external_id=t.external_id,
+                ege_number=t.ege_number,
                 status=progress_map.get(t.id, "not_started"),
+                has_solution=bool(t.solution_steps and len(t.solution_steps) > 0),
             )
             for t in topic.tasks
         ]
@@ -78,6 +81,7 @@ async def get_navigation(
             tasks=tasks_nav,
             exam_id=exam_data.get("exam_id"),
             latest_score=exam_data.get("score"),
+            latest_primary_score=exam_data.get("primary_score"),
             max_score=exam_data.get("max_score"),
         ))
     return nav

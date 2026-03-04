@@ -7,8 +7,13 @@ import type {
     AnswerVal,
     AIAssistResponse,
     AIMode,
+    ExamInfo,
     ExamStartResponse,
     ExamResult,
+    UserStats,
+    WeeklyActivity,
+    TopicsPerformance,
+    RecentSolutions,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -55,10 +60,22 @@ export function useAIAssist(taskId: number) {
 }
 
 /* ── Exam ─────────────────────────────────────────── */
+export function useExamByTopic(topicId: number | null) {
+    return useQuery<ExamInfo>({
+        queryKey: ["exam", "topic", topicId],
+        queryFn: () => api<ExamInfo>(`/exams/by-topic/${topicId}`),
+        enabled: !!topicId,
+    });
+}
+
 export function useStartExam(examId: number) {
+    const qc = useQueryClient();
     return useMutation<ExamStartResponse, Error, void>({
         mutationFn: () =>
             api<ExamStartResponse>(`/exams/${examId}/start`, { method: "POST" }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["exam"] });
+        },
     });
 }
 
@@ -69,5 +86,34 @@ export function useSubmitExam(examId: number) {
                 method: "POST",
                 body: JSON.stringify(body),
             }),
+    });
+}
+
+/* ── Statistics ──────────────────────────────────────── */
+export function useUserStats() {
+    return useQuery<UserStats>({
+        queryKey: ["stats", "overview"],
+        queryFn: () => api<UserStats>("/stats/overview"),
+    });
+}
+
+export function useWeeklyActivity() {
+    return useQuery<WeeklyActivity>({
+        queryKey: ["stats", "weekly"],
+        queryFn: () => api<WeeklyActivity>("/stats/weekly-activity"),
+    });
+}
+
+export function useTopicsPerformance() {
+    return useQuery<TopicsPerformance>({
+        queryKey: ["stats", "topics"],
+        queryFn: () => api<TopicsPerformance>("/stats/topics-performance"),
+    });
+}
+
+export function useRecentSolutions(limit: number = 10) {
+    return useQuery<RecentSolutions>({
+        queryKey: ["stats", "recent", limit],
+        queryFn: () => api<RecentSolutions>(`/stats/recent-solutions?limit=${limit}`),
     });
 }

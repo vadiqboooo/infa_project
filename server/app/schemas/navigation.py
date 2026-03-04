@@ -6,7 +6,9 @@ from pydantic import BaseModel
 class TaskNav(BaseModel):
     id: int
     external_id: str | None = None
+    ege_number: int | None = None
     status: str = "not_started"  # not_started / solved / failed
+    has_solution: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -19,6 +21,7 @@ class TopicNav(BaseModel):
     tasks: list[TaskNav] = []
     exam_id: int | None = None
     latest_score: float | None = None
+    latest_primary_score: int | None = None
     max_score: int | None = None
 
     model_config = {"from_attributes": True}

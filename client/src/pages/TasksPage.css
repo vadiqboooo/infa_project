@@ -1,0 +1,730 @@
+.main-layout {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+/* ── Hamburger button ──────────────────────── */
+
+.hamburger-btn {
+    position: fixed;
+    top: var(--sp-4);
+    left: var(--sp-4);
+    z-index: 1001;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hamburger-btn:hover {
+    background: var(--clr-surface-2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* На десктопе сдвигаем кнопку вместе с sidebar */
+@media (min-width: 769px) {
+    .main-layout:has(.sidebar-wrapper.open) .hamburger-btn {
+        left: calc(280px + var(--sp-4));
+    }
+
+    /* Когда sidebar закрыт, добавляем большой padding слева для кнопки */
+    .main-layout:has(.sidebar-wrapper:not(.open)) .task-header {
+        padding-left: calc(44px + var(--sp-8) + var(--sp-4));
+    }
+
+    /* На мобильных тоже нужен отступ */
+}
+
+@media (max-width: 768px) {
+    .task-header {
+        padding-left: calc(44px + var(--sp-8) + var(--sp-4)) !important;
+    }
+}
+
+.hamburger-line {
+    width: 20px;
+    height: 2px;
+    background: var(--clr-text);
+    border-radius: 2px;
+    transition: all 0.2s ease;
+}
+
+/* ── Sidebar wrapper & overlay ──────────────── */
+
+.sidebar-wrapper {
+    width: 280px;
+    height: 100vh;
+    flex-shrink: 0;
+    transition: margin-left 0.3s ease, width 0.3s ease;
+    z-index: 1000;
+}
+
+.sidebar-wrapper:not(.open) {
+    margin-left: -280px;
+    width: 0;
+}
+
+.sidebar-overlay {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Desktop: sidebar pushes content, mobile: overlay */
+@media (max-width: 768px) {
+    .sidebar-wrapper {
+        position: fixed;
+        top: 0;
+        left: -280px;
+        width: 280px;
+        margin-left: 0;
+    }
+
+    .sidebar-wrapper.open {
+        left: 0;
+    }
+
+    .sidebar-wrapper:not(.open) {
+        width: 280px;
+    }
+
+    .sidebar-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        animation: fadeIn 0.3s ease;
+    }
+}
+
+.workspace {
+    flex: 1;
+    background: var(--clr-bg);
+    padding-left: 72px;
+    min-height: 100vh;
+    transition: all 0.3s ease;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+/* На десктопе компенсируем отрицательный margin sidebar */
+@media (min-width: 769px) {
+    /* Когда sidebar закрыт, сдвигаем workspace вправо */
+    .main-layout:has(.sidebar-wrapper:not(.open)) .workspace {
+        margin-left: 280px;
+    }
+}
+
+/* ── Empty State ──────────────────────────── */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 80vh;
+    text-align: center;
+    color: var(--clr-text-muted);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: var(--sp-4);
+}
+
+/* ── Exam Results ──────────────────────────── */
+
+.exam-result-card {
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-8);
+    max-width: 600px;
+    width: 100%;
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.exam-result-title {
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    color: var(--clr-text);
+    margin-bottom: var(--sp-6);
+}
+
+.exam-result-score {
+    margin: var(--sp-6) 0;
+}
+
+.score-circle {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
+    background: linear-gradient(135deg, var(--clr-primary), var(--clr-accent));
+    border-radius: 50%;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+}
+
+.score-value {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+}
+
+.score-label {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-top: var(--sp-2);
+}
+
+.exam-result-info {
+    margin: var(--sp-6) 0;
+    color: var(--clr-text-muted);
+}
+
+.exam-result-info p {
+    margin: var(--sp-2) 0;
+}
+
+.exam-date {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+}
+
+.exam-result-actions {
+    display: flex;
+    gap: var(--sp-3);
+    justify-content: center;
+    margin-top: var(--sp-6);
+}
+
+.exam-result-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin: var(--sp-6) 0;
+    padding: var(--sp-5);
+    background: var(--clr-bg);
+    border-radius: var(--radius-lg);
+}
+
+.result-stat {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: var(--fs-base);
+    color: var(--clr-text);
+}
+
+.stat-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+}
+
+.stat-icon.correct {
+    background: var(--clr-success-bg);
+    color: var(--clr-success);
+}
+
+.stat-icon.total {
+    background: var(--clr-surface-2);
+    color: var(--clr-text-muted);
+}
+
+/* ── Exam View Notice ──────────────────────────── */
+
+.exam-view-notice {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    background: var(--clr-warning-bg);
+    border: 1px solid var(--clr-warning);
+    border-radius: var(--radius-lg);
+    color: var(--clr-warning);
+    font-weight: 600;
+    font-size: var(--fs-sm);
+    margin-top: var(--sp-4);
+}
+
+/* ── Finish Exam Button ──────────────────────────── */
+
+.btn-finish-exam {
+    padding: var(--sp-2) var(--sp-4);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Ensure timer + finish button wrapper doesn't overflow */
+.task-progress-info > div {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* ── Fixed Header ──────────────────────────── */
+
+.task-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--clr-bg);
+    border-bottom: 1px solid var(--clr-border);
+    padding: var(--sp-5) var(--sp-6);
+    backdrop-filter: blur(8px);
+    background: rgba(15, 17, 23, 0.95);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.task-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-4);
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+
+.task-topic-title {
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    color: var(--clr-text);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.task-progress-info {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--clr-text-muted);
+    background: var(--clr-surface);
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--clr-border);
+    flex-shrink: 0;
+    max-width: 100%;
+}
+
+/* ── Compact Navigation ──────────────────────── */
+
+.task-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.task-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    color: var(--clr-text);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.task-nav-btn:hover:not(:disabled) {
+    background: var(--clr-surface-2);
+    border-color: var(--clr-primary);
+    color: var(--clr-primary);
+}
+
+.task-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.task-nav-btn span {
+    font-size: var(--fs-md);
+}
+
+.task-nav-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--sp-1) 0;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.task-nav-center::-webkit-scrollbar {
+    height: 6px;
+}
+
+.task-nav-center::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.task-nav-center::-webkit-scrollbar-thumb {
+    background: var(--clr-border);
+    border-radius: 3px;
+}
+
+.task-nav-center::-webkit-scrollbar-thumb:hover {
+    background: var(--clr-text-muted);
+}
+
+/* Task squares (like pills but square) */
+.task-square {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    background: var(--clr-surface);
+    border: 2px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    color: var(--clr-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.task-square:hover {
+    background: var(--clr-surface-2);
+    border-color: var(--clr-primary);
+    color: var(--clr-text);
+    transform: translateY(-2px);
+}
+
+.task-square.active {
+    background: var(--clr-primary);
+    border-color: var(--clr-primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.task-square.solved {
+    background: var(--clr-success-bg);
+    border-color: var(--clr-success);
+    color: var(--clr-success);
+}
+
+.task-square.solved.active {
+    background: var(--clr-success);
+    color: white;
+}
+
+.task-square.failed {
+    background: var(--clr-danger-bg);
+    border-color: var(--clr-danger);
+    color: var(--clr-danger);
+}
+
+.task-square.failed.active {
+    background: var(--clr-danger);
+    color: white;
+}
+
+/* ── Task Content Wrapper ──────────────────────── */
+
+.task-content-wrapper {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: var(--sp-6);
+}
+
+/* ── Task Layout (двухколоночная) ──────────────── */
+
+.task-layout {
+    display: flex;
+    gap: var(--sp-6);
+    align-items: flex-start;
+}
+
+/* Левая часть - текст задачи */
+.task-main {
+    flex: 1;
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-6);
+    line-height: 1.8;
+    min-height: 400px;
+    box-shadow: var(--shadow);
+}
+
+/* Правая часть - ответ и ИИ */
+.task-sidebar {
+    flex: 0 0 400px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+}
+
+.task-answer-section {
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-xl);
+    padding: var(--sp-6);
+    box-shadow: var(--shadow);
+}
+
+.answer-label {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--clr-text);
+    margin: 0 0 var(--sp-4) 0 !important;
+    padding-top: 0 !important;
+    display: block;
+}
+
+.task-answer-section {
+    padding-top: var(--sp-6) !important;
+}
+
+.task-answer-section > h3:first-child,
+.task-answer-section > *:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Убираем отступ сверху у task-main тоже */
+.task-main {
+    padding-top: var(--sp-6) !important;
+}
+
+.answer-actions {
+    margin-top: var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    align-items: flex-start;
+}
+
+.btn-check {
+    padding: var(--sp-4) var(--sp-6);
+    font-size: var(--fs-md);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    border-radius: var(--radius-lg);
+    transition: all 0.2s ease;
+    min-width: 200px;
+}
+
+.btn-check span:first-child {
+    font-size: var(--fs-lg);
+}
+
+.btn-check:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-check:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Answer Feedback ──────────────────────────── */
+
+.answer-feedback {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    font-size: var(--fs-base);
+    animation: slideIn 0.3s ease;
+    max-width: fit-content;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.answer-feedback.correct {
+    background: var(--clr-success-bg);
+    color: var(--clr-success);
+    border: 1px solid var(--clr-success);
+}
+
+.answer-feedback.incorrect {
+    background: var(--clr-danger-bg);
+    color: var(--clr-danger);
+    border: 1px solid var(--clr-danger);
+}
+
+.feedback-icon {
+    font-size: var(--fs-xl);
+    font-weight: 700;
+}
+
+/* ── Responsive ──────────────────────────────── */
+
+@media (max-width: 1024px) {
+    /* На планшетах и мобильных - одна колонка */
+    .task-layout {
+        flex-direction: column;
+    }
+
+    .task-sidebar {
+        position: static;
+        flex: 1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .workspace {
+        padding-left: var(--sp-4);
+    }
+
+    .task-header {
+        padding: var(--sp-4);
+    }
+
+    .task-header-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--sp-3);
+    }
+
+    .task-topic-title {
+        font-size: var(--fs-lg);
+        max-width: 100%;
+    }
+
+    .task-progress-info {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .task-progress-info > div {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--sp-2);
+    }
+
+    .btn-finish-exam {
+        width: 100%;
+    }
+
+    .task-nav {
+        flex-direction: column;
+        gap: var(--sp-2);
+        width: 100%;
+    }
+
+    .task-nav-center {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .task-selector {
+        width: 100%;
+    }
+
+    .task-content-wrapper {
+        padding: var(--sp-4);
+    }
+
+    .task-main,
+    .task-answer-section {
+        padding: var(--sp-4);
+    }
+
+    /* На мобильных кнопка и feedback на всю ширину */
+    .answer-actions {
+        align-items: stretch;
+    }
+
+    .btn-check {
+        width: 100%;
+    }
+
+    .answer-feedback {
+        max-width: 100%;
+    }
+
+    .exam-result-actions {
+        flex-direction: column;
+    }
+
+    .exam-result-actions .btn {
+        width: 100%;
+    }
+}

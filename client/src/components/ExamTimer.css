@@ -1,0 +1,51 @@
+/* ── Exam Timer ──────────────────────────────────── */
+
+.exam-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.exam-timer-icon {
+    font-size: var(--fs-lg);
+}
+
+.exam-timer-text {
+    font-size: var(--fs-base);
+    font-family: "Courier New", monospace;
+    color: var(--clr-text);
+}
+
+.exam-timer.low-time {
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.5);
+}
+
+.exam-timer.low-time .exam-timer-text {
+    color: #f59e0b;
+}
+
+.exam-timer.critical {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.5);
+    animation: pulse-critical 1s ease-in-out infinite;
+}
+
+.exam-timer.critical .exam-timer-text {
+    color: #ef4444;
+}
+
+@keyframes pulse-critical {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}

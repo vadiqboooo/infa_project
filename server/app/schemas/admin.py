@@ -38,6 +38,7 @@ class TaskAdminIn(BaseModel):
     difficulty: TaskDifficulty = TaskDifficulty.easy
     correct_answer: dict | None = None
     solution_steps: list | None = None
+    full_solution_code: str | None = None
 
 
 class ImportVariantIn(BaseModel):
@@ -64,6 +65,7 @@ class TaskAdminOut(BaseModel):
     difficulty: TaskDifficulty = TaskDifficulty.easy
     correct_answer: dict | None = None
     solution_steps: list | None = None
+    full_solution_code: str | None = None
 
     model_config = {"from_attributes": True}
 

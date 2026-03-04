@@ -1,64 +1,166 @@
 .task-view {
-    background: var(--clr-surface);
-    border: 1px solid var(--clr-border);
-    border-radius: var(--radius-lg);
-    padding: var(--sp-8);
-    margin-bottom: var(--sp-6);
-    box-shadow: var(--shadow);
+    margin: 0;
+    padding: 0;
 }
 
 .task-title {
     font-size: var(--fs-xl);
     font-weight: 700;
     margin-bottom: var(--sp-6);
-    color: var(--clr-primary);
+    color: var(--clr-text);
 }
 
 .task-body {
-    line-height: 1.8;
+    line-height: 1.9;
     font-size: var(--fs-base);
+    color: var(--clr-text);
+}
+
+.task-body > *:first-child {
+    margin-top: 0 !important;
 }
 
 .task-body p {
-    margin-bottom: var(--sp-4);
+    margin-bottom: var(--sp-5);
+}
+
+.task-body p:last-child {
+    margin-bottom: 0;
+}
+
+.task-body strong,
+.task-body b {
+    font-weight: 700;
+    color: var(--clr-text);
+}
+
+.task-body em,
+.task-body i {
+    font-style: italic;
+    color: var(--clr-text-muted);
+}
+
+.task-body ul,
+.task-body ol {
+    margin: var(--sp-4) 0;
+    padding-left: var(--sp-6);
+}
+
+.task-body li {
+    margin-bottom: var(--sp-2);
+}
+
+.task-body code {
+    font-family: 'Courier New', monospace;
+    background: var(--clr-surface-2);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.9em;
+    color: var(--clr-primary);
+}
+
+.task-body pre {
+    background: var(--clr-surface-2);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4);
+    margin: var(--sp-5) 0;
+    overflow-x: auto;
+}
+
+.task-body pre code {
+    background: none;
+    padding: 0;
+    color: var(--clr-text);
 }
 
 .task-body img {
     display: block;
     margin: var(--sp-6) auto;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     max-width: 100%;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--clr-border);
+}
+
+.task-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--sp-5) 0;
+}
+
+.task-body th,
+.task-body td {
+    padding: var(--sp-3);
+    border: 1px solid var(--clr-border);
+    text-align: left;
+}
+
+.task-body th {
+    background: var(--clr-surface-2);
+    font-weight: 600;
 }
 
 .task-files {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--sp-2);
-    margin-top: var(--sp-4);
-    padding-top: var(--sp-4);
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-6);
     border-top: 1px solid var(--clr-border);
 }
 
 .task-files-label {
     font-size: var(--fs-sm);
-    color: var(--clr-muted, #888);
-    margin-right: var(--sp-1);
+    font-weight: 600;
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--sp-2);
 }
 
 .task-file-link {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--sp-2);
     font-size: var(--fs-sm);
-    color: var(--clr-primary, #6366f1);
+    font-weight: 500;
+    color: var(--clr-primary);
     text-decoration: none;
-    padding: 2px var(--sp-2);
-    border: 1px solid currentColor;
-    border-radius: var(--radius);
-    transition: background 0.15s;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--clr-primary-bg);
+    border: 1px solid var(--clr-primary);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+    max-width: fit-content;
 }
 
 .task-file-link:hover {
-    background: rgba(99, 102, 241, 0.1);
+    background: var(--clr-primary);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* Better KaTeX formula styling */
+.task-body .katex-display {
+    margin: var(--sp-5) 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--sp-3) 0;
+}
+
+.task-body .katex {
+    font-size: 1.15em;
+    color: var(--clr-text);
+}
+
+.task-body .katex-html {
+    color: var(--clr-text);
+}
+
+/* Inline формулы */
+.task-body p .katex {
+    font-size: 1.1em;
+    vertical-align: middle;
 }

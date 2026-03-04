@@ -28,5 +28,6 @@ class ExamResult(BaseModel):
     attempt_id: int
     total_tasks: int
     correct_count: int
+    primary_score: int
     score: float
     finished_at: datetime

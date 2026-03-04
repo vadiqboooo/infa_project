@@ -39,6 +39,7 @@ class Task(Base):
     difficulty: Mapped[TaskDifficulty] = mapped_column(Enum(TaskDifficulty), nullable=False, default=TaskDifficulty.easy)
     correct_answer: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     solution_steps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    full_solution_code: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # relationships
     topic = relationship("Topic", back_populates="tasks")

@@ -13,9 +13,15 @@ class TaskOut(BaseModel):
     id: int
     topic_id: int
     external_id: str | None = None
+    ege_number: int | None = None
+    title: str | None = None
+    description: str | None = None
     content_html: str
     media_resources: list | dict | None = None
     answer_type: AnswerType
+    difficulty: str = "easy"
+    solution_steps: list | None = None
+    full_solution_code: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -29,6 +35,8 @@ class TaskSyncItem(BaseModel):
     media_resources: list | dict | None = None
     answer_type: AnswerType = AnswerType.single_number
     correct_answer: dict | None = None
+    solution_steps: list | None = None
+    full_solution_code: str | None = None
 
 
 class TaskSyncIn(BaseModel):

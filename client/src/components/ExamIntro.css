@@ -1,0 +1,115 @@
+/* ── Exam Intro ──────────────────────────────────── */
+
+.exam-intro {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 200px);
+    padding: var(--sp-6);
+}
+
+.exam-intro-card {
+    max-width: 600px;
+    width: 100%;
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-lg);
+    padding: var(--sp-8);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-6);
+}
+
+.exam-intro-title {
+    font-size: var(--fs-2xl);
+    font-weight: 700;
+    color: var(--clr-text);
+    margin: 0;
+    text-align: center;
+}
+
+.exam-intro-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+}
+
+.exam-info-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    background: var(--clr-bg);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--clr-border);
+}
+
+.exam-info-icon {
+    font-size: var(--fs-2xl);
+}
+
+.exam-info-label {
+    font-size: var(--fs-xs);
+    color: var(--clr-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.exam-info-value {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--clr-text);
+    margin-top: var(--sp-1);
+}
+
+.exam-intro-instructions {
+    background: rgba(99, 102, 241, 0.05);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--sp-5);
+}
+
+.exam-intro-instructions h3 {
+    font-size: var(--fs-base);
+    font-weight: 600;
+    color: var(--clr-text);
+    margin: 0 0 var(--sp-3) 0;
+}
+
+.exam-intro-instructions ul {
+    margin: 0;
+    padding-left: var(--sp-5);
+    list-style-type: disc;
+}
+
+.exam-intro-instructions li {
+    font-size: var(--fs-sm);
+    color: var(--clr-text-muted);
+    margin-bottom: var(--sp-2);
+    line-height: 1.6;
+}
+
+.exam-intro-instructions li:last-child {
+    margin-bottom: 0;
+}
+
+.btn-exam-start {
+    padding: var(--sp-4) var(--sp-6);
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    width: 100%;
+}
+
+@media (max-width: 640px) {
+    .exam-intro {
+        padding: var(--sp-4);
+    }
+
+    .exam-intro-card {
+        padding: var(--sp-5);
+    }
+
+    .exam-intro-info {
+        grid-template-columns: 1fr;
+    }
+}

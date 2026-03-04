@@ -96,6 +96,7 @@ async def get_exam_by_topic(
             "id": finished.id,
             "started_at": finished.started_at,
             "finished_at": finished.finished_at,
+            "primary_score": finished.primary_score,
             "score": finished.score,
         } if finished else None,
     }
@@ -219,6 +220,7 @@ async def submit_exam(
     task_map: dict[int, Task] = {t.id: t for t in exam.tasks}
     total = len(task_map)
     correct_count = 0
+    primary_score = 0
 
     from app.routers.solving import _answers_equal
     from app.models.progress import UserProgress, ProgressStatus
@@ -231,6 +233,11 @@ async def submit_exam(
         is_correct = _answers_equal(task.correct_answer, answer_item.answer)
         if is_correct:
             correct_count += 1
+            # Questions 1-25: 1 point, 26-27: 2 points
+            if task.ege_number and task.ege_number >= 26:
+                primary_score += 2
+            else:
+                primary_score += 1
 
         # Sync with UserProgress so navigation shows solved tasks
         prog_result = await db.execute(
@@ -257,10 +264,17 @@ async def submit_exam(
             if is_correct:
                 progress.status = ProgressStatus.solved
 
-    score = (correct_count / total * 100) if total > 0 else 0.0
+    # EGE scoring conversion table (0 to 29 primary points)
+    ege_score_map = [0, 7, 14, 20, 27, 34, 40, 43, 46, 48, 51, 54, 56, 59, 62, 64, 67, 70, 72, 75, 78, 80, 83, 85, 88, 90, 93, 95, 98, 100]
+    
+    # Ensure primary_score doesn't exceed 29
+    primary_score = min(primary_score, 29)
+    score = float(ege_score_map[primary_score])
+    
     now = datetime.now(timezone.utc)
 
     attempt.finished_at = now
+    attempt.primary_score = primary_score
     attempt.score = score
     await db.commit()
     await db.refresh(attempt)
@@ -269,6 +283,7 @@ async def submit_exam(
         attempt_id=attempt.id,
         total_tasks=total,
         correct_count=correct_count,
+        primary_score=primary_score,
         score=score,
         finished_at=now,
     )

@@ -1,12 +1,10 @@
 .sidebar {
-    width: var(--sidebar-w);
+    width: 100%;
     height: 100vh;
     background: var(--clr-surface);
     border-right: 1px solid var(--clr-border);
     display: flex;
     flex-direction: column;
-    position: sticky;
-    top: 0;
 }
 
 .sidebar-header {
@@ -17,10 +15,46 @@
 .sidebar-title {
     font-size: var(--fs-base);
     font-weight: 700;
-    margin-bottom: var(--sp-4);
+    margin-bottom: var(--sp-3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--clr-text-muted);
+}
+
+/* ── Category Tabs ──────────────────────────── */
+
+.category-tabs {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+    flex-wrap: wrap;
+}
+
+.category-tab {
+    flex: 1;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    background: var(--clr-surface-2);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-md);
+    color: var(--clr-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.category-tab:hover {
+    background: var(--clr-surface);
+    color: var(--clr-text);
+}
+
+.category-tab.active {
+    background: var(--clr-primary);
+    border-color: var(--clr-primary);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .mode-toggle {

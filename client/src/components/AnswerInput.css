@@ -1,30 +1,59 @@
-.answer-section {
-    margin-top: var(--sp-6);
+/* Single number input - ограничиваем ширину */
+.answer-input-single {
+    max-width: 300px;
+    font-size: var(--fs-lg);
+    padding: var(--sp-4);
 }
 
-.answer-label {
-    display: block;
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--clr-text-muted);
-    margin-bottom: var(--sp-2);
-}
-
+/* Pair inputs - компактная сетка */
 .pair-inputs {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--sp-4);
+    max-width: 400px;
 }
 
+.pair-inputs .input {
+    font-size: var(--fs-lg);
+    padding: var(--sp-4);
+    text-align: center;
+}
+
+/* Table grid - компактная таблица */
 .table-grid {
     display: grid;
     gap: var(--sp-2);
-    background: var(--clr-border);
-    padding: var(--sp-1);
-    border-radius: var(--radius-sm);
+    background: var(--clr-surface-2);
+    padding: var(--sp-2);
+    border-radius: var(--radius-md);
+    max-width: 600px;
+    border: 1px solid var(--clr-border);
 }
 
 .table-input {
     text-align: center;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
+    padding: var(--sp-3);
+    font-size: var(--fs-base);
+    min-width: 60px;
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 768px) {
+    .answer-input-single {
+        max-width: 100%;
+    }
+
+    .pair-inputs {
+        max-width: 100%;
+    }
+
+    .table-grid {
+        max-width: 100%;
+    }
+
+    .table-input {
+        min-width: 50px;
+        font-size: var(--fs-sm);
+    }
 }

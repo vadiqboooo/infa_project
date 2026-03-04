@@ -277,6 +277,7 @@ async def create_task(body: TaskAdminIn, db: AsyncSession = Depends(get_db)):
         difficulty=body.difficulty,
         correct_answer=body.correct_answer,
         solution_steps=body.solution_steps,
+        full_solution_code=body.full_solution_code,
         order_index=max_order + 1,
     )
     db.add(task)
@@ -292,17 +293,10 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    task.topic_id = body.topic_id
-    task.external_id = body.external_id
-    task.ege_number = body.ege_number
-    task.title = body.title
-    task.description = body.description
-    task.content_html = body.content_html
-    task.media_resources = body.media_resources
-    task.answer_type = body.answer_type
-    task.difficulty = body.difficulty
-    task.correct_answer = body.correct_answer
-    task.solution_steps = body.solution_steps
+    # Use a safer update pattern
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(task, field, value)
+    
     await db.commit()
     await db.refresh(task)
     return task

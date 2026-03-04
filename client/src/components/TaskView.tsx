@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import parse from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
+import katex from "katex";
 import "katex/dist/katex.min.css";
 import type { TaskFile } from "../api/types";
 import "./TaskView.css";
@@ -13,8 +14,52 @@ interface Props {
 
 const parseOptions: HTMLReactParserOptions = {};
 
+// Функция для рендеринга LaTeX-формул
+function renderLatex(text: string): string {
+    // Обрабатываем display-формулы $$...$$
+    text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+        try {
+            return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+        } catch (e) {
+            return match;
+        }
+    });
+
+    // Обрабатываем inline-формулы $...$
+    text = text.replace(/\$([^\$\n]+?)\$/g, (match, formula) => {
+        try {
+            return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+        } catch (e) {
+            return match;
+        }
+    });
+
+    // Обрабатываем формулы в нотации \(...\) для inline
+    text = text.replace(/\\\(([\s\S]+?)\\\)/g, (match, formula) => {
+        try {
+            return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+        } catch (e) {
+            return match;
+        }
+    });
+
+    // Обрабатываем формулы в нотации \[...\] для display
+    text = text.replace(/\\\[([\s\S]+?)\\\]/g, (match, formula) => {
+        try {
+            return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+        } catch (e) {
+            return match;
+        }
+    });
+
+    return text;
+}
+
 export default function TaskView({ content, title, files }: Props) {
-    const parsedContent = useMemo(() => parse(content, parseOptions), [content]);
+    const parsedContent = useMemo(() => {
+        const processedContent = renderLatex(content);
+        return parse(processedContent, parseOptions);
+    }, [content]);
 
     return (
         <div className="task-view fade-in">
