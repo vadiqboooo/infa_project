@@ -1,12 +1,12 @@
 #!/bin/bash
 DOMAIN="rancheasy.ru"
-EMAIL="vadiqbozhko@gmail.com"
+EMAIL="vadiq12@gmail.com"
 
 echo "### 1. Перезапуск nginx в режиме HTTP..."
 docker compose up -d nginx
 
 echo "### 2. Получение сертификата через certbot..."
-docker compose run --rm certbot certonly --webroot --webroot-path=/var/lib/letsencrypt/ --email $EMAIL --agree-tos --no-eff-email -d $DOMAIN
+docker compose run --rm --entrypoint certbot certbot certonly --webroot --webroot-path=/var/lib/letsencrypt/ --email $EMAIL --agree-tos --no-eff-email -d $DOMAIN
 
 if [ $? -eq 0 ]; then
     echo "### 3. Сертификат успешно получен! Возвращаем конфиг со SSL..."
