@@ -1,29 +1,12 @@
-services:
-  db:
-    image: postgres:15-alpine
-    restart: always
-    environment:
-      POSTGRES_DB: edu_platform
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d edu_platform"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build: ./server
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres_password@db:5432/edu_platform
+      DATABASE_URL: postgresql+asyncpg://postgres:Cvdfer34@host.docker.internal:5432/edu_platform
       JWT_SECRET: your_very_secret_key_here
       # LLM_API_KEY, etc. should be in a separate .env file on the server
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./server:/app
     # Note: Using sh -c to wait for DB and run migrations
@@ -61,6 +44,5 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
-  postgres_data:
   certbot_etc:
   certbot_var:
