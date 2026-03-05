@@ -18,7 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column('topics', sa.Column('is_mock', sa.Integer(), server_default='0', nullable=False))
+    op.execute("ALTER TABLE topics ADD COLUMN IF NOT EXISTS is_mock INTEGER DEFAULT 0 NOT NULL")
 
 
 def downgrade() -> None:
