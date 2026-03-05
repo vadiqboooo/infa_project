@@ -71,19 +71,8 @@ export default function ExamsListPage() {
               <button
                 key={variant.id}
                 onClick={() => navigate(`/exams/${variant.id}`)}
-                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 block w-full relative overflow-hidden min-w-[300px] flex flex-col"
+                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 block w-full relative overflow-hidden min-w-[350px] flex flex-col"
               >
-                {/* Large Solid Accent Score in BACKGROUND - Bottom Right */}
-                {isSolved && (
-                  <div className="absolute right-4 bottom-2 select-none pointer-events-none z-0 opacity-10 transition-transform group-hover:scale-105 duration-700">
-                    <div className="flex flex-col items-end">
-                        <span className="text-[120px] font-black text-[#3F8C62] leading-none tracking-tighter">
-                            {variant.latest_score?.toFixed(0)}
-                        </span>
-                    </div>
-                  </div>
-                )}
-
                 {/* Top row - Foreground */}
                 <div className="flex items-start justify-between mb-8 relative z-10">
                   <div className="flex items-center gap-4">
