@@ -28,7 +28,7 @@ import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
 
 function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem("jwt_token");

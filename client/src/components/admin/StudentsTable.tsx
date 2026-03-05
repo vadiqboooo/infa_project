@@ -9,7 +9,7 @@ interface StudentsTableProps {
   onRefresh?: () => void;
 }
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
 
 export function StudentsTable({ students, apiKey, onRefresh }: StudentsTableProps) {
   const [search, setSearch] = useState('');
