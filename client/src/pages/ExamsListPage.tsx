@@ -71,13 +71,13 @@ export default function ExamsListPage() {
               <button
                 key={variant.id}
                 onClick={() => navigate(`/exams/${variant.id}`)}
-                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 block w-full relative overflow-hidden"
+                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 block w-full relative overflow-hidden min-w-[300px] flex flex-col"
               >
                 {/* Large Solid Accent Score in BACKGROUND - Bottom Right */}
                 {isSolved && (
-                  <div className="absolute right-4 bottom-2 select-none pointer-events-none z-0 opacity-70 transition-transform group-hover:scale-105 duration-700">
+                  <div className="absolute right-4 bottom-2 select-none pointer-events-none z-0 opacity-10 transition-transform group-hover:scale-105 duration-700">
                     <div className="flex flex-col items-end">
-                        <span className="text-[100px] font-black text-[#3F8C62] leading-none tracking-tighter">
+                        <span className="text-[120px] font-black text-[#3F8C62] leading-none tracking-tighter">
                             {variant.latest_score?.toFixed(0)}
                         </span>
                     </div>
@@ -99,7 +99,7 @@ export default function ExamsListPage() {
                     </div>
                     <div>
                       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
-                        Контрольный вариант
+                        {variant.is_mock ? 'Полный вариант' : 'Контрольный вариант'}
                       </div>
                       <div className="font-bold text-gray-900 group-hover:text-[#3F8C62] transition-colors">
                         {variant.title}
@@ -112,10 +112,10 @@ export default function ExamsListPage() {
                   />
                 </div>
 
-                {/* Content / Progress - Foreground (ABOVE the score) */}
-                <div className="relative z-10">
+                {/* Content / Progress - Foreground */}
+                <div className="relative z-10 mt-auto">
                   {!isSolved && (
-                    <div className="flex items-center gap-4 text-xs font-bold text-gray-400 mb-8">
+                    <div className="flex items-center gap-4 text-xs font-bold text-gray-400 mb-6">
                       <span className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">
                         <Clock size={14} className="text-gray-300" />
                         {variant.time_limit_minutes || 235} мин
@@ -124,37 +124,48 @@ export default function ExamsListPage() {
                     </div>
                   )}
 
-                  <div className={cn("space-y-2", isSolved ? "mt-4" : "")}>
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-tight">
-                        <span className="text-gray-400">Прогресс решения</span>
-                      </div>
-                      <div className="relative flex items-center h-6">
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-[#3F8C62] transition-all duration-1000"
-                            style={{ width: `${progressPercent}%` }}
-                          />
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-sm font-black text-gray-900">
-                                {currentPoints} / {maxPoints}
-                            </span>
-                        </div>
-                      </div>
-                      
-                      {isSolved ? (
-                          <div className="flex items-center gap-1.5 text-[#3F8C62] text-[10px] font-bold uppercase pt-1">
-                              <Trophy size={12} />
-                              Завершено
+                  <div className={cn("flex items-center gap-6", isSolved ? "justify-between" : "flex-col items-stretch space-y-2")}>
+                      <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-tight">
+                            <span className="text-gray-400">Прогресс решения</span>
                           </div>
-                      ) : (
-                          <div className="flex items-center justify-between pt-1">
-                              <span className="text-[10px] font-bold text-gray-300 uppercase">
-                                  {solvedTasksCount > 0 ? "В процессе" : "Не начат"}
-                              </span>
-                              <span className="flex items-center gap-1 text-xs text-[#3F8C62] font-bold">
-                                  {solvedTasksCount > 0 ? "Продолжить" : "Начать"}
-                                  <ChevronRight size={14} />
+                          <div className="relative flex items-center h-6">
+                            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-[#3F8C62] transition-all duration-1000"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="text-sm font-black text-gray-900">
+                                    {currentPoints} / {maxPoints}
+                                </span>
+                            </div>
+                          </div>
+                          
+                          {isSolved ? (
+                              <div className="flex items-center gap-1.5 text-[#3F8C62] text-[10px] font-bold uppercase pt-1">
+                                  <Trophy size={12} />
+                                  Завершено
+                              </div>
+                          ) : (
+                              <div className="flex items-center justify-between pt-1">
+                                  <span className="text-[10px] font-bold text-gray-300 uppercase">
+                                      {solvedTasksCount > 0 ? "В процессе" : "Не начат"}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-xs text-[#3F8C62] font-bold">
+                                      {solvedTasksCount > 0 ? "Продолжить" : "Начать"}
+                                      <ChevronRight size={14} />
+                                  </span>
+                              </div>
+                          )}
+                      </div>
+
+                      {isSolved && (
+                          <div className="flex flex-col items-end shrink-0">
+                              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-[-10px]">Балл</div>
+                              <span className="text-6xl font-black text-[#3F8C62] leading-none tracking-tighter">
+                                  {variant.latest_score?.toFixed(0)}
                               </span>
                           </div>
                       )}

@@ -196,9 +196,10 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
                             size={14}
                             className="text-amber-500 mt-0.5 shrink-0"
                           />
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            {step.explanation}
-                          </p>
+                          <div 
+                            className="text-sm text-gray-600 leading-relaxed prose prose-sm max-w-none"
+                            dangerouslySetInnerHTML={{ __html: step.explanation }}
+                          />
                         </div>
 
                         {/* Code block - only show if not empty */}
