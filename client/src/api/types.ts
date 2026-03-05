@@ -69,6 +69,7 @@ export interface TaskOut {
     id: number;
     topic_id: number;
     external_id: string | null;
+    ege_number: number | null;
     content_html: string;
     media_resources: { files?: TaskFile[] } | null;
     answer_type: AnswerType;
@@ -77,6 +78,7 @@ export interface TaskOut {
     description?: string | null;
     solution_steps?: SolutionStep[] | null;
     full_solution_code?: string | null;
+    status?: ProgressStatus;
 }
 
 /* ── Answers ───────────────────────────────────────── */
