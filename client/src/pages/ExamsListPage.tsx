@@ -162,6 +162,7 @@ export default function ExamsListPage() {
             );
           })}
         </div>
-      ) : (    </div>
+      )}
+    </div>
   );
 }
