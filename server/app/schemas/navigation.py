@@ -23,5 +23,7 @@ class TopicNav(BaseModel):
     latest_score: float | None = None
     latest_primary_score: int | None = None
     max_score: int | None = None
+    time_limit_minutes: int | None = None
+    is_mock: bool = False
 
     model_config = {"from_attributes": True}

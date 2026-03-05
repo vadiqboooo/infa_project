@@ -15,6 +15,7 @@ import {
   ArrowUp,
   ArrowDown,
   Search,
+  Clock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
@@ -40,6 +41,11 @@ export function TopicDetail({
   const [editingTask, setEditingTask] = useState<Partial<TaskAdmin> | null>(null);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
   const [search, setSearch] = useState("");
+
+  // Sync internal state when prop updates from server
+  React.useEffect(() => {
+    setEditingTopic(topic);
+  }, [topic]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => 
@@ -75,8 +81,20 @@ export function TopicDetail({
                 type="text"
                 value={editingTopic.title}
                 onChange={(e) => handleTopicFieldChange('title', e.target.value)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20"
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 w-64"
+                placeholder="Название"
               />
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                <Clock size={14} className="text-gray-400" />
+                <input
+                  type="number"
+                  value={editingTopic.time_limit_minutes || 60}
+                  onChange={(e) => handleTopicFieldChange('time_limit_minutes', parseInt(e.target.value) || 0)}
+                  className="w-16 bg-transparent text-sm font-bold focus:outline-none"
+                  placeholder="Мин"
+                />
+                <span className="text-[10px] font-bold text-gray-400 uppercase">Мин</span>
+              </div>
               <select
                 value={editingTopic.category}
                 onChange={(e) => handleTopicFieldChange('category', e.target.value as TopicCategory)}
@@ -86,13 +104,28 @@ export function TopicDetail({
                 <option value="homework">Домашняя работа</option>
                 <option value="variants">Вариант</option>
               </select>
-              <button onClick={handleSaveTopicHeader} className="p-1.5 bg-[#3F8C62] text-white rounded-lg">
+              <select
+                value={editingTopic.is_mock ? 'mock' : 'regular'}
+                onChange={(e) => handleTopicFieldChange('is_mock', e.target.value === 'mock')}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
+              >
+                <option value="regular">Обычная тема</option>
+                <option value="mock">Пробник (Mock)</option>
+              </select>
+              <button onClick={handleSaveTopicHeader} className="p-1.5 bg-[#3F8C62] text-white rounded-lg hover:bg-[#357A54] transition-colors">
                 <Save size={16} />
+              </button>
+              <button onClick={() => setIsEditingHeader(false)} className="p-1.5 bg-gray-100 text-gray-400 rounded-lg hover:bg-gray-200 transition-colors">
+                <X size={16} />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-gray-900">{topic.title}</h2>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-lg">
+                <Clock size={12} />
+                <span className="text-[10px] font-bold">{topic.time_limit_minutes || 60} мин</span>
+              </div>
               <span className={clsx(
                 "px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider",
                 topic.category === 'tutorial' ? "bg-blue-100 text-blue-700" :
@@ -100,6 +133,11 @@ export function TopicDetail({
               )}>
                 {topic.category === 'tutorial' ? 'Разбор' : topic.category === 'homework' ? 'ДЗ' : 'Вариант'}
               </span>
+              {topic.is_mock && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                  Пробник
+                </span>
+              )}
               <button onClick={() => setIsEditingHeader(true)} className="p-1.5 text-gray-400 hover:text-gray-600">
                 <Pencil size={14} />
               </button>

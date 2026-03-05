@@ -22,7 +22,7 @@ async def get_navigation(
     db: AsyncSession = Depends(get_db),
 ):
     """Return sidebar navigation tree: topics → tasks with user progress."""
-    # Загружаем темы с задачами (сортировка определена в модели)
+    # Load topics with tasks
     result = await db.execute(
         select(Topic).options(selectinload(Topic.tasks)).order_by(Topic.order_index)
     )
@@ -36,26 +36,30 @@ async def get_navigation(
         p.task_id: p.status.value for p in prog_result.scalars().all()
     }
 
-    # Fetch latest exam attempts
+    # Fetch all exams to get time limits and task counts
     from app.models.exam import Exam
     from app.models.exam_attempt import ExamAttempt
 
+    all_exams_result = await db.execute(
+        select(Exam).options(selectinload(Exam.tasks))
+    )
+    all_exams = {e.topic_id: e for e in all_exams_result.scalars().unique().all()}
+
+    # Fetch latest exam attempts for the user
     attempts_query = await db.execute(
         select(ExamAttempt, Exam)
         .join(Exam, Exam.id == ExamAttempt.exam_id)
         .where(ExamAttempt.user_id == user.id)
         .order_by(ExamAttempt.finished_at.desc())
     )
-    # Map topic_id -> (score, total_tasks, exam_id)
-    exam_map = {}
+    
+    # Map topic_id -> latest attempt data
+    latest_attempts = {}
     for attempt, exam in attempts_query.all():
-        if exam.topic_id not in exam_map:
-            # First one is the latest due to order_by
-            exam_map[exam.topic_id] = {
+        if exam.topic_id not in latest_attempts:
+            latest_attempts[exam.topic_id] = {
                 "score": attempt.score,
                 "primary_score": attempt.primary_score,
-                "max_score": len(exam.tasks) if exam.tasks else 0,
-                "exam_id": exam.id
             }
 
     nav: list[TopicNav] = []
@@ -71,7 +75,8 @@ async def get_navigation(
             for t in topic.tasks
         ]
         
-        exam_data = exam_map.get(topic.id, {})
+        exam = all_exams.get(topic.id)
+        latest_attempt = latest_attempts.get(topic.id, {})
         
         nav.append(TopicNav(
             id=topic.id,
@@ -79,10 +84,12 @@ async def get_navigation(
             order_index=topic.order_index,
             category=topic.category,
             tasks=tasks_nav,
-            exam_id=exam_data.get("exam_id"),
-            latest_score=exam_data.get("score"),
-            latest_primary_score=exam_data.get("primary_score"),
-            max_score=exam_data.get("max_score"),
+            exam_id=exam.id if exam else None,
+            latest_score=latest_attempt.get("score"),
+            latest_primary_score=latest_attempt.get("primary_score"),
+            max_score=len(exam.tasks) if exam and exam.tasks else len(topic.tasks),
+            time_limit_minutes=exam.time_limit_minutes if exam else 60,
+            is_mock=topic.is_mock,
         ))
     return nav
 
@@ -96,7 +103,7 @@ async def get_task(
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     return task
 
 

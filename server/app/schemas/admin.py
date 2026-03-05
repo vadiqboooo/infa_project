@@ -12,6 +12,8 @@ class TopicIn(BaseModel):
     title: str
     order_index: int = 0
     category: str = "tutorial"
+    time_limit_minutes: int | None = 60
+    is_mock: bool = False
 
 
 class TopicOut(BaseModel):
@@ -20,6 +22,8 @@ class TopicOut(BaseModel):
     order_index: int
     category: str = "tutorial"
     task_count: int = 0
+    time_limit_minutes: int | None = 60
+    is_mock: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ export default function ExamPage() {
     const tasks: TaskNav[] = currentTopic?.tasks ?? [];
     const [taskIndex, setTaskIndex] = useState(0);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
+    const [currentAnswer, setCurrentAnswer] = useState<AnswerVal>("");
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,6 +37,32 @@ export default function ExamPage() {
     const submitExamMutation = useSubmitExam(examInfo?.id ?? 0);
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
+
+    // Sync currentAnswer when task changes
+    useEffect(() => {
+        if (task) {
+            setCurrentAnswer(examAnswers[task.id] ?? "");
+        }
+    }, [task?.id]);
+
+    const isAnswerChanged = useMemo(() => {
+        if (!task) return false;
+        const saved = JSON.stringify(examAnswers[task.id] ?? "");
+        const current = JSON.stringify(currentAnswer);
+        return saved !== current;
+    }, [task, examAnswers, currentAnswer]);
+
+    const isAnswerSaved = useMemo(() => {
+        if (!task) return false;
+        const saved = examAnswers[task.id];
+        return saved !== undefined && saved !== "" && JSON.stringify(saved) !== JSON.stringify([]);
+    }, [task, examAnswers]);
+
+    const handleSaveAnswer = () => {
+        if (task) {
+            setExamAnswers(prev => ({ ...prev, [task.id]: currentAnswer }));
+        }
+    };
 
     // Timer logic
     useEffect(() => {
@@ -350,12 +377,41 @@ export default function ExamPage() {
                                 <div className="space-y-4">
                                     <AnswerInput
                                         type={task?.answer_type || 'single_number'}
-                                        value={examAnswers[task?.id || 0] ?? ""}
-                                        onChange={(val) => {
-                                            setExamAnswers(prev => ({ ...prev, [task?.id || 0]: val }));
-                                        }}
+                                        value={currentAnswer}
+                                        onChange={setCurrentAnswer}
                                         disabled={isSubmitting}
+                                        egeNumber={task?.ege_number}
                                     />
+
+                                    <button
+                                        onClick={handleSaveAnswer}
+                                        disabled={isSubmitting || !isAnswerChanged}
+                                        className={clsx(
+                                            "w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg",
+                                            isAnswerChanged 
+                                                ? "bg-[#3F8C62] hover:bg-[#357A54] text-white shadow-[#3F8C62]/20" 
+                                                : isAnswerSaved
+                                                    ? "bg-emerald-50 text-[#3F8C62] shadow-none opacity-80 cursor-default"
+                                                    : "bg-gray-50 text-gray-300 shadow-none cursor-default"
+                                        )}
+                                    >
+                                        {isAnswerChanged ? (
+                                            <>
+                                                <Save size={16} />
+                                                Сохранить ответ
+                                            </>
+                                        ) : isAnswerSaved ? (
+                                            <>
+                                                <Check size={16} />
+                                                Ответ сохранен
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Save size={16} />
+                                                Сохранить ответ
+                                            </>
+                                        )}
+                                    </button>
                                     
                                     <div className="flex gap-2 pt-2">
                                         <button 

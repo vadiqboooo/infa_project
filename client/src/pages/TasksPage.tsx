@@ -328,7 +328,7 @@ export default function TasksPage() {
                             ) : (
                                 <ExamIntro
                                     taskCount={tasks.length}
-                                    timeLimitMinutes={examInfo?.time_limit_minutes || 235}
+                                    timeLimitMinutes={examInfo?.time_limit_minutes || 60}
                                     onStart={handleStartExam}
                                     loading={startExam.isPending}
                                 />

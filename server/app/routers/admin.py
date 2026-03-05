@@ -43,6 +43,10 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
         select(Task.topic_id, func.count(Task.id)).group_by(Task.topic_id)
     )
     counts = {row[0]: row[1] for row in counts_result.all()}
+    
+    # Get exam time limits
+    exams_result = await db.execute(select(Exam))
+    exams = {e.topic_id: e.time_limit_minutes for e in exams_result.scalars().all()}
 
     return [
         TopicOut(
@@ -51,6 +55,8 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             order_index=t.order_index,
             category=t.category,
             task_count=counts.get(t.id, 0),
+            time_limit_minutes=exams.get(t.id, 60),
+            is_mock=t.is_mock,
         )
         for t in topics
     ]
@@ -58,11 +64,30 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
 
 @router.post("/topics", response_model=TopicOut, status_code=status.HTTP_201_CREATED)
 async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
-    topic = Topic(title=body.title, order_index=body.order_index, category=body.category)
+    topic = Topic(
+        title=body.title, 
+        order_index=body.order_index, 
+        category=body.category,
+        is_mock=body.is_mock
+    )
     db.add(topic)
+    await db.flush()
+    
+    # Create exam
+    exam = Exam(topic_id=topic.id, time_limit_minutes=body.time_limit_minutes or 60)
+    db.add(exam)
+    
     await db.commit()
     await db.refresh(topic)
-    return TopicOut(id=topic.id, title=topic.title, order_index=topic.order_index, category=topic.category, task_count=0)
+    return TopicOut(
+        id=topic.id, 
+        title=topic.title, 
+        order_index=topic.order_index, 
+        category=topic.category, 
+        task_count=0,
+        time_limit_minutes=exam.time_limit_minutes,
+        is_mock=topic.is_mock
+    )
 
 
 @router.put("/topics/{topic_id}", response_model=TopicOut)
@@ -75,6 +100,17 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.title = body.title
     topic.order_index = body.order_index
     topic.category = body.category
+    topic.is_mock = body.is_mock
+    
+    # Update exam
+    exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    exam = exam_res.scalar_one_or_none()
+    if exam:
+        exam.time_limit_minutes = body.time_limit_minutes or 60
+    else:
+        exam = Exam(topic_id=topic_id, time_limit_minutes=body.time_limit_minutes or 60)
+        db.add(exam)
+        
     await db.commit()
     await db.refresh(topic)
 
@@ -82,7 +118,15 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         select(func.count(Task.id)).where(Task.topic_id == topic_id)
     )
     task_count = count_result.scalar() or 0
-    return TopicOut(id=topic.id, title=topic.title, order_index=topic.order_index, category=topic.category, task_count=task_count)
+    return TopicOut(
+        id=topic.id, 
+        title=topic.title, 
+        order_index=topic.order_index, 
+        category=topic.category, 
+        task_count=task_count,
+        time_limit_minutes=exam.time_limit_minutes,
+        is_mock=topic.is_mock
+    )
 
 
 @router.delete("/topics/{topic_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -291,7 +335,7 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
 
     # Use a safer update pattern
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -307,7 +351,7 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     await db.delete(task)
     await db.commit()
 
@@ -318,7 +362,7 @@ async def move_task_up(task_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
 
     # Найти предыдущую задачу в той же теме
     prev_result = await db.execute(
@@ -341,7 +385,7 @@ async def move_task_down(task_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
 
     # Найти следующую задачу в той же теме
     next_result = await db.execute(
@@ -497,7 +541,7 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
 
     exam = Exam(
         topic_id=topic.id,
-        time_limit_minutes=235,
+        time_limit_minutes=body.time_limit_minutes if hasattr(body, 'time_limit_minutes') and body.time_limit_minutes else 235,
     )
     db.add(exam)
     await db.flush()

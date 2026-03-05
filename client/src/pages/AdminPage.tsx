@@ -218,7 +218,13 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const handleCreateTopic = async () => {
         const title = prompt("Введите название новой темы");
         if (!title) return;
-        const body: TopicIn = { title, order_index: topics.length, category: 'tutorial' as TopicCategory };
+        const body: TopicIn = { 
+            title, 
+            order_index: topics.length, 
+            category: 'tutorial' as TopicCategory,
+            time_limit_minutes: 60,
+            is_mock: false
+        };
         await adminFetch("/admin/topics", apiKey, { 
             method: "POST", 
             body: JSON.stringify(body) 
@@ -383,9 +389,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
-                                                    {categoryLabel(topic.category)}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
+                                                        {categoryLabel(topic.category)}
+                                                    </span>
+                                                    {topic.is_mock && (
+                                                        <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                            Пробник
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <span className="text-xs font-bold text-gray-500">{topic.task_count}</span>
@@ -469,7 +482,9 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
         const body: TopicIn = {
             title: data.title || topic.title,
             order_index: data.order_index ?? topic.order_index,
-            category: (data.category as TopicCategory) || topic.category
+            category: (data.category as TopicCategory) || topic.category,
+            time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
+            is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock
         };
         await adminFetch(`/admin/topics/${topic.id}`, apiKey, { 
             method: "PUT", 

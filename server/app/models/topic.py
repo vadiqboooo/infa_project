@@ -13,6 +13,7 @@ class Topic(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     category: Mapped[str] = mapped_column(String(50), default="tutorial", nullable=False)
+    is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
 
     # relationships
     tasks = relationship(

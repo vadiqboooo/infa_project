@@ -1,41 +1,132 @@
-/* Single number input - ограничиваем ширину */
-.answer-input-single {
-    max-width: 300px;
-    font-size: var(--fs-lg);
-    padding: var(--sp-4);
+/* Hide spin buttons in Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-/* Pair inputs - компактная сетка */
+/* Hide spin buttons for Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Base input style: solid black bottom border */
+.input {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #000000;
+    border-radius: 0;
+    outline: none;
+    transition: all 0.2s ease;
+    padding: var(--sp-2) 0;
+    color: #000000;
+    font-weight: 500;
+}
+
+.input:focus {
+    border-bottom-color: var(--clr-primary, #3F8C62);
+}
+
+/* Separator between inputs in a row */
+.input-separator {
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: var(--sp-2);
+    color: #000000;
+    font-weight: bold;
+    opacity: 0.3;
+    font-size: 1.2rem;
+    user-select: none;
+}
+
+/* Single number input */
+.answer-input-single {
+    width: 100%;
+    max-width: 100%;
+    font-size: var(--fs-lg, 1.25rem);
+    padding: var(--sp-4) 0;
+}
+
+/* Pair inputs */
 .pair-inputs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    align-items: center;
     gap: var(--sp-4);
-    max-width: 400px;
+    width: 100%;
+    padding-top: var(--sp-2);
 }
 
 .pair-inputs .input {
-    font-size: var(--fs-lg);
-    padding: var(--sp-4);
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-lg, 1.25rem);
     text-align: center;
 }
 
-/* Table grid - компактная таблица */
-.table-grid {
-    display: grid;
+/* Table styles */
+.table-grid-wrapper {
+    display: flex;
+    flex-direction: column;
     gap: var(--sp-2);
-    background: var(--clr-surface-2);
-    padding: var(--sp-2);
-    border-radius: var(--radius-md);
-    max-width: 600px;
-    border: 1px solid var(--clr-border);
+    width: 100%;
+    margin-top: var(--sp-4);
+}
+
+.table-row-dynamic {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    width: 100%;
 }
 
 .table-input {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #000000 !important;
+    border-radius: 0 !important;
+    outline: none;
+    transition: all 0.2s ease;
+    padding: var(--sp-2) 0;
     text-align: center;
-    border-radius: var(--radius-sm);
-    padding: var(--sp-3);
-    font-size: var(--fs-base);
-    min-width: 60px;
+    width: 100%;
+    font-size: var(--fs-base, 1rem);
+    flex: 1;
+}
+
+.table-input:focus {
+    border-bottom-color: var(--clr-primary, #3F8C62) !important;
+}
+
+/* Task 27 specific styles */
+.task-27-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-6);
+    width: 100%;
+    margin-top: var(--sp-2);
+}
+
+.task-27-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+}
+
+.task-27-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #000000;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+    opacity: 0.6;
+}
+
+.task-27-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    width: 100%;
 }
 
 /* Адаптив для мобильных */
@@ -44,16 +135,17 @@
         max-width: 100%;
     }
 
-    .pair-inputs {
-        max-width: 100%;
+    .pair-inputs, .table-row-dynamic, .task-27-row {
+        gap: var(--sp-2);
     }
 
-    .table-grid {
-        max-width: 100%;
+    .input-separator {
+        padding-bottom: var(--sp-1);
+        font-size: 1rem;
     }
 
     .table-input {
-        min-width: 50px;
-        font-size: var(--fs-sm);
+        min-width: 40px;
+        font-size: var(--fs-sm, 0.875rem);
     }
 }

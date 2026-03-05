@@ -59,7 +59,12 @@ export default function ExamsListPage() {
                 return sum;
             }, 0);
             
-            const maxPoints = 29;
+            // Calculate max possible points based on all tasks
+            const maxPoints = variant.tasks.reduce((sum, task) => {
+                const num = task.ege_number || 0;
+                return sum + (num >= 26 ? 2 : 1);
+            }, 0) || 29;
+
             const progressPercent = Math.min(100, Math.round((currentPoints / maxPoints) * 100));
 
             return (
@@ -113,7 +118,7 @@ export default function ExamsListPage() {
                     <div className="flex items-center gap-4 text-xs font-bold text-gray-400 mb-8">
                       <span className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">
                         <Clock size={14} className="text-gray-300" />
-                        235 мин
+                        {variant.time_limit_minutes || 235} мин
                       </span>
                       <span className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">{totalTasksCount} задач</span>
                     </div>

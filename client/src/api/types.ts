@@ -36,12 +36,12 @@ export interface TaskNav {
     external_id: string | null;
     ege_number: number | null;
     status: ProgressStatus;
-    has_solution: bool;
+    has_solution: boolean;
 }
 
 export interface TopicNav {
     id: number;
-    title: str;
+    title: string;
     order_index: number;
     category: TopicCategory;
     tasks: TaskNav[];
@@ -49,6 +49,8 @@ export interface TopicNav {
     latest_score?: number;
     latest_primary_score?: number;
     max_score?: number;
+    time_limit_minutes?: number;
+    is_mock: boolean;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -174,6 +176,8 @@ export interface TopicAdmin {
     order_index: number;
     category: TopicCategory;
     task_count: number;
+    time_limit_minutes?: number;
+    is_mock: boolean;
 }
 
 export interface TaskAdmin {
@@ -195,6 +199,8 @@ export interface TopicIn {
     title: string;
     order_index: number;
     category: TopicCategory;
+    time_limit_minutes?: number;
+    is_mock: boolean;
 }
 
 export interface ImportVariantIn {
