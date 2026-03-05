@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = "/api";
 
 function getToken(): string | null {
     return localStorage.getItem("jwt_token");

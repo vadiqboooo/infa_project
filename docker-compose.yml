@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: edu_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d edu_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./server
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres_password@db:5432/edu_platform
+      JWT_SECRET: your_very_secret_key_here
+      # LLM_API_KEY, etc. should be in a separate .env file on the server
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+    # Note: Using sh -c to wait for DB and run migrations
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./client
+    restart: always
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:stable-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./client/dist:/usr/share/nginx/html
+      - certbot_etc:/etc/letsencrypt
+      - certbot_var:/var/lib/letsencrypt
+    depends_on:
+      - frontend
+      - backend
+
+  certbot:
+    image: certbot/certbot
+    restart: always
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_var:/var/lib/letsencrypt
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  postgres_data:
+  certbot_etc:
+  certbot_var:
