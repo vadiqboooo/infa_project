@@ -45,7 +45,6 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/ssl:/etc/nginx/ssl
-      - ./client/dist:/usr/share/nginx/html
       - certbot_etc:/etc/letsencrypt
       - certbot_var:/var/lib/letsencrypt
     depends_on:
