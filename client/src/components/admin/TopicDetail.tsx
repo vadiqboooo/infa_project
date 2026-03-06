@@ -41,6 +41,7 @@ export function TopicDetail({
   const [editingTask, setEditingTask] = useState<Partial<TaskAdmin> | null>(null);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
   const [search, setSearch] = useState("");
+  const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
 
   // Sync internal state when prop updates from server
   React.useEffect(() => {
@@ -48,12 +49,50 @@ export function TopicDetail({
   }, [topic]);
 
   const filteredTasks = useMemo(() => {
-    return tasks.filter(t => 
-        search === "" || 
+    return tasks.filter(t =>
+        search === "" ||
         (t.title && t.title.toLowerCase().includes(search.toLowerCase())) ||
         (t.ege_number && String(t.ege_number).includes(search))
     );
   }, [tasks, search]);
+
+  const handleMoveTask = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    const fromTask = filteredTasks[fromIndex];
+    const toTask = filteredTasks[toIndex];
+    // Swap order_index values to reorder tasks
+    onSaveTask({ ...fromTask, order_index: toTask.order_index });
+    onSaveTask({ ...toTask, order_index: fromTask.order_index });
+  };
+
+  const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    const dragImage = document.createElement('div');
+    dragImage.style.opacity = '0';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    if (draggedTaskId === null) return;
+    const fromIndex = filteredTasks.findIndex((t) => t.id === draggedTaskId);
+    if (fromIndex !== -1 && fromIndex !== toIndex) {
+      handleMoveTask(fromIndex, toIndex);
+    }
+    setDraggedTaskId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+  };
 
   const handleTopicFieldChange = (field: keyof TopicAdmin, value: any) => {
     setEditingTopic((prev) => ({ ...prev, [field]: value }));
@@ -170,6 +209,7 @@ export function TopicDetail({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
+              <th className="px-6 py-4 w-12"></th>
               <th className="px-6 py-4 w-16 text-center">№ ЕГЭ</th>
               <th className="px-6 py-4">Описание задачи</th>
               <th className="px-6 py-4 w-32 text-center">Решение</th>
@@ -179,8 +219,24 @@ export function TopicDetail({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filteredTasks.map((task) => (
-              <tr key={task.id} className="hover:bg-gray-50/50 transition-colors group">
+            {filteredTasks.map((task, index) => {
+              const isDragged = draggedTaskId === task.id;
+              return (
+              <tr
+                key={task.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, task.id)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
+                className={clsx(
+                  'hover:bg-gray-50/50 transition-colors group cursor-move',
+                  isDragged && 'opacity-50 bg-[#3F8C62]/5'
+                )}
+              >
+                <td className="px-6 py-4 text-center">
+                  <GripVertical size={14} className={clsx('mx-auto', isDragged ? 'text-[#3F8C62]' : 'text-gray-300')} />
+                </td>
                 <td className="px-6 py-4 text-center">
                   <span className="text-xs font-bold text-gray-400">{task.ege_number || '—'}</span>
                 </td>

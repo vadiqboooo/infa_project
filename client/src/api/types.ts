@@ -206,6 +206,7 @@ export interface TaskAdmin {
     correct_answer: Record<string, unknown> | null;
     solution_steps: SolutionStep[] | null;
     full_solution_code: string | null;
+    order_index: number;
 }
 
 export interface TopicIn {

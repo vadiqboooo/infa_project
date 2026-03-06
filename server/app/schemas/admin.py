@@ -43,6 +43,7 @@ class TaskAdminIn(BaseModel):
     correct_answer: dict | None = None
     solution_steps: list | None = None
     full_solution_code: str | None = None
+    order_index: int | None = None
 
 
 class ImportVariantIn(BaseModel):
@@ -70,6 +71,7 @@ class TaskAdminOut(BaseModel):
     correct_answer: dict | None = None
     solution_steps: list | None = None
     full_solution_code: str | None = None
+    order_index: int = 0
 
     model_config = {"from_attributes": True}
 

@@ -499,7 +499,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
         const isNew = !taskData.id;
         const method = isNew ? "POST" : "PUT";
         const url = isNew ? "/admin/tasks" : `/admin/tasks/${taskData.id}`;
-        
+
         // Explicitly include all fields to be sure
         const body = {
             topic_id: topic.id,
@@ -513,7 +513,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             correct_answer: taskData.correct_answer,
             solution_steps: taskData.solution_steps,
             full_solution_code: taskData.full_solution_code,
-            media_resources: (taskData as any).media_resources
+            media_resources: (taskData as any).media_resources,
+            order_index: taskData.order_index
         };
         
         await adminFetch(url, apiKey, {
