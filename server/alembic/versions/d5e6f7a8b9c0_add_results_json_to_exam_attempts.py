@@ -1,7 +1,7 @@
 """add results_json to exam_attempts
 
 Revision ID: d5e6f7a8b9c0
-Revises: cf7f1c1ef3ae
+Revises: a1b2c3d4e5f6
 Create Date: 2026-03-06 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'd5e6f7a8b9c0'
-down_revision: Union[str, None] = 'cf7f1c1ef3ae'
+down_revision: Union[str, None] = 'a1b2c3d4e5f6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
