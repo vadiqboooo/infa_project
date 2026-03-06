@@ -135,6 +135,22 @@ async def delete_topic(topic_id: int, db: AsyncSession = Depends(get_db)):
     topic = result.scalar_one_or_none()
     if topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+
+    # Collect task IDs belonging to this topic
+    task_ids_result = await db.execute(select(Task.id).where(Task.topic_id == topic_id))
+    task_ids = [row[0] for row in task_ids_result.all()]
+
+    if task_ids:
+        # Delete dependent records that reference these tasks
+        from app.models.progress import UserProgress
+        from app.models.ai_chat_log import AIChatLog
+        await db.execute(
+            UserProgress.__table__.delete().where(UserProgress.task_id.in_(task_ids))
+        )
+        await db.execute(
+            AIChatLog.__table__.delete().where(AIChatLog.task_id.in_(task_ids))
+        )
+
     await db.delete(topic)
     await db.commit()
 

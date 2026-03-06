@@ -20,7 +20,7 @@ class UserProgress(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     status: Mapped[ProgressStatus] = mapped_column(
         Enum(ProgressStatus), nullable=False, default=ProgressStatus.not_started,
     )

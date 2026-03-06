@@ -19,7 +19,7 @@ class AIChatLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     mode: Mapped[AIMode] = mapped_column(Enum(AIMode), nullable=False, default=AIMode.tutorial)
     user_query: Mapped[str] = mapped_column(Text, nullable=False, default="")
     ai_response: Mapped[str] = mapped_column(Text, nullable=False, default="")
