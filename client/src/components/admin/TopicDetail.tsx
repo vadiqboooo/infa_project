@@ -222,18 +222,18 @@ export function TopicDetail({
             {filteredTasks.map((task, index) => {
               const isDragged = draggedTaskId === task.id;
               return (
-              <tr
-                key={task.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, task.id)}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                className={clsx(
-                  'hover:bg-gray-50/50 transition-colors group cursor-move',
-                  isDragged && 'opacity-50 bg-[#3F8C62]/5'
-                )}
-              >
+                <tr
+                  key={task.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, task.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={clsx(
+                    'hover:bg-gray-50/50 transition-colors group cursor-move',
+                    isDragged && 'opacity-50 bg-[#3F8C62]/5'
+                  )}
+                >
                 <td className="px-6 py-4 text-center">
                   <GripVertical size={14} className={clsx('mx-auto', isDragged ? 'text-[#3F8C62]' : 'text-gray-300')} />
                 </td>
