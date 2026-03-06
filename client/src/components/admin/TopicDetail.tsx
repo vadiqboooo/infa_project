@@ -292,7 +292,8 @@ export function TopicDetail({
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
 
