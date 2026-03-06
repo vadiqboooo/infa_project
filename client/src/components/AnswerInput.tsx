@@ -141,7 +141,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                         const newVal = tableData.map((r, ri) =>
                                             r.map((c, ci) => (ri === rIdx && ci === 0 ? parseInputValue(e.target.value) : c))
                                         );
-                                        onChange(stringifyTable(newVal));
+                                        onChange(newVal);
                                     }}
                                     disabled={disabled}
                                     placeholder=""
@@ -156,7 +156,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                         const newVal = tableData.map((r, ri) =>
                                             r.map((c, ci) => (ri === rIdx && ci === 1 ? parseInputValue(e.target.value) : c))
                                         );
-                                        onChange(stringifyTable(newVal));
+                                        onChange(newVal);
                                     }}
                                     disabled={disabled}
                                     placeholder=""
@@ -181,7 +181,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                 const newVal = tableData.map((r, ri) =>
                                     r.map((c, ci) => (ri === rIdx && ci === 0 ? parseInputValue(e.target.value) : c))
                                 );
-                                onChange(stringifyTable(newVal));
+                                onChange(newVal);
                             }}
                             disabled={disabled}
                             placeholder=""
@@ -196,7 +196,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                 const newVal = tableData.map((r, ri) =>
                                     r.map((c, ci) => (ri === rIdx && ci === 1 ? parseInputValue(e.target.value) : c))
                                 );
-                                onChange(stringifyTable(newVal));
+                                onChange(newVal);
                             }}
                             disabled={disabled}
                             placeholder=""
