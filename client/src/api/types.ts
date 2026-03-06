@@ -120,6 +120,15 @@ export interface ExamStartResponse {
     time_limit_minutes: number;
 }
 
+export interface TaskResult {
+    task_id: number;
+    ege_number: number | null;
+    user_answer: { val: AnswerVal } | null;
+    correct_answer: { val: AnswerVal } | null;
+    is_correct: boolean;
+    points: number;
+}
+
 export interface ExamResult {
     attempt_id: number;
     total_tasks: number;
@@ -127,6 +136,7 @@ export interface ExamResult {
     primary_score: number;
     score: number;
     finished_at: string;
+    task_results?: TaskResult[];
 }
 
 /* ── Statistics ────────────────────────────────────── */

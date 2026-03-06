@@ -98,6 +98,7 @@ async def get_exam_by_topic(
             "finished_at": finished.finished_at,
             "primary_score": finished.primary_score,
             "score": finished.score,
+            "results": finished.results_json,
         } if finished else None,
     }
 
@@ -225,21 +226,36 @@ async def submit_exam(
     from app.routers.solving import _answers_equal
     from app.models.progress import UserProgress, ProgressStatus
 
-    for answer_item in body.answers:
-        task = task_map.get(answer_item.task_id)
-        if task is None:
-            continue
+    task_results = []
+    user_answers_map = {a.task_id: a.answer for a in body.answers}
+
+    for task_id, task in task_map.items():
+        user_answer = user_answers_map.get(task_id)
+        is_correct = False
+        if user_answer:
+            is_correct = _answers_equal(task.correct_answer, user_answer)
         
-        is_correct = _answers_equal(task.correct_answer, answer_item.answer)
+        task_points = 0
         if is_correct:
             correct_count += 1
             # Questions 1-25: 1 point, 26-27: 2 points
             if task.ege_number and task.ege_number >= 26:
-                primary_score += 2
+                task_points = 2
             else:
-                primary_score += 1
+                task_points = 1
+        
+        primary_score += task_points
 
-        # Sync with UserProgress so navigation shows solved tasks
+        task_results.append({
+            "task_id": task.id,
+            "ege_number": task.ege_number,
+            "user_answer": user_answer.model_dump() if user_answer else None,
+            "correct_answer": task.correct_answer,
+            "is_correct": is_correct,
+            "points": task_points
+        })
+
+        # Sync with UserProgress
         prog_result = await db.execute(
             select(UserProgress).where(
                 UserProgress.user_id == user.id,
@@ -260,14 +276,12 @@ async def submit_exam(
         else:
             progress.attempts_count += 1
             progress.last_attempt_at = datetime.now(timezone.utc)
-            # Only upgrade status to solved, don't downgrade if they already solved it before
             if is_correct:
                 progress.status = ProgressStatus.solved
 
-    # EGE scoring conversion table (0 to 29 primary points)
+    # EGE scoring conversion table
     ege_score_map = [0, 7, 14, 20, 27, 34, 40, 43, 46, 48, 51, 54, 56, 59, 62, 64, 67, 70, 72, 75, 78, 80, 83, 85, 88, 90, 93, 95, 98, 100]
     
-    # Ensure primary_score doesn't exceed 29
     primary_score = min(primary_score, 29)
     score = float(ege_score_map[primary_score])
     
@@ -276,6 +290,7 @@ async def submit_exam(
     attempt.finished_at = now
     attempt.primary_score = primary_score
     attempt.score = score
+    attempt.results_json = {"task_results": task_results}
     await db.commit()
     await db.refresh(attempt)
 
@@ -286,4 +301,5 @@ async def submit_exam(
         primary_score=primary_score,
         score=score,
         finished_at=now,
+        task_results=task_results
     )

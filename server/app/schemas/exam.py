@@ -24,6 +24,15 @@ class ExamSubmitIn(BaseModel):
     answers: list[ExamAnswerItem]
 
 
+class TaskResult(BaseModel):
+    task_id: int
+    ege_number: int | None
+    user_answer: AnswerIn | None
+    correct_answer: dict | None
+    is_correct: bool
+    points: int
+
+
 class ExamResult(BaseModel):
     attempt_id: int
     total_tasks: int
@@ -31,3 +40,4 @@ class ExamResult(BaseModel):
     primary_score: int
     score: float
     finished_at: datetime
+    task_results: list[TaskResult] = []

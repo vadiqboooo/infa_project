@@ -172,6 +172,8 @@ export function TopicDetail({
             <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
               <th className="px-6 py-4 w-16 text-center">№ ЕГЭ</th>
               <th className="px-6 py-4">Описание задачи</th>
+              <th className="px-6 py-4 w-32 text-center">Решение</th>
+              <th className="px-6 py-4 w-32 text-center">План</th>
               <th className="px-6 py-4 w-32">Сложность</th>
               <th className="px-6 py-4 w-20"></th>
             </tr>
@@ -189,6 +191,24 @@ export function TopicDetail({
                     </p>
                     <div className="text-[11px] text-gray-400 line-clamp-1" dangerouslySetInnerHTML={{ __html: task.content_html.replace(/<[^>]*>?/gm, '') }} />
                   </div>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  {task.full_solution_code ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold uppercase">
+                      <Code2 size={10} /> Есть
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-gray-300 uppercase">Нет</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-center">
+                  {task.solution_steps && task.solution_steps.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase">
+                      <ListChecks size={10} /> {task.solution_steps.length} ш.
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-gray-300 uppercase">Нет</span>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <span className={clsx(
