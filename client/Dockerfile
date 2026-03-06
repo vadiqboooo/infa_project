@@ -18,14 +18,12 @@ RUN npm run build
 # Stage 2: Serve the application with Nginx
 FROM nginx:stable-alpine
 
+# Copy the custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copy the build output from the first stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# We'll use the main nginx config instead of copying it here, 
-# or we can copy a basic one and mount the real one via docker-compose.
-# For simplicity, we'll let docker-compose handle the nginx config mounting.
-
 EXPOSE 80
-EXPOSE 443
 
 CMD ["nginx", "-g", "daemon off;"]

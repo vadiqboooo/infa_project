@@ -24,7 +24,7 @@ export function TopicCard({ id, egeId, title, description, progress }: TopicCard
   return (
     <Link
       to={`${id}`}
-      className="group bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all hover:-translate-y-1 block relative"
+      className="group bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all hover:-translate-y-1 block relative w-full max-w-[400px]"
     >
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">

@@ -27,7 +27,7 @@ export default function ExamsListPage() {
   }
 
   return (
-    <div className="p-8 animate-in fade-in duration-500">
+    <div className="p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Варианты ЕГЭ</h1>
         <p className="text-gray-500 text-sm">
@@ -44,7 +44,7 @@ export default function ExamsListPage() {
           <p className="text-sm">Администратор еще не добавил контрольные варианты</p>
         </div>
       ) : (
-        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))] justify-start">
           {examVariants.map((variant) => {
             const isSolved = variant.latest_score !== undefined && variant.latest_score !== null;
             const solvedTasksCount = variant.tasks.filter(t => t.status === 'solved').length;
@@ -71,7 +71,7 @@ export default function ExamsListPage() {
               <button
                 key={variant.id}
                 onClick={() => navigate(`/exams/${variant.id}`)}
-                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full h-full min-h-[220px]"
+                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full max-w-[400px] h-full min-h-[220px]"
               >
                 {/* Large Score - Positioned to be overlapped by progress bar */}
                 {isSolved && (

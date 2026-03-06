@@ -34,7 +34,7 @@ export function TasksListPage() {
   };
 
   return (
-    <div className="space-y-8 p-8 animate-in fade-in duration-500">
+    <div className="space-y-8 p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
@@ -56,13 +56,13 @@ export function TasksListPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))] justify-start">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
             <div key={i} className="h-48 bg-gray-100 rounded-3xl animate-pulse" />
           ))}
         </div>
       ) : topics.length > 0 ? (
-        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
+        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))] justify-start">
           {topics.map((topic) => (
             <TopicCard
               key={topic.id}
