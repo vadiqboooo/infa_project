@@ -19,7 +19,7 @@ export default function ExamsListPage() {
     return (
         <div className="p-8 space-y-6">
             <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
                 {[1, 2, 3].map(i => <div key={i} className="h-48 bg-white border border-gray-100 rounded-2xl animate-pulse" />)}
             </div>
         </div>
@@ -44,7 +44,7 @@ export default function ExamsListPage() {
           <p className="text-sm">Администратор еще не добавил контрольные варианты</p>
         </div>
       ) : (
-        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(350px,1fr))]">
+        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
           {examVariants.map((variant) => {
             const isSolved = variant.latest_score !== undefined && variant.latest_score !== null;
             const solvedTasksCount = variant.tasks.filter(t => t.status === 'solved').length;
@@ -71,7 +71,7 @@ export default function ExamsListPage() {
               <button
                 key={variant.id}
                 onClick={() => navigate(`/exams/${variant.id}`)}
-                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 block w-full relative overflow-hidden min-w-[350px] flex flex-col"
+                className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full h-full min-h-[220px]"
               >
                 {/* Large Score - Positioned to be overlapped by progress bar */}
                 {isSolved && (

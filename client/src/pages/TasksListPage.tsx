@@ -56,13 +56,13 @@ export function TasksListPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
             <div key={i} className="h-48 bg-gray-100 rounded-3xl animate-pulse" />
           ))}
         </div>
       ) : topics.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid gap-6 grid-cols-1 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))]">
           {topics.map((topic) => (
             <TopicCard
               key={topic.id}
