@@ -261,7 +261,9 @@ export default function ExamPage() {
                                                 key={tr.task_id}
                                                 className={clsx(
                                                     "border-b border-gray-50 transition-colors",
-                                                    tr.is_correct ? "bg-emerald-50/50" : "bg-red-50/30"
+                                                    tr.is_correct ? "bg-emerald-50/50"
+                                                        : tr.points > 0 ? "bg-amber-50/50"
+                                                        : "bg-red-50/30"
                                                 )}
                                             >
                                                 <td className="py-3 px-3 font-bold text-gray-700">
@@ -274,14 +276,21 @@ export default function ExamPage() {
                                                     {formatAnswer(tr.correct_answer)}
                                                 </td>
                                                 <td className="py-3 px-3 text-center">
-                                                    <span className={clsx(
-                                                        "inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold",
-                                                        tr.is_correct
-                                                            ? "bg-[#3F8C62] text-white"
-                                                            : "bg-gray-100 text-gray-400"
-                                                    )}>
-                                                        {tr.points}
-                                                    </span>
+                                                    {(() => {
+                                                        const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
+                                                        return (
+                                                            <span className={clsx(
+                                                                "inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold",
+                                                                tr.points === max
+                                                                    ? "bg-[#3F8C62] text-white"
+                                                                    : tr.points > 0
+                                                                        ? "bg-amber-100 text-amber-700"
+                                                                        : "bg-gray-100 text-gray-400"
+                                                            )}>
+                                                                {tr.points}/{max}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </td>
                                             </tr>
                                         ))}

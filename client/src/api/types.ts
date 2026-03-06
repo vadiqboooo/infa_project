@@ -127,6 +127,7 @@ export interface TaskResult {
     correct_answer: { val: AnswerVal } | null;
     is_correct: boolean;
     points: number;
+    max_points?: number;
 }
 
 export interface ExamResult {

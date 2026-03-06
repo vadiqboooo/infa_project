@@ -31,6 +31,7 @@ class TaskResult(BaseModel):
     correct_answer: dict | None
     is_correct: bool
     points: int
+    max_points: int = 1
 
 
 class ExamResult(BaseModel):

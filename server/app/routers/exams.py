@@ -223,7 +223,7 @@ async def submit_exam(
     correct_count = 0
     primary_score = 0
 
-    from app.routers.solving import _answers_equal
+    from app.routers.solving import _answers_equal, _partial_score
     from app.models.progress import UserProgress, ProgressStatus
 
     task_results = []
@@ -232,27 +232,31 @@ async def submit_exam(
     for task_id, task in task_map.items():
         user_answer = user_answers_map.get(task_id)
         is_correct = False
-        if user_answer:
-            is_correct = _answers_equal(task.correct_answer, user_answer)
-        
         task_points = 0
-        if is_correct:
-            correct_count += 1
-            # Questions 1-25: 1 point, 26-27: 2 points
+
+        if user_answer:
             if task.ege_number and task.ege_number >= 26:
-                task_points = 2
+                # Partial scoring for tasks 26-27
+                task_points = _partial_score(task.correct_answer, user_answer, task.ege_number)
+                is_correct = task_points == 2
             else:
-                task_points = 1
-        
+                # Binary scoring for tasks 1-25
+                is_correct = _answers_equal(task.correct_answer, user_answer)
+                task_points = 1 if is_correct else 0
+
+        if task_points > 0:
+            correct_count += 1
         primary_score += task_points
 
+        max_points = 2 if (task.ege_number and task.ege_number >= 26) else 1
         task_results.append({
             "task_id": task.id,
             "ege_number": task.ege_number,
             "user_answer": user_answer.model_dump() if user_answer else None,
             "correct_answer": task.correct_answer,
             "is_correct": is_correct,
-            "points": task_points
+            "points": task_points,
+            "max_points": max_points,
         })
 
         # Sync with UserProgress

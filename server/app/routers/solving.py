@@ -85,6 +85,59 @@ def _answers_equal(correct: dict | None, given: AnswerIn) -> bool:
     return False
 
 
+def _partial_score(correct: dict | None, given: AnswerIn, ege_number: int | None) -> int:
+    """Return partial score for tasks 26/27 (0, 1, or 2).
+
+    Task 26 (pair): each matching element = 1 point, max 2.
+    Task 27 (table 2×2): each matching row (pair) = 1 point, max 2.
+    """
+    if correct is None or ege_number not in (26, 27):
+        return 0
+
+    expected = correct.get("val")
+    user_val = given.val
+    if expected is None or user_val is None:
+        return 0
+
+    def to_float(v):
+        try:
+            if isinstance(v, str):
+                return float(v.replace(",", ".").strip())
+            return float(v)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    def vals_eq(a, b) -> bool:
+        fa, fb = to_float(a), to_float(b)
+        if fa is not None and fb is not None:
+            return abs(fa - fb) < 1e-9
+        return str(a).strip().lower() == str(b).strip().lower()
+
+    if ege_number == 26:
+        # Pair answer: [a, b] — each matching element is 1 point
+        if not isinstance(expected, list) or not isinstance(user_val, list):
+            return 0
+        score = 0
+        for a, b in zip(expected, user_val):
+            if vals_eq(a, b):
+                score += 1
+        return min(score, 2)
+
+    if ege_number == 27:
+        # Table answer: [[a,b],[c,d]] — each matching row is 1 point
+        if not isinstance(expected, list) or not isinstance(user_val, list):
+            return 0
+        score = 0
+        for row_e, row_u in zip(expected, user_val):
+            if not isinstance(row_e, list) or not isinstance(row_u, list):
+                continue
+            if len(row_e) == len(row_u) and all(vals_eq(a, b) for a, b in zip(row_e, row_u)):
+                score += 1
+        return min(score, 2)
+
+    return 0
+
+
 async def _is_task_in_active_exam(task_id: int, user_id: int, db: AsyncSession) -> bool:
     """Check whether a task belongs to an exam the user is currently taking."""
     from app.models.exam import exam_tasks
