@@ -10,10 +10,12 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import admin, auth, content, exams, solving, stats
 
 
+os.makedirs("uploads/exam_solutions", exist_ok=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
-    os.makedirs("uploads/exam_solutions", exist_ok=True)
     yield
 
 
