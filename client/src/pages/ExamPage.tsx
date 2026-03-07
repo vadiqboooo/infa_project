@@ -187,112 +187,120 @@ export default function ExamPage() {
             return String(v);
         };
 
+        const sortedResults = [...taskResults].sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0));
+        const firstHalf = sortedResults.slice(0, 14);
+        const secondHalf = sortedResults.slice(14);
+
+        const ResultRow = ({ tr, idx }: { tr: TaskResult; idx: number }) => {
+            const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
+            return (
+                <tr
+                    key={tr.task_id}
+                    className={clsx(
+                        "border-b border-gray-50 transition-colors",
+                        tr.is_correct ? "bg-emerald-50/50"
+                            : tr.points > 0 ? "bg-amber-50/50"
+                            : "bg-red-50/30"
+                    )}
+                >
+                    <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8">
+                        {tr.ege_number || idx + 1}
+                    </td>
+                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate">
+                        {formatAnswer(tr.user_answer)}
+                    </td>
+                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate">
+                        {formatAnswer(tr.correct_answer)}
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                        <span className={clsx(
+                            "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
+                            tr.points === max
+                                ? "bg-[#3F8C62] text-white"
+                                : tr.points > 0
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-gray-100 text-gray-400"
+                        )}>
+                            {tr.points}/{max}
+                        </span>
+                    </td>
+                </tr>
+            );
+        };
+
+        const TableHead = () => (
+            <thead>
+                <tr className="border-b border-gray-100">
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider w-8">№</th>
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Ваш</th>
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Верный</th>
+                    <th className="text-center py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Балл</th>
+                </tr>
+            </thead>
+        );
+
         return (
-            <div className="min-h-screen bg-[#F8F7F4] py-10 px-4">
-                <div className="max-w-3xl mx-auto">
-                    {/* Score Card */}
-                    <div className="bg-white border border-gray-200 rounded-[32px] p-10 text-center shadow-xl shadow-gray-200/50 mb-8">
-                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle2 size={40} />
-                        </div>
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Вариант завершен</h1>
-                        <p className="text-gray-500 text-sm mb-8">Результаты успешно сохранены в вашей истории обучения</p>
+            <div className="min-h-screen bg-[#F8F7F4]">
+                {/* Top bar */}
+                <div className="h-13 flex items-center px-6 py-3 bg-white border-b border-gray-100">
+                    <button
+                        onClick={() => navigate('/exams')}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors"
+                    >
+                        <ArrowLeft size={16} />
+                        К вариантам
+                    </button>
+                </div>
 
-                        <div className="bg-gray-50 rounded-2xl p-6 mb-8 flex flex-col items-center">
-                            <div className="text-5xl font-black text-[#3F8C62] mb-1">
-                                {result.score.toFixed(0)}
+                <div className="max-w-4xl mx-auto px-4 py-6">
+                    {/* Score Card — compact horizontal */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm mb-5 flex items-center gap-6">
+                        <div className="flex items-center gap-3 shrink-0">
+                            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                                <CheckCircle2 size={20} />
                             </div>
-                            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">баллов получено</div>
-
-                            <div className="w-full h-px bg-gray-200 my-5" />
-
-                            <div className="grid grid-cols-2 gap-y-6 gap-x-8 w-full">
-                                <div>
-                                    <div className="text-lg font-bold text-gray-900">{result.primary_score} / 29</div>
-                                    <div className="text-[10px] text-gray-400 font-bold uppercase">первичный балл</div>
-                                </div>
-                                <div>
-                                    <div className="text-lg font-bold text-gray-900">{result.correct_count ?? taskResults.filter(r => r.is_correct).length}</div>
-                                    <div className="text-[10px] text-gray-400 font-bold uppercase">верных заданий</div>
-                                </div>
-                                <div className="col-span-2 pt-4 border-t border-gray-100 flex justify-center">
-                                    <div className="text-xs font-medium text-gray-400">
-                                        Всего заданий в варианте: <span className="text-gray-900 font-bold">{result.total_tasks ?? taskResults.length}</span>
-                                    </div>
-                                </div>
+                            <div>
+                                <div className="text-xs text-gray-400 font-bold uppercase tracking-widest">Вариант завершен</div>
+                                <div className="text-sm font-bold text-gray-700 truncate max-w-[200px]">{currentTopic.title}</div>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3">
-                            <button
-                                onClick={() => navigate('/exams')}
-                                className="w-full py-3.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
-                            >
-                                К списку вариантов
-                            </button>
-                            <button
-                                onClick={() => navigate('/')}
-                                className="w-full py-3.5 text-gray-500 hover:text-gray-700 font-bold transition-all"
-                            >
-                                На главную
-                            </button>
+                        <div className="w-px h-10 bg-gray-100 mx-2 shrink-0" />
+
+                        <div className="flex items-center gap-6 flex-1">
+                            <div className="text-center">
+                                <div className="text-3xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xl font-bold text-gray-900">{result.primary_score}<span className="text-gray-300 font-normal">/29</span></div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xl font-bold text-gray-900">{result.correct_count ?? taskResults.filter(r => r.is_correct).length}<span className="text-gray-300 font-normal">/{result.total_tasks ?? taskResults.length}</span></div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">верных</div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Results Table */}
+                    {/* Results Table — 2 columns */}
                     {taskResults.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-[24px] p-6 shadow-sm">
-                            <h2 className="text-lg font-bold text-gray-900 mb-4">Подробные результаты</h2>
-                            <div className="overflow-x-auto">
+                        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                            <h2 className="text-sm font-bold text-gray-700 mb-4">Подробные результаты</h2>
+                            <div className="grid grid-cols-2 gap-4">
                                 <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-gray-100">
-                                            <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">№</th>
-                                            <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ваш ответ</th>
-                                            <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Правильный ответ</th>
-                                            <th className="text-center py-3 px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Балл</th>
-                                        </tr>
-                                    </thead>
+                                    <TableHead />
                                     <tbody>
-                                        {taskResults
-                                            .sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0))
-                                            .map((tr, idx) => (
-                                            <tr
-                                                key={tr.task_id}
-                                                className={clsx(
-                                                    "border-b border-gray-50 transition-colors",
-                                                    tr.is_correct ? "bg-emerald-50/50"
-                                                        : tr.points > 0 ? "bg-amber-50/50"
-                                                        : "bg-red-50/30"
-                                                )}
-                                            >
-                                                <td className="py-3 px-3 font-bold text-gray-700">
-                                                    {tr.ege_number || idx + 1}
-                                                </td>
-                                                <td className="py-3 px-3 text-gray-600 font-mono text-xs">
-                                                    {formatAnswer(tr.user_answer)}
-                                                </td>
-                                                <td className="py-3 px-3 text-gray-600 font-mono text-xs">
-                                                    {formatAnswer(tr.correct_answer)}
-                                                </td>
-                                                <td className="py-3 px-3 text-center">
-                                                    {(() => {
-                                                        const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
-                                                        return (
-                                                            <span className={clsx(
-                                                                "inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold",
-                                                                tr.points === max
-                                                                    ? "bg-[#3F8C62] text-white"
-                                                                    : tr.points > 0
-                                                                        ? "bg-amber-100 text-amber-700"
-                                                                        : "bg-gray-100 text-gray-400"
-                                                            )}>
-                                                                {tr.points}/{max}
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </td>
-                                            </tr>
+                                        {firstHalf.map((tr, idx) => (
+                                            <ResultRow key={tr.task_id} tr={tr} idx={idx} />
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <table className="w-full text-sm">
+                                    <TableHead />
+                                    <tbody>
+                                        {secondHalf.map((tr, idx) => (
+                                            <ResultRow key={tr.task_id} tr={tr} idx={idx + 14} />
                                         ))}
                                     </tbody>
                                 </table>
