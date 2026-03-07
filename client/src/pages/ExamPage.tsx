@@ -197,7 +197,7 @@ export default function ExamPage() {
                 <tr
                     key={tr.task_id}
                     className={clsx(
-                        "transition-colors",
+                        "border-b border-gray-100 transition-colors",
                         tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
                             : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
                             : "hover:bg-gray-50/80"
