@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { python } from "@codemirror/lang-python";
+import { githubLight } from "@uiw/codemirror-theme-github";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText } from "lucide-react";
 import { clsx } from "clsx";
@@ -505,13 +508,17 @@ export default function ExamPage() {
                                         <p className="text-sm text-gray-500 shrink-0">
                                             Вставьте код вашего решения ниже
                                         </p>
-                                        <textarea
-                                            value={localCode}
-                                            onChange={(e) => setLocalCode(e.target.value)}
-                                            className="flex-1 font-mono text-sm bg-gray-50 border border-gray-200 rounded-xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/30 focus:border-[#3F8C62] text-gray-800 min-h-[400px]"
-                                            placeholder="# Вставьте код здесь..."
-                                            spellCheck={false}
-                                        />
+                                        <div className="flex-1 min-h-[400px] border border-gray-200 rounded-xl overflow-hidden text-sm">
+                                            <CodeMirror
+                                                value={localCode}
+                                                onChange={(val) => setLocalCode(val)}
+                                                extensions={[python()]}
+                                                theme={githubLight}
+                                                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                                                style={{ height: "100%", fontSize: "13px" }}
+                                                placeholder="# Вставьте код здесь..."
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>
