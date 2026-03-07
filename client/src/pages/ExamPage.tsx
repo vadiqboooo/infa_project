@@ -197,10 +197,10 @@ export default function ExamPage() {
                 <tr
                     key={tr.task_id}
                     className={clsx(
-                        "border-b border-gray-50 transition-colors",
-                        tr.is_correct ? "bg-emerald-50/50"
-                            : tr.points > 0 ? "bg-amber-50/50"
-                            : "bg-red-50/30"
+                        "transition-colors",
+                        tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                            : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
+                            : "hover:bg-gray-50/80"
                     )}
                 >
                     <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8">
@@ -241,56 +241,67 @@ export default function ExamPage() {
 
         return (
             <div className="min-h-screen bg-[#F8F7F4]">
-                {/* Top bar */}
-                <div className="h-13 flex items-center px-6 py-3 bg-white border-b border-gray-100">
-                    <button
-                        onClick={() => navigate('/exams')}
-                        className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-gray-900 transition-colors"
-                    >
-                        <ArrowLeft size={16} />
-                        К вариантам
-                    </button>
-                </div>
+                {/* Header — back button + score card в одной строке */}
+                <div className="bg-white border-b border-gray-200 shadow-sm">
+                    <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-5">
+                        {/* Кнопка назад */}
+                        <button
+                            onClick={() => navigate('/exams')}
+                            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0"
+                        >
+                            <ArrowLeft size={16} />
+                            Назад
+                        </button>
 
-                <div className="max-w-4xl mx-auto px-4 py-6">
-                    {/* Score Card — compact horizontal */}
-                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm mb-5 flex items-center gap-6">
+                        <div className="w-px h-8 bg-gray-200 shrink-0" />
+
+                        {/* Иконка + название */}
                         <div className="flex items-center gap-3 shrink-0">
-                            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                                <CheckCircle2 size={20} />
+                            <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                                <CheckCircle2 size={18} />
                             </div>
                             <div>
-                                <div className="text-xs text-gray-400 font-bold uppercase tracking-widest">Вариант завершен</div>
-                                <div className="text-sm font-bold text-gray-700 truncate max-w-[200px]">{currentTopic.title}</div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Вариант завершен</div>
+                                <div className="text-sm font-bold text-gray-800 truncate max-w-[220px]">{currentTopic.title}</div>
                             </div>
                         </div>
 
-                        <div className="w-px h-10 bg-gray-100 mx-2 shrink-0" />
+                        <div className="w-px h-8 bg-gray-200 shrink-0" />
 
-                        <div className="flex items-center gap-6 flex-1">
-                            <div className="text-center">
-                                <div className="text-3xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
+                        {/* Метрики — занимают оставшееся пространство */}
+                        <div className="flex items-center gap-8 flex-1">
+                            <div>
+                                <div className="text-2xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
                                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
                             </div>
-                            <div className="text-center">
-                                <div className="text-xl font-bold text-gray-900">{result.primary_score}<span className="text-gray-300 font-normal">/29</span></div>
+                            <div className="w-px h-6 bg-gray-100" />
+                            <div>
+                                <div className="text-lg font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
                                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
                             </div>
-                            <div className="text-center">
-                                <div className="text-xl font-bold text-gray-900">{result.correct_count ?? taskResults.filter(r => r.is_correct).length}<span className="text-gray-300 font-normal">/{result.total_tasks ?? taskResults.length}</span></div>
+                            <div className="w-px h-6 bg-gray-100" />
+                            <div>
+                                <div className="text-lg font-bold text-gray-900 leading-none">
+                                    {result.correct_count ?? taskResults.filter(r => r.is_correct).length}
+                                    <span className="text-gray-300 font-normal text-sm">/{result.total_tasks ?? taskResults.length}</span>
+                                </div>
                                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">верных</div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    {/* Results Table — 2 columns */}
+                {/* Results Table */}
+                <div className="max-w-5xl mx-auto px-6 py-6">
                     {taskResults.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-                            <h2 className="text-sm font-bold text-gray-700 mb-4">Подробные результаты</h2>
-                            <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 border-b border-gray-100">
+                                <h2 className="text-sm font-bold text-gray-700">Подробные результаты</h2>
+                            </div>
+                            <div className="grid grid-cols-2 divide-x divide-gray-200">
                                 <table className="w-full text-sm">
                                     <TableHead />
-                                    <tbody>
+                                    <tbody className="divide-y divide-gray-100">
                                         {firstHalf.map((tr, idx) => (
                                             <ResultRow key={tr.task_id} tr={tr} idx={idx} />
                                         ))}
@@ -298,7 +309,7 @@ export default function ExamPage() {
                                 </table>
                                 <table className="w-full text-sm">
                                     <TableHead />
-                                    <tbody>
+                                    <tbody className="divide-y divide-gray-100">
                                         {secondHalf.map((tr, idx) => (
                                             <ResultRow key={tr.task_id} tr={tr} idx={idx + 14} />
                                         ))}
