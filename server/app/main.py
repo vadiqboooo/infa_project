@@ -1,9 +1,11 @@
 """FastAPI application entry-point."""
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.routers import admin, auth, content, exams, solving, stats
 
@@ -11,7 +13,8 @@ from app.routers import admin, auth, content, exams, solving, stats
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
-    yield  # nothing special on startup for now
+    os.makedirs("uploads/exam_solutions", exist_ok=True)
+    yield
 
 
 app = FastAPI(
@@ -36,6 +39,9 @@ app.include_router(solving.router)
 app.include_router(exams.router)
 app.include_router(stats.router)
 app.include_router(admin.router, prefix="/admin")
+
+# Serve uploaded files (exam solutions)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/", tags=["health"])

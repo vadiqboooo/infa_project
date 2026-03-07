@@ -128,6 +128,8 @@ export interface TaskResult {
     is_correct: boolean;
     points: number;
     max_points?: number;
+    code_solution?: string | null;
+    file_solution_url?: string | null;
 }
 
 export interface ExamResult {

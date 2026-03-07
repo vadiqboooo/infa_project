@@ -20,8 +20,14 @@ class ExamAnswerItem(BaseModel):
     answer: AnswerIn
 
 
+class CodeSolutionItem(BaseModel):
+    task_id: int
+    code: str
+
+
 class ExamSubmitIn(BaseModel):
     answers: list[ExamAnswerItem]
+    code_solutions: list[CodeSolutionItem] = []
 
 
 class TaskResult(BaseModel):
@@ -32,6 +38,8 @@ class TaskResult(BaseModel):
     is_correct: bool
     points: int
     max_points: int = 1
+    code_solution: str | None = None
+    file_solution_url: str | None = None
 
 
 class ExamResult(BaseModel):

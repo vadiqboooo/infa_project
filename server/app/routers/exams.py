@@ -1,11 +1,14 @@
 """Exams router — start / submit exam attempts."""
 
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
@@ -98,7 +101,7 @@ async def get_exam_by_topic(
             "finished_at": finished.finished_at,
             "primary_score": finished.primary_score,
             "score": finished.score,
-            "results": finished.results_json,
+            "task_results": (finished.results_json or {}).get("task_results", []),
         } if finished else None,
     }
 
@@ -228,6 +231,7 @@ async def submit_exam(
 
     task_results = []
     user_answers_map = {a.task_id: a.answer for a in body.answers}
+    code_solutions_map = {item.task_id: item.code for item in body.code_solutions}
 
     for task_id, task in task_map.items():
         user_answer = user_answers_map.get(task_id)
@@ -257,6 +261,8 @@ async def submit_exam(
             "is_correct": is_correct,
             "points": task_points,
             "max_points": max_points,
+            "code_solution": code_solutions_map.get(task.id),
+            "file_solution_url": None,
         })
 
         # Sync with UserProgress
@@ -307,3 +313,49 @@ async def submit_exam(
         finished_at=now,
         task_results=task_results
     )
+
+
+ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv", ".ods"}
+
+
+@router.post("/attempt/{attempt_id}/upload/{task_id}")
+async def upload_task_file_solution(
+    attempt_id: int,
+    task_id: int,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a spreadsheet file solution for a specific task in an attempt."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+
+    upload_dir = Path(f"uploads/exam_solutions/{attempt_id}")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / f"{task_id}{suffix}"
+    file_path.write_bytes(await file.read())
+
+    file_url = f"/uploads/exam_solutions/{attempt_id}/{task_id}{suffix}"
+
+    # Update file_solution_url in results_json
+    results = dict(attempt.results_json or {})
+    for tr in results.get("task_results", []):
+        if tr.get("task_id") == task_id:
+            tr["file_solution_url"] = file_url
+            break
+    attempt.results_json = results
+    flag_modified(attempt, "results_json")
+    await db.commit()
+
+    return {"file_url": file_url}

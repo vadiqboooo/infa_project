@@ -80,7 +80,10 @@ export function useStartExam(examId: number) {
 }
 
 export function useSubmitExam(examId: number) {
-    return useMutation<ExamResult, Error, { answers: { task_id: number; answer: { val: AnswerVal } }[] }>({
+    return useMutation<ExamResult, Error, {
+        answers: { task_id: number; answer: { val: AnswerVal } }[];
+        code_solutions?: { task_id: number; code: string }[];
+    }>({
         mutationFn: (body) =>
             api<ExamResult>(`/exams/${examId}/submit`, {
                 method: "POST",

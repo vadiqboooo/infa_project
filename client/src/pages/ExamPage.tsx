@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +28,14 @@ export default function ExamPage() {
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Solution attachment state
+    const CODE_TASK_NUMS = new Set([2,5,6,7,8,9,11,13,14,15,16,17,23,24,25,26,27]);
+    const FILE_TASK_NUMS = new Set([3,18,22]);
+    const [codeSolutions, setCodeSolutions] = useState<Record<number, string>>({});
+    const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
+    const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
+    const [localCode, setLocalCode] = useState("");
 
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
@@ -124,9 +132,27 @@ export default function ExamPage() {
                 answers: tasks.map(t => ({
                     task_id: t.id,
                     answer: { val: examAnswers[t.id] ?? "" }
-                }))
+                })),
+                code_solutions: Object.entries(codeSolutions)
+                    .filter(([_, code]) => code.trim())
+                    .map(([taskId, code]) => ({ task_id: Number(taskId), code })),
             };
             const res = await submitExamMutation.mutateAsync(payload);
+
+            // Upload file solutions after submit (non-blocking failures)
+            const token = localStorage.getItem("jwt_token");
+            for (const [taskIdStr, file] of Object.entries(fileSolutions)) {
+                try {
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    await fetch(`/api/exams/attempt/${res.attempt_id}/upload/${taskIdStr}`, {
+                        method: "POST",
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        body: formData,
+                    });
+                } catch { /* file upload failure is non-critical */ }
+            }
+
             setExamResult(res);
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
             if (res.score >= 80) {
@@ -213,16 +239,28 @@ export default function ExamPage() {
                         {formatAnswer(tr.correct_answer)}
                     </td>
                     <td className="py-2 px-2 text-center">
-                        <span className={clsx(
-                            "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
-                            tr.points === max
-                                ? "bg-[#3F8C62] text-white"
-                                : tr.points > 0
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-gray-100 text-gray-400"
-                        )}>
-                            {tr.points}/{max}
-                        </span>
+                        <div className="flex items-center justify-center gap-1">
+                            <span className={clsx(
+                                "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
+                                tr.points === max
+                                    ? "bg-[#3F8C62] text-white"
+                                    : tr.points > 0
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-gray-100 text-gray-400"
+                            )}>
+                                {tr.points}/{max}
+                            </span>
+                            {tr.code_solution && (
+                                <span title="Есть решение (код)" className="text-purple-400">
+                                    <Code size={11} />
+                                </span>
+                            )}
+                            {tr.file_solution_url && (
+                                <a href={tr.file_solution_url} target="_blank" rel="noreferrer" title="Скачать файл решения" className="text-blue-400 hover:text-blue-600">
+                                    <Paperclip size={11} />
+                                </a>
+                            )}
+                        </div>
                     </td>
                 </tr>
             );
@@ -407,6 +445,97 @@ export default function ExamPage() {
                 </button>
             </div>
 
+            {/* Solution drawer panel */}
+            {solutionPanelTaskId !== null && (() => {
+                const egeNum = task?.id === solutionPanelTaskId ? task?.ege_number ?? null : null;
+                const isFileTask = egeNum !== null && FILE_TASK_NUMS.has(egeNum);
+                return (
+                    <div className="fixed inset-0 z-50 flex">
+                        <div className="flex-1 bg-black/20" onClick={() => setSolutionPanelTaskId(null)} />
+                        <div className="w-[520px] bg-white h-full shadow-2xl flex flex-col border-l border-gray-200">
+                            <div className="p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
+                                <div>
+                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">
+                                        {egeNum ? `Задание ${egeNum}` : "Задание"}
+                                    </div>
+                                    <h3 className="font-bold text-gray-900 text-sm">
+                                        {isFileTask ? "Прикрепить файл таблицы" : "Решение (код)"}
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setSolutionPanelTaskId(null)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 p-5 overflow-y-auto">
+                                {isFileTask ? (
+                                    <div className="space-y-4">
+                                        <p className="text-sm text-gray-500">
+                                            Прикрепите файл электронной таблицы (.xlsx, .xls, .csv, .ods)
+                                        </p>
+                                        <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                                            <FileText size={28} className="text-gray-300 mb-2" />
+                                            <span className="text-sm text-gray-400 font-medium">
+                                                {fileSolutions[solutionPanelTaskId]
+                                                    ? fileSolutions[solutionPanelTaskId].name
+                                                    : "Нажмите или перетащите файл"}
+                                            </span>
+                                            <input
+                                                type="file"
+                                                accept=".xlsx,.xls,.csv,.ods"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) setFileSolutions(prev => ({ ...prev, [solutionPanelTaskId]: file }));
+                                                }}
+                                            />
+                                        </label>
+                                        {fileSolutions[solutionPanelTaskId] && (
+                                            <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                                                <Check size={14} />
+                                                {fileSolutions[solutionPanelTaskId].name}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col gap-3">
+                                        <p className="text-sm text-gray-500 shrink-0">
+                                            Вставьте код вашего решения ниже
+                                        </p>
+                                        <textarea
+                                            value={localCode}
+                                            onChange={(e) => setLocalCode(e.target.value)}
+                                            className="flex-1 font-mono text-sm bg-gray-50 border border-gray-200 rounded-xl p-4 resize-none focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/30 focus:border-[#3F8C62] text-gray-800 min-h-[400px]"
+                                            placeholder="# Вставьте код здесь..."
+                                            spellCheck={false}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-5 border-t border-gray-100 shrink-0">
+                                <button
+                                    onClick={() => {
+                                        if (!isFileTask) {
+                                            setCodeSolutions(prev => ({ ...prev, [solutionPanelTaskId]: localCode }));
+                                        }
+                                        setSolutionPanelTaskId(null);
+                                    }}
+                                    className="w-full py-3 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
+                                >
+                                    {isFileTask
+                                        ? (fileSolutions[solutionPanelTaskId] ? "Готово" : "Закрыть")
+                                        : "Сохранить решение"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-8 pt-6">
@@ -511,15 +640,48 @@ export default function ExamPage() {
                                         )}
                                     </button>
                                     
+                                    {/* Solution attachment button */}
+                                    {task?.ege_number && (CODE_TASK_NUMS.has(task.ege_number) || FILE_TASK_NUMS.has(task.ege_number)) && (
+                                        <button
+                                            onClick={() => {
+                                                setSolutionPanelTaskId(task.id);
+                                                setLocalCode(codeSolutions[task.id] || "");
+                                            }}
+                                            disabled={isSubmitting}
+                                            className={clsx(
+                                                "w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 border",
+                                                FILE_TASK_NUMS.has(task.ege_number)
+                                                    ? fileSolutions[task.id]
+                                                        ? "bg-blue-50 text-blue-600 border-blue-200"
+                                                        : "bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600 border-gray-200"
+                                                    : codeSolutions[task.id]
+                                                        ? "bg-purple-50 text-purple-600 border-purple-200"
+                                                        : "bg-gray-50 text-gray-500 hover:bg-purple-50 hover:text-purple-600 border-gray-200"
+                                            )}
+                                        >
+                                            {FILE_TASK_NUMS.has(task.ege_number) ? (
+                                                <>
+                                                    <Paperclip size={14} />
+                                                    {fileSolutions[task.id] ? `${fileSolutions[task.id].name.slice(0, 18)}…` : "Прикрепить файл"}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Code size={14} />
+                                                    {codeSolutions[task.id] ? "Решение прикреплено ✓" : "Прикрепить решение"}
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+
                                     <div className="flex gap-2 pt-2">
-                                        <button 
+                                        <button
                                             onClick={() => setTaskIndex(prev => Math.max(0, prev - 1))}
                                             disabled={taskIndex === 0}
                                             className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
                                         >
                                             Назад
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => setTaskIndex(prev => Math.min(tasks.length - 1, prev + 1))}
                                             disabled={taskIndex === tasks.length - 1}
                                             className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
