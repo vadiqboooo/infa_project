@@ -1,5 +1,5 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
@@ -21,6 +21,27 @@ const queryClient = new QueryClient({
   },
 });
 
+const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
+  { pattern: /^\/login/, title: "Вход" },
+  { pattern: /^\/exams\/\d+/, title: "Пробник" },
+  { pattern: /^\/exams/, title: "Пробники" },
+  { pattern: /^\/homework\/\d+/, title: "Домашка" },
+  { pattern: /^\/homework/, title: "Домашка" },
+  { pattern: /^\/tasks\/\d+/, title: "Разбор" },
+  { pattern: /^\/tasks/, title: "Разбор" },
+  { pattern: /^\/admin/, title: "Админ" },
+  { pattern: /^\/$|^\/dashboard/, title: "Главная" },
+];
+
+function PageTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const match = PAGE_TITLES.find(({ pattern }) => pattern.test(pathname));
+    document.title = match ? `Инфа ЕГЭ — ${match.title}` : "Инфа ЕГЭ";
+  }, [pathname]);
+  return null;
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loggedIn } = useAuth();
   return loggedIn ? <>{children}</> : <Navigate to="/login" />;
@@ -31,6 +52,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <PageTitle />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 
