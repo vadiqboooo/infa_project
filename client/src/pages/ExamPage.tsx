@@ -39,6 +39,7 @@ export default function ExamPage() {
     const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
     const [localCode, setLocalCode] = useState("");
+    const [viewingCode, setViewingCode] = useState<string | null>(null);
 
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
@@ -220,28 +221,29 @@ export default function ExamPage() {
         const firstHalf = sortedResults.slice(0, 14);
         const secondHalf = sortedResults.slice(14);
 
+
         const ResultRow = ({ tr, idx }: { tr: TaskResult; idx: number }) => {
             const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
             return (
                 <tr
                     key={tr.task_id}
                     className={clsx(
-                        "border-b border-gray-100 transition-colors",
+                        "transition-colors",
                         tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
                             : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
                             : "hover:bg-gray-50/80"
                     )}
                 >
-                    <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8">
+                    <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8 border-b border-gray-200">
                         {tr.ege_number || idx + 1}
                     </td>
-                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate">
+                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate border-b border-gray-200">
                         {formatAnswer(tr.user_answer)}
                     </td>
-                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate">
+                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate border-b border-gray-200">
                         {formatAnswer(tr.correct_answer)}
                     </td>
-                    <td className="py-2 px-2 text-center">
+                    <td className="py-2 px-2 text-center border-b border-gray-200">
                         <div className="flex items-center justify-center gap-1">
                             <span className={clsx(
                                 "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
@@ -254,13 +256,22 @@ export default function ExamPage() {
                                 {tr.points}/{max}
                             </span>
                             {tr.code_solution && (
-                                <span title="Есть решение (код)" className="text-purple-400">
-                                    <Code size={11} />
-                                </span>
+                                <button
+                                    onClick={() => setViewingCode(tr.code_solution!)}
+                                    title="Посмотреть решение (код)"
+                                    className="text-purple-400 hover:text-purple-600 transition-colors"
+                                >
+                                    <Code size={13} />
+                                </button>
                             )}
                             {tr.file_solution_url && (
-                                <a href={tr.file_solution_url} target="_blank" rel="noreferrer" title="Скачать файл решения" className="text-blue-400 hover:text-blue-600">
-                                    <Paperclip size={11} />
+                                <a
+                                    href={tr.file_solution_url}
+                                    download
+                                    title="Скачать файл решения"
+                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                >
+                                    <Paperclip size={13} />
                                 </a>
                             )}
                         </div>
@@ -271,11 +282,11 @@ export default function ExamPage() {
 
         const TableHead = () => (
             <thead>
-                <tr className="border-b border-gray-100">
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider w-8">№</th>
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Ваш</th>
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Верный</th>
-                    <th className="text-center py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">Балл</th>
+                <tr className="bg-gray-50">
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider w-8 border-b-2 border-gray-200">№</th>
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Ваш</th>
+                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Верный</th>
+                    <th className="text-center py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Балл</th>
                 </tr>
             </thead>
         );
@@ -340,17 +351,17 @@ export default function ExamPage() {
                                 <h2 className="text-sm font-bold text-gray-700">Подробные результаты</h2>
                             </div>
                             <div className="grid grid-cols-2 divide-x divide-gray-200">
-                                <table className="w-full text-sm">
+                                <table className="w-full text-sm border-collapse">
                                     <TableHead />
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody>
                                         {firstHalf.map((tr, idx) => (
                                             <ResultRow key={tr.task_id} tr={tr} idx={idx} />
                                         ))}
                                     </tbody>
                                 </table>
-                                <table className="w-full text-sm">
+                                <table className="w-full text-sm border-collapse">
                                     <TableHead />
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody>
                                         {secondHalf.map((tr, idx) => (
                                             <ResultRow key={tr.task_id} tr={tr} idx={idx + 14} />
                                         ))}
@@ -360,6 +371,33 @@ export default function ExamPage() {
                         </div>
                     )}
                 </div>
+
+            {/* Modal: view code solution */}
+            {viewingCode && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setViewingCode(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-2 text-purple-600 font-bold text-sm">
+                                <Code size={16} />
+                                Решение (код)
+                            </div>
+                            <button onClick={() => setViewingCode(null)} className="text-gray-400 hover:text-gray-700 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="overflow-auto flex-1 rounded-b-2xl">
+                            <CodeMirror
+                                value={viewingCode}
+                                extensions={[python()]}
+                                theme={githubLight}
+                                editable={false}
+                                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
+                                style={{ fontSize: "13px" }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
         );
     }

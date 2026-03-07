@@ -86,18 +86,18 @@
 .task-body table {
     width: 100%;
     border-collapse: collapse;
-    margin: var(--sp-5) 0;
+    margin: 1.25rem 0;
 }
 
 .task-body th,
 .task-body td {
-    padding: var(--sp-3);
-    border: 1px solid var(--clr-border);
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
     text-align: left;
 }
 
 .task-body th {
-    background: var(--clr-surface-2);
+    background: #f3f4f6;
     font-weight: 600;
 }
 
