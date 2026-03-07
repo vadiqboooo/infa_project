@@ -26,7 +26,7 @@ export default function TasksPage() {
     const location = useLocation();
     
     const [taskIndex, setTaskIndex] = useState(0);
-    const [answer, setAnswer] = useState<AnswerVal>(0);
+    const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>({});
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
     const [showChat, setShowChat] = useState(true);
     const [solutionOpen, setSolutionOpen] = useState(false);
@@ -66,11 +66,12 @@ export default function TasksPage() {
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const check = useCheckAnswer(currentTaskNav?.id ?? 0);
 
-    // Reset answer when task changes
+    // Reset check result when task changes
     useEffect(() => {
-        setAnswer(0);
         setCheckResult(null);
     }, [taskIndex, id]);
+
+    const answer = savedAnswers[currentTaskNav?.id ?? 0] ?? 0;
 
     const handleCheck = async () => {
         if (!currentTaskNav) return;
@@ -280,12 +281,12 @@ export default function TasksPage() {
                                         <div className="space-y-3">
                                             <AnswerInput
                                                 type={task?.answer_type || 'single_number'}
-                                                value={isVariant && examInfo?.active_attempt ? (examAnswers[task?.id || 0] ?? 0) : answer}
+                                                value={isVariant && examInfo?.active_attempt ? (examAnswers[task?.id || 0] ?? 0) : (savedAnswers[task?.id || 0] ?? 0)}
                                                 onChange={(val) => {
                                                     if (isVariant && examInfo?.active_attempt) {
                                                         setExamAnswers(prev => ({ ...prev, [task?.id || 0]: val }));
                                                     } else {
-                                                        setAnswer(val);
+                                                        setSavedAnswers(prev => ({ ...prev, [task?.id || 0]: val }));
                                                         setCheckResult(null);
                                                     }
                                                 }}
