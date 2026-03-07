@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Send, Bot, X, Code2, BookOpen } from 'lucide-react';
+import TaskView from '../components/TaskView';
 import { useNavigate, useParams, Link } from 'react-router';
 import { clsx } from 'clsx';
 import { useStore } from '../store';
@@ -167,9 +168,9 @@ export function TaskPage() {
                   </button>
                 )}
               </div>
-              <p className="text-gray-800 leading-relaxed whitespace-pre-line">
-                {currentTask.description}
-              </p>
+              <div className="text-gray-800 leading-relaxed">
+                <TaskView content={currentTask.description} />
+              </div>
             </div>
 
             {/* Right sub-column: Answer + Chat */}

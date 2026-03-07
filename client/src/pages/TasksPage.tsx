@@ -214,7 +214,9 @@ export default function TasksPage() {
                                                 ? 'bg-[#3F8C62] text-white shadow-md'
                                                 : t.status === 'solved'
                                                     ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                    : 'bg-white border border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-600'
+                                                    : t.status === 'failed'
+                                                        ? 'bg-red-100 text-red-700 border border-red-300'
+                                                        : 'bg-white border border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-600'
                                         )}
                                     >
                                         <span>{idx + 1}</span>

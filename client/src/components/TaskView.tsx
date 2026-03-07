@@ -14,12 +14,73 @@ interface Props {
 
 const parseOptions: HTMLReactParserOptions = {};
 
+// Маппинг HTML-сущностей на LaTeX-команды для логических операций
+const HTML_ENTITY_TO_LATEX: Record<string, string> = {
+    "&and;": "\\land",
+    "&or;": "\\lor",
+    "&not;": "\\lnot ",
+    "&oplus;": "\\oplus",
+    "&rarr;": "\\rightarrow",
+    "&larr;": "\\leftarrow",
+    "&harr;": "\\leftrightarrow",
+    "&rArr;": "\\Rightarrow",
+    "&lArr;": "\\Leftarrow",
+    "&hArr;": "\\Leftrightarrow",
+    "&forall;": "\\forall",
+    "&exist;": "\\exists",
+    "&empty;": "\\emptyset",
+    "&isin;": "\\in",
+    "&notin;": "\\notin",
+    "&sub;": "\\subset",
+    "&sup;": "\\supset",
+    "&cup;": "\\cup",
+    "&cap;": "\\cap",
+    "&le;": "\\leq",
+    "&ge;": "\\geq",
+    "&ne;": "\\neq",
+    "&equiv;": "\\equiv",
+    "&sdot;": "\\cdot",
+    "&times;": "\\times",
+    "&divide;": "\\div",
+    "&plusmn;": "\\pm",
+    "&infin;": "\\infty",
+    "&sum;": "\\sum",
+    "&prod;": "\\prod",
+    "&radic;": "\\sqrt{}",
+    "&part;": "\\partial",
+    "&nabla;": "\\nabla",
+    "&alpha;": "\\alpha",
+    "&beta;": "\\beta",
+    "&gamma;": "\\gamma",
+    "&delta;": "\\delta",
+    "&epsilon;": "\\epsilon",
+    "&lambda;": "\\lambda",
+    "&mu;": "\\mu",
+    "&pi;": "\\pi",
+    "&sigma;": "\\sigma",
+    "&tau;": "\\tau",
+    "&phi;": "\\phi",
+    "&omega;": "\\omega",
+};
+
+const htmlEntityPattern = new RegExp(
+    Object.keys(HTML_ENTITY_TO_LATEX).map(e => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+    "gi"
+);
+
+// Декодируем HTML-сущности внутри формулы в LaTeX-команды
+function decodeHtmlEntitiesInFormula(formula: string): string {
+    return formula.replace(htmlEntityPattern, (match) => {
+        return HTML_ENTITY_TO_LATEX[match.toLowerCase()] || match;
+    });
+}
+
 // Функция для рендеринга LaTeX-формул
 function renderLatex(text: string): string {
     // Обрабатываем display-формулы $$...$$
     text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
         try {
-            return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: true, throwOnError: false });
         } catch (e) {
             return match;
         }
@@ -28,7 +89,7 @@ function renderLatex(text: string): string {
     // Обрабатываем inline-формулы $...$
     text = text.replace(/\$([^\$\n]+?)\$/g, (match, formula) => {
         try {
-            return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: false, throwOnError: false });
         } catch (e) {
             return match;
         }
@@ -37,7 +98,7 @@ function renderLatex(text: string): string {
     // Обрабатываем формулы в нотации \(...\) для inline
     text = text.replace(/\\\(([\s\S]+?)\\\)/g, (match, formula) => {
         try {
-            return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: false, throwOnError: false });
         } catch (e) {
             return match;
         }
@@ -46,7 +107,7 @@ function renderLatex(text: string): string {
     // Обрабатываем формулы в нотации \[...\] для display
     text = text.replace(/\\\[([\s\S]+?)\\\]/g, (match, formula) => {
         try {
-            return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: true, throwOnError: false });
         } catch (e) {
             return match;
         }
