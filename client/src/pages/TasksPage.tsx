@@ -303,7 +303,7 @@ export default function TasksPage() {
                                             </div>
 
                                             {/* Answer section — bottom of task card */}
-                                            <div className="mt-6 pt-4 border-t border-gray-100">
+                                            <div className="mt-6 pt-4 border-t border-gray-100 max-w-[40%]">
                                                 <div className="flex items-start gap-3">
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Ваш ответ</div>
