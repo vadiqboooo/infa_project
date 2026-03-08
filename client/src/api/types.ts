@@ -28,7 +28,9 @@ export enum TaskDifficulty {
 export enum TopicCategory {
     tutorial = "tutorial",
     homework = "homework",
-    variants = "variants"
+    control = "control",
+    variants = "variants",
+    mock = "mock"
 }
 
 export interface TaskNav {

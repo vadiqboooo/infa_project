@@ -9,12 +9,14 @@ interface Props {
     onViewTopicStats: (topicId: number) => void;
 }
 
-type Tab = "tutorial" | "homework" | "variants";
+type Tab = "tutorial" | "homework" | "control" | "variants" | "mock";
 
 const TAB_OPTIONS: { key: Tab; label: string }[] = [
     { key: "tutorial", label: "Разбор" },
     { key: "homework", label: "Домашка" },
+    { key: "control", label: "КР" },
     { key: "variants", label: "Варианты" },
+    { key: "mock", label: "Пробники" },
 ];
 
 function StatusIcon({ status }: { status: string }) {

@@ -62,13 +62,15 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
     });
 }
 
-type FilterCategory = 'все' | 'tutorial' | 'homework' | 'variants';
+type FilterCategory = 'все' | 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
 
 const FILTER_OPTIONS: { key: FilterCategory; label: string }[] = [
-  { key: 'все', label: 'Все' },
-  { key: 'tutorial', label: 'Разбор' },
-  { key: 'homework', label: 'Домашняя работа' },
-  { key: 'variants', label: 'Вариант' },
+    { key: 'все', label: 'Все' },
+    { key: 'tutorial', label: 'Разбор' },
+    { key: 'homework', label: 'Домашняя работа' },
+    { key: 'control', label: 'Контрольная' },
+    { key: 'variants', label: 'Вариант' },
+    { key: 'mock', label: 'Пробник' },
 ];
 
 export default function AdminPage() {
@@ -263,12 +265,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const categoryLabel = (cat: string) => {
         if (cat === 'tutorial') return 'Разбор';
         if (cat === 'homework') return 'ДЗ';
+        if (cat === 'control') return 'КР';
+        if (cat === 'mock') return 'Пробник';
         return 'Вариант';
     };
 
     const categoryColor = (cat: string) => {
         if (cat === 'tutorial') return 'bg-blue-100 text-blue-700';
         if (cat === 'homework') return 'bg-violet-100 text-violet-700';
+        if (cat === 'control') return 'bg-sky-100 text-sky-700';
+        if (cat === 'mock') return 'bg-purple-100 text-purple-700';
         return 'bg-orange-100 text-orange-700';
     };
 

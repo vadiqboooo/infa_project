@@ -199,6 +199,30 @@ export default function ExamPage() {
         );
     }
 
+    // Result Screen — mock category: hide scores, show "results recorded" message
+    const isMock = String(currentTopic?.category) === "mock";
+    if (isMock && (examResult || (examInfo.finished_attempt && !examInfo.active_attempt))) {
+        return (
+            <div className="min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
+                <div className="bg-white border border-gray-200 rounded-[32px] p-10 max-w-md w-full text-center shadow-xl shadow-gray-200/50">
+                    <div className="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle2 size={32} />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-3">Ответы записаны</h1>
+                    <p className="text-gray-500 text-sm leading-relaxed mb-8">
+                        Вы завершили пробный экзамен. Ваши ответы зафиксированы и будут проверены преподавателем. Результаты сообщат после проверки.
+                    </p>
+                    <button
+                        onClick={() => navigate('/exams')}
+                        className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20"
+                    >
+                        Вернуться к вариантам
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // Result Screen
     if (examResult || (examInfo.finished_attempt && !examInfo.active_attempt)) {
         const result = examResult || examInfo.finished_attempt;
@@ -411,7 +435,11 @@ export default function ExamPage() {
                         <Clock size={32} />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">{currentTopic.title}</h1>
-                    <p className="text-gray-500 text-sm mb-8">Контрольный вариант для проверки знаний</p>
+                    <p className="text-gray-500 text-sm mb-8">
+                        {isMock
+                            ? "Пробный экзамен — результаты будут проверены преподавателем"
+                            : "Контрольный вариант для проверки знаний"}
+                    </p>
                     
                     <div className="grid grid-cols-2 gap-4 mb-10">
                         <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">

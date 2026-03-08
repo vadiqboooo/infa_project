@@ -141,15 +141,9 @@ export function TopicDetail({
               >
                 <option value="tutorial">Разбор</option>
                 <option value="homework">Домашняя работа</option>
+                <option value="control">Контрольная работа</option>
                 <option value="variants">Вариант</option>
-              </select>
-              <select
-                value={editingTopic.is_mock ? 'mock' : 'regular'}
-                onChange={(e) => handleTopicFieldChange('is_mock', e.target.value === 'mock')}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
-              >
-                <option value="regular">Обычная тема</option>
-                <option value="mock">Пробник (Mock)</option>
+                <option value="mock">Пробник</option>
               </select>
               <button onClick={handleSaveTopicHeader} className="p-1.5 bg-[#3F8C62] text-white rounded-lg hover:bg-[#357A54] transition-colors">
                 <Save size={16} />
@@ -168,15 +162,16 @@ export function TopicDetail({
               <span className={clsx(
                 "px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider",
                 topic.category === 'tutorial' ? "bg-blue-100 text-blue-700" :
-                topic.category === 'homework' ? "bg-violet-100 text-violet-700" : "bg-orange-100 text-orange-700"
+                topic.category === 'homework' ? "bg-violet-100 text-violet-700" :
+                topic.category === 'control' ? "bg-sky-100 text-sky-700" :
+                topic.category === 'mock' ? "bg-purple-100 text-purple-700" :
+                "bg-orange-100 text-orange-700"
               )}>
-                {topic.category === 'tutorial' ? 'Разбор' : topic.category === 'homework' ? 'ДЗ' : 'Вариант'}
+                {topic.category === 'tutorial' ? 'Разбор' :
+                 topic.category === 'homework' ? 'ДЗ' :
+                 topic.category === 'control' ? 'КР' :
+                 topic.category === 'mock' ? 'Пробник' : 'Вариант'}
               </span>
-              {topic.is_mock && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wider">
-                  Пробник
-                </span>
-              )}
               <button onClick={() => setIsEditingHeader(true)} className="p-1.5 text-gray-400 hover:text-gray-600">
                 <Pencil size={14} />
               </button>
