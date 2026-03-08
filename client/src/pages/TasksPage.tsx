@@ -3,10 +3,11 @@ import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
 import ChatWidget from "../components/ChatWidget";
+import MentorPanel from "../components/MentorPanel";
 import ExamIntro from "../components/ExamIntro";
 import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
-import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
 import type { AnswerVal, TaskNav, TopicNav, ExamResult } from "../api/types";
@@ -29,6 +30,7 @@ export default function TasksPage() {
     const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>({});
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
     const [showChat, setShowChat] = useState(true);
+    const [mentorOpen, setMentorOpen] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
@@ -183,7 +185,7 @@ export default function TasksPage() {
                     <div className="w-px h-5 bg-gray-200" />
                     <h1 className="font-bold text-gray-900 truncate">{currentTopic.title}</h1>
                     
-                    <div className="ml-auto flex items-center gap-4">
+                    <div className="ml-auto flex items-center gap-3">
                         {isVariant && examInfo?.active_attempt ? (
                             <ExamTimer
                                 startedAt={examInfo.active_attempt.started_at}
@@ -194,13 +196,27 @@ export default function TasksPage() {
                             <Code2 size={11} />
                             Python
                         </span>
+                        {(!isVariant || !examInfo?.active_attempt) && task && (
+                            <button
+                                onClick={() => setMentorOpen(o => !o)}
+                                className={clsx(
+                                    "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-bold transition-all",
+                                    mentorOpen
+                                        ? "bg-violet-600 text-white shadow-md"
+                                        : "bg-violet-100 text-violet-700 hover:bg-violet-200"
+                                )}
+                            >
+                                <HelpCircle size={13} />
+                                Помощь
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
 
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-8 pt-8">
+                <div className="flex-1 overflow-y-auto p-8 pt-8" style={{ minWidth: 0 }}>
                     {!isVariant || !examInfo || (examInfo.active_attempt && !examResult) || viewingFinishedExam ? (
                         <>
                             {/* Task Navigation Row */}
@@ -433,6 +449,17 @@ export default function TasksPage() {
                         </div>
                     )}
                 </div>
+
+                {/* Mentor side panel */}
+                {mentorOpen && task && (
+                    <div className="w-[440px] shrink-0 h-full overflow-hidden border-l border-gray-200 flex flex-col">
+                        <MentorPanel
+                            key={task.id}
+                            taskId={task.id}
+                            onClose={() => setMentorOpen(false)}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Solution drawer */}

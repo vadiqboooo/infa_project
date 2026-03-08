@@ -50,7 +50,7 @@ export function useCheckAnswer(taskId: number) {
 
 /* ── AI Assist ───────────────────────────────────────── */
 export function useAIAssist(taskId: number) {
-    return useMutation<AIAssistResponse, Error, { user_query: string; mode: AIMode }>({
+    return useMutation<AIAssistResponse, Error, { user_query: string; mode: AIMode; user_code?: string | null }>({
         mutationFn: (body) =>
             api<AIAssistResponse>(`/tasks/${taskId}/ai-assist`, {
                 method: "POST",

@@ -222,6 +222,21 @@ SYSTEM_PROMPT = """Ты — образовательный ассистент д
 
 Отвечай на русском языке."""
 
+MENTOR_SYSTEM_PROMPT = """Ты — наставник по программированию для школьников, готовящихся к ЕГЭ по информатике (Python).
+
+Твои правила:
+- НИКОГДА не давай готовый правильный код и не называй прямой ответ
+- Действуй как опытный учитель: веди ученика к пониманию через вопросы и наблюдения
+- Если в коде небольшая ошибка — укажи конкретно, но не исправляй сам (например: "ты считаешь единицы, а задача просит нули")
+- Если решение принципиально неверное — задавай наводящие вопросы: "какое значение просит найти задача?", "что именно находит твой код?", "какой результат ты получишь на примере из условия?"
+- Иногда проверяй знание встроенных функций: "что делает функция set() с дубликатами?", "что возвращает int() от строки '10'?"
+- Хвали за правильные части кода
+- Если ученик не прислал код — вежливо попроси: "Поделись своим кодом, я посмотрю что не так"
+- Анализируй эталонное решение (если есть) только для понимания задачи — не показывай его ученику
+- Отвечай кратко: 2–4 предложения, один-два конкретных вопроса или наблюдения
+
+Отвечай на русском языке."""
+
 
 @router.post("/{task_id}/ai-assist", response_model=AIAssistResponse)
 async def ai_assist(
@@ -254,15 +269,25 @@ async def ai_assist(
     history = logs_result.scalars().all()
 
     # Build messages for LLM
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.append({
-        "role": "system",
-        "content": f"Задача:\n{task.content_html}",
-    })
+    is_mentor = body.user_code is not None
+    system_prompt = MENTOR_SYSTEM_PROMPT if is_mentor else SYSTEM_PROMPT
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Task context block
+    task_context = f"Условие задачи:\n{task.content_html}"
+    if is_mentor and task.full_solution_code:
+        task_context += f"\n\nЭталонное решение (только для твоего анализа, не показывай ученику):\n```python\n{task.full_solution_code}\n```"
+    messages.append({"role": "system", "content": task_context})
+
     for log in reversed(history):
         messages.append({"role": "user", "content": log.user_query})
         messages.append({"role": "assistant", "content": log.ai_response})
-    messages.append({"role": "user", "content": body.user_query})
+
+    # Include student code in current message if provided
+    user_message = body.user_query
+    if body.user_code:
+        user_message = f"Мой код:\n```python\n{body.user_code}\n```\n\n{body.user_query}" if body.user_query else f"Мой код:\n```python\n{body.user_code}\n```"
+    messages.append({"role": "user", "content": user_message})
 
     # Call LLM API
     try:
