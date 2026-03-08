@@ -27,7 +27,9 @@ export default function TasksPage() {
     const location = useLocation();
     
     const [taskIndex, setTaskIndex] = useState(0);
-    const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>({});
+    const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>(() => {
+        try { return JSON.parse(localStorage.getItem('edu_task_answers') || '{}'); } catch { return {}; }
+    });
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
     const [showChat, setShowChat] = useState(true);
     const [mentorOpen, setMentorOpen] = useState(false);
@@ -67,6 +69,11 @@ export default function TasksPage() {
 
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const check = useCheckAnswer(currentTaskNav?.id ?? 0);
+
+    // Persist answers to localStorage
+    useEffect(() => {
+        try { localStorage.setItem('edu_task_answers', JSON.stringify(savedAnswers)); } catch {}
+    }, [savedAnswers]);
 
     // Reset check result when task changes
     useEffect(() => {
@@ -187,10 +194,19 @@ export default function TasksPage() {
                     
                     <div className="ml-auto flex items-center gap-3">
                         {isVariant && examInfo?.active_attempt ? (
-                            <ExamTimer
-                                startedAt={examInfo.active_attempt.started_at}
-                                timeLimitMinutes={examInfo.time_limit_minutes}
-                            />
+                            <>
+                                <ExamTimer
+                                    startedAt={examInfo.active_attempt.started_at}
+                                    timeLimitMinutes={examInfo.time_limit_minutes}
+                                />
+                                <button
+                                    onClick={handleFinishExam}
+                                    disabled={submitExam.isPending}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors"
+                                >
+                                    {submitExam.isPending ? "Отправка..." : "Завершить экзамен"}
+                                </button>
+                            </>
                         ) : null}
                         <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">
                             <Code2 size={11} />
@@ -285,74 +301,59 @@ export default function TasksPage() {
                                                     files={task.media_resources?.files}
                                                 />
                                             </div>
+
+                                            {/* Answer section — bottom of task card */}
+                                            <div className="mt-6 pt-4 border-t border-gray-100">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Ваш ответ</div>
+                                                        <AnswerInput
+                                                            type={task.answer_type || 'single_number'}
+                                                            egeNumber={task.ege_number}
+                                                            value={isVariant && examInfo?.active_attempt ? (examAnswers[task.id] ?? 0) : (savedAnswers[task.id] ?? 0)}
+                                                            onChange={(val) => {
+                                                                if (isVariant && examInfo?.active_attempt) {
+                                                                    setExamAnswers(prev => ({ ...prev, [task.id]: val }));
+                                                                } else {
+                                                                    setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
+                                                                    setCheckResult(null);
+                                                                }
+                                                            }}
+                                                            disabled={check.isPending || viewingFinishedExam}
+                                                        />
+                                                    </div>
+                                                    {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (
+                                                        <button
+                                                            onClick={handleCheck}
+                                                            disabled={check.isPending}
+                                                            className="mt-5 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors shrink-0"
+                                                        >
+                                                            {check.isPending ? "..." : "Проверить"}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {checkResult === 'correct' && (
+                                                    <div className="mt-3 p-2.5 bg-emerald-50 rounded-lg text-emerald-700 text-sm font-medium flex items-center gap-2">
+                                                        <div className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-xs">✓</div>
+                                                        Правильный ответ!
+                                                    </div>
+                                                )}
+                                                {checkResult === 'wrong' && (
+                                                    <div className="mt-3 p-2.5 bg-red-50 rounded-lg text-red-600 text-sm font-medium flex items-center gap-2">
+                                                        <div className="w-5 h-5 bg-red-200 rounded-full flex items-center justify-center text-xs">✕</div>
+                                                        Неверно. Попробуйте ещё раз.
+                                                    </div>
+                                                )}
+                                                {task.status === 'solved' && checkResult !== 'correct' && (
+                                                    <div className="mt-2 text-emerald-600 text-sm font-medium flex items-center gap-1.5">
+                                                        <div className="w-4 h-4 bg-emerald-100 rounded-full flex items-center justify-center text-[10px]">✓</div>
+                                                        Вы уже решили эту задачу
+                                                    </div>
+                                                )}
+                                            </div>
                                         </>
                                     ) : null}
-                                </div>
-
-                                {/* Right: Panel */}
-                                <div className="w-full lg:w-[300px] shrink-0 flex flex-col gap-4">
-                                    {/* Answer Card */}
-                                    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Ваш ответ
-                                        </label>
-                                        <div className="space-y-3">
-                                            <AnswerInput
-                                                type={task?.answer_type || 'single_number'}
-                                                value={isVariant && examInfo?.active_attempt ? (examAnswers[task?.id || 0] ?? 0) : (savedAnswers[task?.id || 0] ?? 0)}
-                                                onChange={(val) => {
-                                                    if (isVariant && examInfo?.active_attempt) {
-                                                        setExamAnswers(prev => ({ ...prev, [task?.id || 0]: val }));
-                                                    } else {
-                                                        setSavedAnswers(prev => ({ ...prev, [task?.id || 0]: val }));
-                                                        setCheckResult(null);
-                                                    }
-                                                }}
-                                                disabled={check.isPending || viewingFinishedExam}
-                                            />
-                                            
-                                            {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (
-                                                <button
-                                                    onClick={handleCheck}
-                                                    disabled={check.isPending}
-                                                    className="w-full bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                                                >
-                                                    {check.isPending ? "Проверка..." : "Проверить"}
-                                                </button>
-                                            )}
-
-                                            {checkResult === 'correct' && (
-                                                <div className="mt-3 p-2.5 bg-emerald-50 rounded-lg text-emerald-700 text-sm font-medium flex items-center gap-2">
-                                                    <div className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-xs">✓</div>
-                                                    Правильный ответ!
-                                                </div>
-                                            )}
-                                            {checkResult === 'wrong' && (
-                                                <div className="mt-3 p-2.5 bg-red-50 rounded-lg text-red-600 text-sm font-medium flex items-center gap-2">
-                                                    <div className="w-5 h-5 bg-red-200 rounded-full flex items-center justify-center text-xs">✕</div>
-                                                    Неверно. Попробуйте ещё раз.
-                                                </div>
-                                            )}
-                                            
-                                            {task?.status === 'solved' && checkResult !== 'correct' && (
-                                                <div className="mt-3 text-emerald-600 text-sm font-medium flex items-center gap-1.5">
-                                                    <div className="w-4 h-4 bg-emerald-100 rounded-full flex items-center justify-center text-[10px]">✓</div>
-                                                    Вы уже решили эту задачу
-                                                </div>
-                                            )}
-
-                                            {isVariant && examInfo?.active_attempt && (
-                                                <button
-                                                    onClick={handleFinishExam}
-                                                    disabled={submitExam.isPending}
-                                                    className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors mt-2"
-                                                >
-                                                    {submitExam.isPending ? "Отправка..." : "Завершить экзамен"}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
                                 </div>
                             </div>
                         </>
