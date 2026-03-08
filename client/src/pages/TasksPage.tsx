@@ -196,20 +196,6 @@ export default function TasksPage() {
                             <Code2 size={11} />
                             Python
                         </span>
-                        {(!isVariant || !examInfo?.active_attempt) && task && (
-                            <button
-                                onClick={() => setMentorOpen(o => !o)}
-                                className={clsx(
-                                    "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-bold transition-all",
-                                    mentorOpen
-                                        ? "bg-violet-600 text-white shadow-md"
-                                        : "bg-violet-100 text-violet-700 hover:bg-violet-200"
-                                )}
-                            >
-                                <HelpCircle size={13} />
-                                Помощь
-                            </button>
-                        )}
                     </div>
                 </div>
             </div>
@@ -266,16 +252,32 @@ export default function TasksPage() {
                                                 <span className="text-xs text-gray-400">
                                                     Задание {taskIndex + 1} — {task.title || 'Информатика'}
                                                 </span>
-                                                {task.solution_steps && task.solution_steps.length > 0 && (
-                                                    <button
-                                                        onClick={() => setSolutionOpen(true)}
-                                                        className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-xl text-[#3F8C62] bg-[#3F8C62]/5 border border-[#3F8C62]/20 hover:bg-[#3F8C62]/10 hover:border-[#3F8C62]/40 transition-all group/sol"
-                                                        title="Пошаговое решение"
-                                                    >
-                                                        <BookOpen size={16} className="group-hover/sol:scale-110 transition-transform" />
-                                                        <span className="text-xs font-bold uppercase tracking-tight">Разбор задачи</span>
-                                                    </button>
-                                                )}
+                                                <div className="ml-auto flex items-center gap-2">
+                                                    {(!isVariant || !examInfo?.active_attempt) && (
+                                                        <button
+                                                            onClick={() => setMentorOpen(o => !o)}
+                                                            className={clsx(
+                                                                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border",
+                                                                mentorOpen
+                                                                    ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                                                                    : "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100"
+                                                            )}
+                                                        >
+                                                            <HelpCircle size={13} />
+                                                            Помощь
+                                                        </button>
+                                                    )}
+                                                    {task.solution_steps && task.solution_steps.length > 0 && (
+                                                        <button
+                                                            onClick={() => setSolutionOpen(true)}
+                                                            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[#3F8C62] bg-[#3F8C62]/5 border border-[#3F8C62]/20 hover:bg-[#3F8C62]/10 hover:border-[#3F8C62]/40 transition-all group/sol"
+                                                            title="Пошаговое решение"
+                                                        >
+                                                            <BookOpen size={13} className="group-hover/sol:scale-110 transition-transform" />
+                                                            <span className="text-xs font-bold uppercase tracking-tight">Разбор</span>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="prose prose-slate max-w-none text-gray-800 leading-relaxed">
                                                 <TaskView
@@ -351,25 +353,6 @@ export default function TasksPage() {
                                         </div>
                                     </div>
 
-                                    {/* AI Card */}
-                                    {(!isVariant || !examInfo?.active_attempt) && (
-                                        <div className="bg-white border border-gray-200 rounded-xl flex flex-col overflow-hidden h-[320px] shadow-sm">
-                                            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
-                                                <div className="flex items-center gap-2">
-                                                    <Bot size={16} className="text-gray-500" />
-                                                    <span className="text-sm font-semibold text-gray-800">AI Ассистент</span>
-                                                </div>
-                                                <button onClick={() => setShowChat(!showChat)} className="text-gray-400 hover:text-gray-600">
-                                                    {showChat ? <X size={14} /> : <Bot size={14} />}
-                                                </button>
-                                            </div>
-                                            {showChat && (
-                                                <div className="flex-1 overflow-hidden">
-                                                    <ChatWidget taskId={task?.id || 0} mode={categoryFilter === 'homework' ? 'practice' : 'tutorial'} />
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         </>
