@@ -271,6 +271,55 @@ export interface StudentOut {
     topic_progress: StudentTopicProgress[];
 }
 
+/* ── Student detail ─────────────────────────────────── */
+export interface StudentTaskResult {
+    task_id: number;
+    ege_number: number | null;
+    order_index: number;
+    status: "solved" | "failed" | "not_started";
+    attempts_count: number;
+}
+
+export interface StudentTopicDetail {
+    topic_id: number;
+    topic_name: string;
+    category: string;
+    tasks: StudentTaskResult[];
+}
+
+export interface StudentDetailOut {
+    id: number;
+    name: string;
+    username: string | null;
+    photo_url: string | null;
+    role: string;
+    last_active_at: string;
+    total_solved: number;
+    total_tasks: number;
+    topics: StudentTopicDetail[];
+}
+
+/* ── Topic stats matrix ─────────────────────────────── */
+export interface TopicStatsTaskInfo {
+    task_id: number;
+    ege_number: number | null;
+    order_index: number;
+}
+
+export interface TopicStatsStudentRow {
+    student_id: number;
+    student_name: string;
+    photo_url: string | null;
+    results: Record<number, string>;
+}
+
+export interface TopicStatsOut {
+    topic_id: number;
+    topic_title: string;
+    tasks: TopicStatsTaskInfo[];
+    students: TopicStatsStudentRow[];
+}
+
 /* ── Auth ──────────────────────────────────────────── */
 export interface TokenResponse {
     access_token: string;

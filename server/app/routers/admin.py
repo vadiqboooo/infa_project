@@ -23,6 +23,12 @@ from app.schemas.admin import (
     StudentTopicProgress,
     StudentExamScore,
     UserRoleUpdate,
+    StudentDetailOut,
+    StudentTopicDetail,
+    StudentTaskResult,
+    TopicStatsOut,
+    TopicStatsStudentRow,
+    TopicStatsTaskInfo,
 )
 
 router = APIRouter(
@@ -267,6 +273,140 @@ async def update_user_role(
     await db.commit()
     
     return await get_student_detail(user_id, db)
+
+
+@router.get("/students/{user_id}", response_model=StudentDetailOut)
+async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_db)):
+    """Get full per-task breakdown for a student, grouped by topic."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get all topics with their tasks
+    topics_result = await db.execute(
+        select(Topic).order_by(Topic.category, Topic.order_index)
+    )
+    all_topics = topics_result.scalars().all()
+
+    tasks_result = await db.execute(
+        select(Task).order_by(Task.order_index, Task.id)
+    )
+    all_tasks = tasks_result.scalars().all()
+
+    # Get all progress records for this user
+    progress_result = await db.execute(
+        select(UserProgress).where(UserProgress.user_id == user_id)
+    )
+    progress_map: dict[int, UserProgress] = {
+        p.task_id: p for p in progress_result.scalars().all()
+    }
+
+    # Group tasks by topic
+    tasks_by_topic: dict[int, list[Task]] = {}
+    for task in all_tasks:
+        tasks_by_topic.setdefault(task.topic_id, []).append(task)
+
+    total_solved = sum(1 for p in progress_map.values() if p.status == ProgressStatus.solved)
+
+    topic_details = []
+    for topic in all_topics:
+        topic_tasks = tasks_by_topic.get(topic.id, [])
+        if not topic_tasks:
+            continue
+        task_results = []
+        for task in topic_tasks:
+            prog = progress_map.get(task.id)
+            task_results.append(StudentTaskResult(
+                task_id=task.id,
+                ege_number=task.ege_number,
+                order_index=task.order_index,
+                status=prog.status.value if prog else "not_started",
+                attempts_count=prog.attempts_count if prog else 0,
+            ))
+        topic_details.append(StudentTopicDetail(
+            topic_id=topic.id,
+            topic_name=topic.title,
+            category=topic.category,
+            tasks=task_results,
+        ))
+
+    name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
+
+    return StudentDetailOut(
+        id=user.id,
+        name=name,
+        username=user.username,
+        photo_url=user.photo_url,
+        role=user.role,
+        last_active_at=user.last_active_at,
+        total_solved=total_solved,
+        total_tasks=len(all_tasks),
+        topics=topic_details,
+    )
+
+
+@router.get("/topics/{topic_id}/stats", response_model=TopicStatsOut)
+async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
+    """Get a student×task matrix of results for a topic."""
+    topic_result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    topic = topic_result.scalar_one_or_none()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    tasks_result = await db.execute(
+        select(Task).where(Task.topic_id == topic_id).order_by(Task.order_index, Task.id)
+    )
+    tasks = tasks_result.scalars().all()
+    if not tasks:
+        return TopicStatsOut(topic_id=topic_id, topic_title=topic.title, tasks=[], students=[])
+
+    task_ids = [t.id for t in tasks]
+
+    # All progress records for these tasks
+    progress_result = await db.execute(
+        select(UserProgress).where(UserProgress.task_id.in_(task_ids))
+    )
+    all_progress = progress_result.scalars().all()
+
+    # Unique user ids who have any interaction
+    user_ids = list({p.user_id for p in all_progress})
+
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users = {u.id: u for u in users_result.scalars().all()}
+
+    # Build per-user result map
+    progress_by_user: dict[int, dict[int, str]] = {}
+    for p in all_progress:
+        progress_by_user.setdefault(p.user_id, {})[p.task_id] = p.status.value
+
+    student_rows = []
+    for uid in user_ids:
+        u = users.get(uid)
+        if not u:
+            continue
+        name = f"{u.first_name_real or ''} {u.last_name_real or ''}".strip() or u.first_name or f"User {u.id}"
+        student_rows.append(TopicStatsStudentRow(
+            student_id=uid,
+            student_name=name,
+            photo_url=u.photo_url,
+            results=progress_by_user.get(uid, {}),
+        ))
+
+    # Sort students by name
+    student_rows.sort(key=lambda s: s.student_name)
+
+    task_infos = [
+        TopicStatsTaskInfo(task_id=t.id, ege_number=t.ege_number, order_index=t.order_index)
+        for t in tasks
+    ]
+
+    return TopicStatsOut(
+        topic_id=topic_id,
+        topic_title=topic.title,
+        tasks=task_infos,
+        students=student_rows,
+    )
 
 
 # ── Exams ─────────────────────────────────────────────────────

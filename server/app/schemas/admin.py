@@ -105,3 +105,54 @@ class StudentOut(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: str
+
+
+# ── Student detail (per-task breakdown) ───────────────
+
+class StudentTaskResult(BaseModel):
+    task_id: int
+    ege_number: int | None
+    order_index: int
+    status: str  # "solved" | "failed" | "not_started"
+    attempts_count: int
+
+
+class StudentTopicDetail(BaseModel):
+    topic_id: int
+    topic_name: str
+    category: str
+    tasks: list[StudentTaskResult]
+
+
+class StudentDetailOut(BaseModel):
+    id: int
+    name: str
+    username: str | None
+    photo_url: str | None
+    role: str
+    last_active_at: datetime
+    total_solved: int
+    total_tasks: int
+    topics: list[StudentTopicDetail]
+
+
+# ── Topic stats matrix ─────────────────────────────────
+
+class TopicStatsStudentRow(BaseModel):
+    student_id: int
+    student_name: str
+    photo_url: str | None
+    results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
+
+
+class TopicStatsTaskInfo(BaseModel):
+    task_id: int
+    ege_number: int | None
+    order_index: int
+
+
+class TopicStatsOut(BaseModel):
+    topic_id: int
+    topic_title: str
+    tasks: list[TopicStatsTaskInfo]
+    students: list[TopicStatsStudentRow]

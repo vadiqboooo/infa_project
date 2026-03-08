@@ -14,16 +14,20 @@ import {
 import { clsx } from "clsx";
 import { Routes, Route, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { 
-    ImportVariantResult, 
-    TaskAdmin, 
-    TopicAdmin, 
-    TopicIn, 
+import type {
+    ImportVariantResult,
+    TaskAdmin,
+    TopicAdmin,
+    TopicIn,
     TopicCategory,
-    StudentOut
+    StudentOut,
+    StudentDetailOut,
+    TopicStatsOut,
 } from "../api/types";
 import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
+import { StudentDetail } from "../components/admin/StudentDetail";
+import { TopicStats } from "../components/admin/TopicStats";
 import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
@@ -171,7 +175,9 @@ export default function AdminPage() {
         <div className="h-full bg-[#F8F7F4]">
             <Routes>
                 <Route index element={<AdminDashboard apiKey={apiKey} />} />
+                <Route path="topics/:id/stats" element={<AdminTopicStatsPage apiKey={apiKey} />} />
                 <Route path="topics/:id" element={<AdminTopicEdit apiKey={apiKey} />} />
+                <Route path="students/:id" element={<AdminStudentDetailPage apiKey={apiKey} />} />
             </Routes>
         </div>
     );
@@ -307,7 +313,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 </button>
             </div>
 
-            {activeTab === 'topics' ? (
+            {activeTab === "topics" ? (
                 <div className="flex-1 flex flex-col min-h-0">
                     {/* Filters Row */}
                     <div className="flex items-center gap-3 mb-6">
@@ -404,15 +410,27 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                 <span className="text-xs font-bold text-gray-500">{topic.task_count}</span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteTopic(topic.id);
-                                                    }}
-                                                    className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigate(`topics/${topic.id}/stats`);
+                                                        }}
+                                                        title="Статистика"
+                                                        className="p-2 rounded-lg text-gray-300 hover:text-[#3F8C62] hover:bg-emerald-50 transition-all"
+                                                    >
+                                                        <Download size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteTopic(topic.id);
+                                                        }}
+                                                        className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -430,10 +448,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     </div>
                 </div>
             ) : (
-                <StudentsTable 
-                    students={students} 
-                    apiKey={apiKey} 
-                    onRefresh={loadData} 
+                <StudentsTable
+                    students={students}
+                    apiKey={apiKey}
+                    onRefresh={loadData}
+                    onViewStudent={(id) => navigate(`students/${id}`)}
                 />
             )}
 
@@ -446,6 +465,67 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         </div>
     );
 }
+
+function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [student, setStudent] = useState<StudentDetailOut | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!id) return;
+        setLoading(true);
+        adminFetch<StudentDetailOut>(`/admin/students/${id}`, apiKey)
+            .then(setStudent)
+            .finally(() => setLoading(false));
+    }, [id, apiKey]);
+
+    if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
+    if (!student) return null;
+
+    return (
+        <div className="p-8 h-full">
+            <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                <StudentDetail
+                    student={student}
+                    onBack={() => navigate("/admin")}
+                    onViewTopicStats={(topicId) => navigate(`/admin/topics/${topicId}/stats`)}
+                />
+            </div>
+        </div>
+    );
+}
+
+
+function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [stats, setStats] = useState<TopicStatsOut | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!id) return;
+        setLoading(true);
+        adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey)
+            .then(setStats)
+            .finally(() => setLoading(false));
+    }, [id, apiKey]);
+
+    if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
+    if (!stats) return null;
+
+    return (
+        <div className="p-8 h-full">
+            <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                <TopicStats
+                    stats={stats}
+                    onBack={() => navigate(-1)}
+                />
+            </div>
+        </div>
+    );
+}
+
 
 function AdminTopicEdit({ apiKey }: { apiKey: string }) {
     const { id } = useParams();

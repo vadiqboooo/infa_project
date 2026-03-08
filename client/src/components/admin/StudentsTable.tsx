@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, Shield, User as UserIcon } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, ExternalLink, Shield, User as UserIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { StudentOut } from '../../api/types';
 
@@ -7,11 +7,12 @@ interface StudentsTableProps {
   students: StudentOut[];
   apiKey?: string;
   onRefresh?: () => void;
+  onViewStudent?: (id: number) => void;
 }
 
 const API_BASE = "/api";
 
-export function StudentsTable({ students, apiKey, onRefresh }: StudentsTableProps) {
+export function StudentsTable({ students, apiKey, onRefresh, onViewStudent }: StudentsTableProps) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'progress' | 'name'>('progress');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -211,15 +212,26 @@ export function StudentsTable({ students, apiKey, onRefresh }: StudentsTableProp
                     </td>
 
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : student.id)}
-                        className={clsx(
-                          "p-1.5 rounded-lg transition-all",
-                          isExpanded ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-gray-100"
+                      <div className="flex items-center gap-1">
+                        {onViewStudent && (
+                          <button
+                            onClick={() => onViewStudent(student.id)}
+                            title="Подробнее"
+                            className="p-1.5 rounded-lg text-gray-400 hover:bg-[#3F8C62]/10 hover:text-[#3F8C62] transition-all"
+                          >
+                            <ExternalLink size={15} />
+                          </button>
                         )}
-                      >
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </button>
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : student.id)}
+                          className={clsx(
+                            "p-1.5 rounded-lg transition-all",
+                            isExpanded ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-gray-100"
+                          )}
+                        >
+                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
