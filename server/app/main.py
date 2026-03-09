@@ -1,6 +1,7 @@
 """FastAPI application entry-point."""
 
 import os
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import admin, auth, content, exams, solving, stats
 
+logger = logging.getLogger(__name__)
 
 os.makedirs("uploads/exam_solutions", exist_ok=True)
 
@@ -16,6 +18,15 @@ os.makedirs("uploads/exam_solutions", exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
+    # Auto-apply pending Alembic migrations on startup
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied.")
+    except Exception as e:
+        logger.warning(f"Alembic migration failed: {e}")
     yield
 
 
