@@ -286,6 +286,8 @@ export interface StudentTopicDetail {
     topic_id: number;
     topic_name: string;
     category: string;
+    attempt_id: number | null;
+    has_analysis: boolean;
     tasks: StudentTaskResult[];
 }
 

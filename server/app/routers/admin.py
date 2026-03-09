@@ -12,6 +12,7 @@ from app.models.topic import Topic
 from app.models.user import User
 from app.models.progress import UserProgress, ProgressStatus
 from app.models.exam_attempt import ExamAttempt
+from app.models.exam_analysis import ExamAnalysis
 from app.schemas.admin import (
     ImportVariantIn,
     ImportVariantResult,
@@ -309,6 +310,38 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
 
     total_solved = sum(1 for p in progress_map.values() if p.status == ProgressStatus.solved)
 
+    # Get all exams for topic->exam mapping
+    all_exams_res = await db.execute(select(Exam))
+    topic_exam_map: dict[int, int] = {e.topic_id: e.id for e in all_exams_res.scalars().all()}
+
+    # Get latest finished attempt per exam for this user
+    exam_ids = list(topic_exam_map.values())
+    attempt_by_exam: dict[int, int] = {}
+    if exam_ids:
+        attempts_res = await db.execute(
+            select(ExamAttempt)
+            .where(
+                ExamAttempt.user_id == user_id,
+                ExamAttempt.exam_id.in_(exam_ids),
+                ExamAttempt.finished_at.is_not(None),
+            )
+            .order_by(ExamAttempt.finished_at.desc())
+        )
+        for att in attempts_res.scalars().all():
+            if att.exam_id not in attempt_by_exam:
+                attempt_by_exam[att.exam_id] = att.id
+
+    # Get which attempts have saved analysis
+    attempt_ids_with_attempts = list(attempt_by_exam.values())
+    analyzed_ids: set[int] = set()
+    if attempt_ids_with_attempts:
+        analysis_res = await db.execute(
+            select(ExamAnalysis.attempt_id).where(
+                ExamAnalysis.attempt_id.in_(attempt_ids_with_attempts)
+            )
+        )
+        analyzed_ids = {row[0] for row in analysis_res.all()}
+
     topic_details = []
     for topic in all_topics:
         topic_tasks = tasks_by_topic.get(topic.id, [])
@@ -324,10 +357,14 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
                 status=prog.status.value if prog else "not_started",
                 attempts_count=prog.attempts_count if prog else 0,
             ))
+        exam_id = topic_exam_map.get(topic.id)
+        attempt_id = attempt_by_exam.get(exam_id) if exam_id else None
         topic_details.append(StudentTopicDetail(
             topic_id=topic.id,
             topic_name=topic.title,
             category=topic.category,
+            attempt_id=attempt_id,
+            has_analysis=attempt_id in analyzed_ids if attempt_id else False,
             tasks=task_results,
         ))
 
@@ -558,7 +595,30 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
     except _httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
+    # Save / overwrite in DB
+    existing_res = await db.execute(
+        select(ExamAnalysis).where(ExamAnalysis.attempt_id == attempt_id)
+    )
+    existing = existing_res.scalar_one_or_none()
+    if existing:
+        existing.analysis_text = analysis
+    else:
+        db.add(ExamAnalysis(attempt_id=attempt_id, analysis_text=analysis))
+    await db.commit()
+
     return {"analysis": analysis}
+
+
+@router.get("/attempts/{attempt_id}/analyze")
+async def get_attempt_analysis(attempt_id: int, db: AsyncSession = Depends(get_db)):
+    """Return saved AI analysis for an attempt, or 404 if not yet generated."""
+    result = await db.execute(
+        select(ExamAnalysis).where(ExamAnalysis.attempt_id == attempt_id)
+    )
+    rec = result.scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(status_code=404, detail="No analysis found")
+    return {"analysis": rec.analysis_text, "created_at": rec.created_at}
 
 
 # ── Exams ─────────────────────────────────────────────────────

@@ -496,6 +496,7 @@ function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
                     student={student}
                     onBack={() => navigate("/admin")}
                     onViewTopicStats={(topicId) => navigate(`/admin/topics/${topicId}/stats`)}
+                    apiKey={apiKey}
                 />
             </div>
         </div>

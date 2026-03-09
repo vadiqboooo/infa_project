@@ -1,12 +1,14 @@
 import React, { useState } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Circle, BarChart2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Circle, BarChart2, Sparkles } from "lucide-react";
 import { clsx } from "clsx";
 import type { StudentDetailOut, StudentTopicDetail } from "../../api/types";
+import { AnalysisModal } from "./AnalysisModal";
 
 interface Props {
     student: StudentDetailOut;
     onBack: () => void;
     onViewTopicStats: (topicId: number) => void;
+    apiKey?: string;
 }
 
 type Tab = "tutorial" | "homework" | "control" | "variants" | "mock";
@@ -25,7 +27,11 @@ function StatusIcon({ status }: { status: string }) {
     return <Circle size={16} className="text-gray-300 shrink-0" />;
 }
 
-function TopicBlock({ topic, onViewStats }: { topic: StudentTopicDetail; onViewStats: () => void }) {
+function TopicBlock({ topic, onViewStats, onAnalyze }: {
+    topic: StudentTopicDetail;
+    onViewStats: () => void;
+    onAnalyze?: () => void;
+}) {
     const solved = topic.tasks.filter(t => t.status === "solved").length;
     const failed = topic.tasks.filter(t => t.status === "failed").length;
     const total = topic.tasks.length;
@@ -41,13 +47,30 @@ function TopicBlock({ topic, onViewStats }: { topic: StudentTopicDetail; onViewS
                         <span className="text-gray-400">{total - solved - failed}</span> не начато
                     </div>
                 </div>
-                <button
-                    onClick={onViewStats}
-                    className="flex items-center gap-1.5 text-xs text-[#3F8C62] font-bold hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                    <BarChart2 size={14} />
-                    Статистика
-                </button>
+                <div className="flex items-center gap-1">
+                    {onAnalyze && topic.attempt_id && (
+                        <button
+                            onClick={onAnalyze}
+                            title={topic.has_analysis ? "Посмотреть анализ ИИ" : "Запустить анализ ИИ"}
+                            className={clsx(
+                                "flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors",
+                                topic.has_analysis
+                                    ? "text-violet-600 bg-violet-50 hover:bg-violet-100"
+                                    : "text-violet-400 hover:text-violet-600 hover:bg-violet-50"
+                            )}
+                        >
+                            <Sparkles size={13} />
+                            {topic.has_analysis ? "Анализ" : "Анализ ИИ"}
+                        </button>
+                    )}
+                    <button
+                        onClick={onViewStats}
+                        className="flex items-center gap-1.5 text-xs text-[#3F8C62] font-bold hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                        <BarChart2 size={14} />
+                        Статистика
+                    </button>
+                </div>
             </div>
             <div className="px-5 py-4">
                 <div className="flex flex-wrap gap-2">
@@ -75,8 +98,9 @@ function TopicBlock({ topic, onViewStats }: { topic: StudentTopicDetail; onViewS
     );
 }
 
-export function StudentDetail({ student, onBack, onViewTopicStats }: Props) {
+export function StudentDetail({ student, onBack, onViewTopicStats, apiKey }: Props) {
     const [tab, setTab] = useState<Tab>("tutorial");
+    const [analysisFor, setAnalysisFor] = useState<{ topicName: string; attemptId: number; hasAnalysis: boolean } | null>(null);
 
     const topicsByCategory = student.topics.filter(t => t.category === tab);
     const totalSolved = student.total_solved;
@@ -150,10 +174,25 @@ export function StudentDetail({ student, onBack, onViewTopicStats }: Props) {
                             key={topic.topic_id}
                             topic={topic}
                             onViewStats={() => onViewTopicStats(topic.topic_id)}
+                            onAnalyze={topic.attempt_id ? () => setAnalysisFor({
+                                topicName: topic.topic_name,
+                                attemptId: topic.attempt_id!,
+                                hasAnalysis: topic.has_analysis,
+                            }) : undefined}
                         />
                     ))
                 )}
             </div>
+
+            {analysisFor && (
+                <AnalysisModal
+                    studentName={student.name}
+                    attemptId={analysisFor.attemptId}
+                    hasAnalysis={analysisFor.hasAnalysis}
+                    apiKey={apiKey}
+                    onClose={() => setAnalysisFor(null)}
+                />
+            )}
         </div>
     );
 }

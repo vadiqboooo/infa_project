@@ -121,6 +121,8 @@ class StudentTopicDetail(BaseModel):
     topic_id: int
     topic_name: str
     category: str
+    attempt_id: int | None = None  # latest finished exam attempt (for AI analysis)
+    has_analysis: bool = False     # whether analysis is already saved in DB
     tasks: list[StudentTaskResult]
 
 
