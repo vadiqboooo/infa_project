@@ -20,13 +20,14 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
     # Auto-apply pending Alembic migrations on startup
     try:
-        from alembic.config import Config
-        from alembic import command
-        alembic_cfg = Config("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied.")
+        import subprocess
+        result = subprocess.run(
+            ["python", "-m", "alembic", "upgrade", "head"],
+            capture_output=True, text=True, check=True
+        )
+        logger.info("Alembic migrations applied. %s", result.stdout.strip())
     except Exception as e:
-        logger.warning(f"Alembic migration failed: {e}")
+        logger.warning("Alembic migration failed: %s", e)
     yield
 
 
