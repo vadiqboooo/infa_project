@@ -590,7 +590,10 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
             }
             resp = await client.post(f"{_settings.LLM_BASE_URL}/chat/completions", headers=headers, json=payload)
             if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"LLM error {resp.status_code}")
+                err_body = resp.text[:500]
+                import logging as _log
+                _log.getLogger(__name__).error("LLM error %s: %s", resp.status_code, err_body)
+                raise HTTPException(status_code=502, detail=f"LLM error {resp.status_code}: {err_body}")
             analysis = resp.json()["choices"][0]["message"]["content"]
     except _httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
