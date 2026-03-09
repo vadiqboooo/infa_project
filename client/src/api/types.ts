@@ -312,6 +312,7 @@ export interface TopicStatsStudentRow {
     student_id: number;
     student_name: string;
     photo_url: string | null;
+    attempt_id: number | null;
     results: Record<number, string>;
 }
 

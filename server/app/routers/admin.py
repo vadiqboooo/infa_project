@@ -407,6 +407,24 @@ async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
     for p in all_progress:
         progress_by_user.setdefault(p.user_id, {})[p.task_id] = p.status.value
 
+    # Latest finished exam attempt per user (for AI analysis)
+    attempt_by_user: dict[int, int] = {}
+    exam_res2 = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    topic_exam = exam_res2.scalar_one_or_none()
+    if topic_exam and user_ids:
+        attempts_res = await db.execute(
+            select(ExamAttempt)
+            .where(
+                ExamAttempt.exam_id == topic_exam.id,
+                ExamAttempt.user_id.in_(user_ids),
+                ExamAttempt.finished_at.is_not(None),
+            )
+            .order_by(ExamAttempt.finished_at.desc())
+        )
+        for att in attempts_res.scalars().all():
+            if att.user_id not in attempt_by_user:
+                attempt_by_user[att.user_id] = att.id
+
     student_rows = []
     for uid in user_ids:
         u = users.get(uid)
@@ -417,6 +435,7 @@ async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
             student_id=uid,
             student_name=name,
             photo_url=u.photo_url,
+            attempt_id=attempt_by_user.get(uid),
             results=progress_by_user.get(uid, {}),
         ))
 
@@ -434,6 +453,112 @@ async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
         tasks=task_infos,
         students=student_rows,
     )
+
+
+@router.post("/attempts/{attempt_id}/analyze")
+async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_db)):
+    """Admin: generate AI analysis for any student's exam attempt."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.finished_at.is_not(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    results_json = attempt.results_json or {}
+    task_results = results_json.get("task_results", [])
+    if not task_results:
+        raise HTTPException(status_code=400, detail="No task results in this attempt")
+
+    task_ids = [tr["task_id"] for tr in task_results]
+    tasks_res = await db.execute(select(Task).where(Task.id.in_(task_ids)))
+    tasks_map: dict[int, Task] = {t.id: t for t in tasks_res.scalars().all()}
+
+    import re as _re
+
+    def _strip(html: str, limit: int = 500) -> str:
+        text = _re.sub(r"<[^>]+>", " ", html)
+        return _re.sub(r"\s+", " ", text).strip()[:limit]
+
+    sorted_results = sorted(task_results, key=lambda r: (r.get("ege_number") or 99))
+    correct = [r for r in sorted_results if r.get("is_correct")]
+    wrong = [r for r in sorted_results if not r.get("is_correct") and r.get("points", 0) == 0]
+    partial = [r for r in sorted_results if not r.get("is_correct") and r.get("points", 0) > 0]
+
+    primary = attempt.primary_score or 0
+    score = attempt.score or 0.0
+
+    wrong_details: list[str] = []
+    for r in wrong + partial:
+        task = tasks_map.get(r["task_id"])
+        num = r.get("ege_number") or "?"
+        u_ans = r.get("user_answer")
+        c_ans = r.get("correct_answer")
+        user_val = u_ans.get("val") if u_ans else "не ответил"
+        correct_val = c_ans.get("val") if c_ans else "?"
+        pts = r.get("points", 0)
+        max_pts = r.get("max_points", 1)
+        detail = f"Задание №{num}: ответ = {user_val}, верный = {correct_val} ({pts}/{max_pts} балл.)"
+        if task and task.content_html:
+            detail += f"\nУсловие: {_strip(task.content_html)}"
+        if task and task.full_solution_code:
+            detail += f"\nЭталонный код:\n```python\n{task.full_solution_code[:500]}\n```"
+        elif task and task.solution_steps and isinstance(task.solution_steps, list):
+            expl = " ".join(s.get("explanation", "") for s in task.solution_steps[:2] if isinstance(s, dict))
+            if expl:
+                detail += f"\nПояснение: {expl[:300]}"
+        wrong_details.append(detail)
+
+    correct_nums = [str(r.get("ege_number") or "?") for r in correct]
+
+    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика.
+
+📊 Итог:
+- Первичный балл: {primary}/29
+- Тестовый балл: {score:.0f}/100
+- Верно: {len(correct)} из {len(sorted_results)}
+- Верные задания: {", ".join(correct_nums) if correct_nums else "нет"}
+
+{"❌ Задания с ошибками:" if wrong_details else "✅ Все задания решены верно!"}
+{chr(10).join(wrong_details)}
+
+Напиши развёрнутый персональный анализ на русском языке:
+1. 📈 **Краткое резюме** — оцени результат и уровень подготовки
+2. ❌ **Разбор ошибок** — для каждого неверного задания: почему возникла ошибка, что нужно понять. Если есть код — объясни ключевую идею.
+3. ✅ **Правильно решённые** — одно тёплое предложение с похвалой
+4. 🎯 **Что повторить** — конкретные темы
+
+Используй markdown (жирный, списки)."""
+
+    import httpx as _httpx
+    from app.config import settings as _settings
+
+    try:
+        async with _httpx.AsyncClient(timeout=120) as client:
+            headers = {
+                "Authorization": f"Bearer {_settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "Edu Platform",
+            }
+            payload = {
+                "model": _settings.LLM_MODEL,
+                "messages": [
+                    {"role": "system", "content": "Ты опытный преподаватель информатики. Анализируешь работы учеников на ЕГЭ. Отвечай на русском языке."},
+                    {"role": "user", "content": prompt},
+                ],
+            }
+            resp = await client.post(f"{_settings.LLM_BASE_URL}/chat/completions", headers=headers, json=payload)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"LLM error {resp.status_code}")
+            analysis = resp.json()["choices"][0]["message"]["content"]
+    except _httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {"analysis": analysis}
 
 
 # ── Exams ─────────────────────────────────────────────────────

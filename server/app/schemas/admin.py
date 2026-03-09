@@ -142,6 +142,7 @@ class TopicStatsStudentRow(BaseModel):
     student_id: int
     student_name: str
     photo_url: str | None
+    attempt_id: int | None  # latest finished exam attempt id (for AI analysis)
     results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
 
 
