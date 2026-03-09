@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, Loader2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, Loader2, X, RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
+import ReactMarkdown from "react-markdown";
 import type { TopicStatsOut } from "../../api/types";
 
 const API_BASE = "/api";
@@ -30,17 +31,21 @@ function Cell({ status }: { status: string | undefined }) {
     );
 }
 
+const CACHE_KEY = (id: number) => `ai_analysis_attempt_${id}`;
+
 function AnalysisModal({ studentName, attemptId, apiKey, onClose }: {
     studentName: string;
     attemptId: number;
     apiKey: string;
     onClose: () => void;
 }) {
-    const [analysis, setAnalysis] = useState<string | null>(null);
+    const cached = localStorage.getItem(CACHE_KEY(attemptId));
+    const [analysis, setAnalysis] = useState<string | null>(cached);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleAnalyze = async () => {
+    const handleAnalyze = async (force = false) => {
+        if (!force && analysis) return;
         setLoading(true);
         setError(null);
         try {
@@ -55,6 +60,7 @@ function AnalysisModal({ studentName, attemptId, apiKey, onClose }: {
             if (!res.ok) throw new Error(`Ошибка ${res.status}`);
             const data = await res.json();
             setAnalysis(data.analysis);
+            localStorage.setItem(CACHE_KEY(attemptId), data.analysis);
         } catch (e: any) {
             setError(e.message || "Не удалось получить анализ");
         } finally {
@@ -82,16 +88,32 @@ function AnalysisModal({ studentName, attemptId, apiKey, onClose }: {
                             <div className="text-[11px] text-gray-400">{studentName}</div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-                        <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                        {analysis && !loading && (
+                            <button
+                                onClick={() => handleAnalyze(true)}
+                                title="Обновить анализ"
+                                className="p-1.5 text-gray-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors"
+                            >
+                                <RefreshCw size={15} />
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto px-6 py-5">
-                    {analysis ? (
-                        <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                            {analysis}
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                            <Loader2 size={28} className="animate-spin text-violet-500" />
+                            <span className="text-sm">Анализирую работу...</span>
+                        </div>
+                    ) : analysis ? (
+                        <div className="prose prose-sm max-w-none text-gray-700 [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900 [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>p]:leading-relaxed [&>ul]:pl-4 [&>ol]:pl-4 [&>li]:mb-1 [&>strong]:text-gray-900 [&>code]:bg-gray-100 [&>code]:px-1 [&>code]:rounded [&>code]:text-xs [&>pre]:bg-gray-50 [&>pre]:rounded-xl [&>pre]:p-4 [&>pre]:text-xs [&>pre]:overflow-x-auto [&>blockquote]:border-l-4 [&>blockquote]:border-violet-200 [&>blockquote]:pl-4 [&>blockquote]:text-gray-500">
+                            <ReactMarkdown>{analysis}</ReactMarkdown>
                         </div>
                     ) : error ? (
                         <div className="text-sm text-red-500 text-center py-8">{error}</div>
@@ -107,13 +129,10 @@ function AnalysisModal({ studentName, attemptId, apiKey, onClose }: {
                                 </p>
                             </div>
                             <button
-                                onClick={handleAnalyze}
-                                disabled={loading}
-                                className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 mt-2"
+                                onClick={() => handleAnalyze()}
+                                className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 mt-2"
                             >
-                                {loading
-                                    ? <><Loader2 size={16} className="animate-spin" /> Анализирую...</>
-                                    : <><Sparkles size={16} /> Запустить анализ</>}
+                                <Sparkles size={16} /> Запустить анализ
                             </button>
                         </div>
                     )}
