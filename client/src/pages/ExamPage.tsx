@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Sparkles, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,6 +31,8 @@ export default function ExamPage() {
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+    const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
 
     // Solution attachment state
     const CODE_TASK_NUMS = new Set([2,5,6,7,8,9,11,13,14,15,16,17,23,24,25,26,27]);
@@ -367,8 +369,8 @@ export default function ExamPage() {
                     </div>
                 </div>
 
-                {/* Results Table */}
-                <div className="max-w-5xl mx-auto px-6 py-6">
+                {/* Results Table + AI Analysis */}
+                <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
                     {taskResults.length > 0 && (
                         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                             <div className="px-5 py-3 border-b border-gray-100">
@@ -394,6 +396,66 @@ export default function ExamPage() {
                             </div>
                         </div>
                     )}
+
+                    {/* AI Analysis */}
+                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 bg-violet-100 text-violet-600 rounded-lg flex items-center justify-center">
+                                    <Sparkles size={14} />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-bold text-gray-700">Анализ ИИ</h2>
+                                    <p className="text-[10px] text-gray-400">Персональный разбор ошибок и рекомендации</p>
+                                </div>
+                            </div>
+                            {!aiAnalysis && (
+                                <button
+                                    onClick={async () => {
+                                        const attemptId = result.attempt_id;
+                                        if (!attemptId) return;
+                                        setAiAnalysisLoading(true);
+                                        try {
+                                            const token = localStorage.getItem("jwt_token");
+                                            const res = await fetch(`/api/exams/attempt/${attemptId}/analyze`, {
+                                                method: "POST",
+                                                headers: {
+                                                    "Content-Type": "application/json",
+                                                    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+                                                },
+                                            });
+                                            if (!res.ok) throw new Error("Ошибка анализа");
+                                            const data = await res.json();
+                                            setAiAnalysis(data.analysis);
+                                        } catch {
+                                            setAiAnalysis("Не удалось получить анализ. Попробуйте позже.");
+                                        } finally {
+                                            setAiAnalysisLoading(false);
+                                        }
+                                    }}
+                                    disabled={aiAnalysisLoading}
+                                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-violet-600/20"
+                                >
+                                    {aiAnalysisLoading ? (
+                                        <><Loader2 size={14} className="animate-spin" /> Анализирую...</>
+                                    ) : (
+                                        <><Sparkles size={14} /> Получить анализ</>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                        {aiAnalysis ? (
+                            <div className="px-6 py-5 prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">
+                                {aiAnalysis}
+                            </div>
+                        ) : (
+                            <div className="px-6 py-8 text-center text-gray-400 text-sm">
+                                {aiAnalysisLoading
+                                    ? "ИИ анализирует ваши ответы и готовит персональную обратную связь..."
+                                    : "Нажмите «Получить анализ» — ИИ разберёт каждую ошибку и подскажет что повторить"}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
             {/* Modal: view code solution */}

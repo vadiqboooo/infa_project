@@ -509,13 +509,15 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
     const [stats, setStats] = useState<TopicStatsOut | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const loadStats = useCallback(async () => {
         if (!id) return;
         setLoading(true);
         adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey)
             .then(setStats)
             .finally(() => setLoading(false));
     }, [id, apiKey]);
+
+    useEffect(() => { loadStats(); }, [loadStats]);
 
     if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
     if (!stats) return null;
@@ -526,6 +528,8 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
                 <TopicStats
                     stats={stats}
                     onBack={() => navigate(-1)}
+                    apiKey={apiKey}
+                    onRefresh={loadStats}
                 />
             </div>
         </div>

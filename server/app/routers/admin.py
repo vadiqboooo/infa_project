@@ -346,6 +346,33 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
     )
 
 
+@router.delete("/students/{user_id}/topics/{topic_id}/progress", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student_topic_progress(user_id: int, topic_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete all UserProgress + ExamAttempts for a student on a topic so they can retake it."""
+    task_ids_result = await db.execute(select(Task.id).where(Task.topic_id == topic_id))
+    task_ids = [row[0] for row in task_ids_result.all()]
+
+    if task_ids:
+        await db.execute(
+            UserProgress.__table__.delete().where(
+                UserProgress.user_id == user_id,
+                UserProgress.task_id.in_(task_ids),
+            )
+        )
+
+    exam_result = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam:
+        await db.execute(
+            ExamAttempt.__table__.delete().where(
+                ExamAttempt.user_id == user_id,
+                ExamAttempt.exam_id == exam.id,
+            )
+        )
+
+    await db.commit()
+
+
 @router.get("/topics/{topic_id}/stats", response_model=TopicStatsOut)
 async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
     """Get a student×task matrix of results for a topic."""

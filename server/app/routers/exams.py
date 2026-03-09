@@ -1,21 +1,30 @@
 """Exams router — start / submit exam attempts."""
 
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
 from app.models.exam_attempt import ExamAttempt
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.exam import ExamResult, ExamStartResponse, ExamSubmitIn
+
+
+def _strip_html(html: str, limit: int = 600) -> str:
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit]
 
 router = APIRouter(prefix="/exams", tags=["exams"])
 
@@ -359,3 +368,120 @@ async def upload_task_file_solution(
     await db.commit()
 
     return {"file_url": file_url}
+
+
+@router.post("/attempt/{attempt_id}/analyze")
+async def analyze_exam_attempt(
+    attempt_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate an AI analysis of the student's exam attempt."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_not(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    results_json = attempt.results_json or {}
+    task_results = results_json.get("task_results", [])
+    if not task_results:
+        raise HTTPException(status_code=400, detail="No task results in this attempt")
+
+    # Load all task details at once
+    task_ids = [tr["task_id"] for tr in task_results]
+    tasks_res = await db.execute(select(Task).where(Task.id.in_(task_ids)))
+    tasks_map: dict[int, Task] = {t.id: t for t in tasks_res.scalars().all()}
+
+    sorted_results = sorted(task_results, key=lambda r: (r.get("ege_number") or 99))
+    correct = [r for r in sorted_results if r.get("is_correct")]
+    wrong = [r for r in sorted_results if not r.get("is_correct") and r.get("points", 0) == 0]
+    partial = [r for r in sorted_results if not r.get("is_correct") and r.get("points", 0) > 0]
+
+    primary = attempt.primary_score or 0
+    score = attempt.score or 0.0
+
+    # Build per-task analysis context for wrong/partial tasks
+    wrong_details: list[str] = []
+    for r in wrong + partial:
+        task = tasks_map.get(r["task_id"])
+        num = r.get("ege_number") or "?"
+        u_ans = r.get("user_answer")
+        c_ans = r.get("correct_answer")
+        user_val = u_ans.get("val") if u_ans else "не ответил"
+        correct_val = c_ans.get("val") if c_ans else "?"
+        pts = r.get("points", 0)
+        max_pts = r.get("max_points", 1)
+
+        detail = f"Задание №{num}: ответ ученика = {user_val}, верный = {correct_val} ({pts}/{max_pts} балл.)"
+        if task and task.content_html:
+            detail += f"\nУсловие: {_strip_html(task.content_html, 500)}"
+        if task and task.full_solution_code:
+            detail += f"\nЭталонный код:\n```python\n{task.full_solution_code[:500]}\n```"
+        elif task and task.solution_steps:
+            steps = task.solution_steps
+            if isinstance(steps, list) and steps:
+                expl = " ".join(
+                    s.get("explanation", "") for s in steps[:2] if isinstance(s, dict)
+                )
+                if expl:
+                    detail += f"\nПояснение решения: {expl[:300]}"
+        wrong_details.append(detail)
+
+    correct_nums = [str(r.get("ege_number") or "?") for r in correct]
+
+    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика.
+
+📊 Итог:
+- Первичный балл: {primary}/29
+- Тестовый балл: {score:.0f}/100
+- Верно решено: {len(correct)} из {len(sorted_results)}
+- Верные задания: {", ".join(correct_nums) if correct_nums else "нет"}
+
+{"❌ Задания с ошибками:" if wrong_details else "✅ Все задания решены верно!"}
+{chr(10).join(wrong_details)}
+
+Напиши развёрнутый персональный анализ на русском языке. Структура:
+1. 📈 **Краткое резюме** — оцени результат, уровень подготовки
+2. ❌ **Разбор ошибок** — по каждому неверному заданию: почему мог возникнуть такой ответ, что нужно понять чтобы решить правильно. Если есть код/решение — объясни ключевую идею.
+3. ✅ **Правильно решённые** — одно тёплое предложение о том, что получилось хорошо
+4. 🎯 **Что повторить** — конкретные темы по ошибкам
+
+Будь конкретным и персональным. Используй markdown (жирный, списки)."""
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            headers = {
+                "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "Edu Platform",
+            }
+            payload = {
+                "model": settings.LLM_MODEL,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты опытный преподаватель информатики, помогаешь школьникам готовиться к ЕГЭ. Давай конкретные, персональные советы. Отвечай на русском языке.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            }
+            resp = await client.post(
+                f"{settings.LLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"LLM API error {resp.status_code}: {resp.text[:200]}")
+            data = resp.json()
+            analysis = data["choices"][0]["message"]["content"]
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"LLM connection error: {str(exc)}")
+
+    return {"analysis": analysis}
