@@ -272,7 +272,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                                                 <td className="text-center" style={{ padding: "8px 8px", borderBottom: "1px solid #f9fafb" }}>
                                                     <div className="flex items-center justify-center gap-1">
                                                         {/* AI Analysis button — only if attempt exists */}
-                                                        {apiKey && student.attempt_id && (
+                                                        {student.attempt_id && (
                                                             <button
                                                                 onClick={() => setAnalysisFor({
                                                                     studentId: student.student_id,
@@ -286,15 +286,13 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                                                             </button>
                                                         )}
                                                         {/* Delete button */}
-                                                        {apiKey && (
-                                                            <button
-                                                                onClick={() => handleDelete(student.student_id, student.student_name)}
-                                                                title="Сбросить результаты"
-                                                                className="p-1.5 rounded-lg text-red-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            onClick={() => handleDelete(student.student_id, student.student_name)}
+                                                            title="Сбросить результаты"
+                                                            className="p-1.5 rounded-lg text-red-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -315,11 +313,11 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
             </div>
 
             {/* AI Analysis Modal */}
-            {analysisFor && apiKey && (
+            {analysisFor && (
                 <AnalysisModal
                     studentName={analysisFor.studentName}
                     attemptId={analysisFor.attemptId}
-                    apiKey={apiKey}
+                    apiKey={apiKey ?? ""}
                     onClose={() => setAnalysisFor(null)}
                 />
             )}
