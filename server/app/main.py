@@ -18,16 +18,18 @@ os.makedirs("uploads/exam_solutions", exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
-    # Auto-apply pending Alembic migrations on startup
+    # Ensure all tables exist (create_all is idempotent — skips existing tables)
     try:
-        import subprocess
-        result = subprocess.run(
-            ["python", "-m", "alembic", "upgrade", "head"],
-            capture_output=True, text=True, check=True
-        )
-        logger.info("Alembic migrations applied. %s", result.stdout.strip())
+        from app.database import engine
+        from app.models import exam_analysis  # noqa: ensure model is registered
+        from sqlalchemy import inspect as sa_inspect
+        async with engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: exam_analysis.ExamAnalysis.__table__.create(sync_conn, checkfirst=True)
+            )
+        logger.info("exam_analyses table ensured.")
     except Exception as e:
-        logger.warning("Alembic migration failed: %s", e)
+        logger.warning("Table creation failed: %s", e)
     yield
 
 
