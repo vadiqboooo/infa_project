@@ -45,10 +45,8 @@ function AnalysisModal({ studentName, attemptId, apiKey, onClose }: {
         setError(null);
         try {
             const token = localStorage.getItem("jwt_token");
-            const headers: Record<string, string> = {
-                "Content-Type": "application/json",
-                "X-API-Key": apiKey,
-            };
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (apiKey) headers["X-API-Key"] = apiKey;
             if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/analyze`, {
                 method: "POST",
@@ -131,11 +129,11 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
 
     const handleDelete = async (studentId: number, studentName: string) => {
         if (!confirm(`Сбросить все результаты «${studentName}» по этому топику? Ученик сможет пройти вариант заново.`)) return;
-        if (!apiKey) return;
         setDeletingId(studentId);
         try {
             const token = localStorage.getItem("jwt_token");
-            const headers: Record<string, string> = { "X-API-Key": apiKey };
+            const headers: Record<string, string> = {};
+            if (apiKey) headers["X-API-Key"] = apiKey;
             if (token) headers["Authorization"] = `Bearer ${token}`;
             const res = await fetch(`${API_BASE}/admin/students/${studentId}/topics/${stats.topic_id}/progress`, {
                 method: "DELETE",
