@@ -68,10 +68,65 @@ const htmlEntityPattern = new RegExp(
     "gi"
 );
 
+// Unicode math symbols → LaTeX commands (for undelimited content)
+const UNICODE_TO_LATEX: Record<string, string> = {
+    "∧": "\\land ", "∨": "\\lor ", "¬": "\\lnot ", "⊕": "\\oplus ",
+    "→": "\\rightarrow ", "←": "\\leftarrow ", "↔": "\\leftrightarrow ",
+    "≡": "\\equiv ", "∀": "\\forall ", "∃": "\\exists ",
+    "∈": "\\in ", "∉": "\\notin ", "⊂": "\\subset ",
+    "∪": "\\cup ", "∩": "\\cap ",
+    "≤": "\\leq ", "≥": "\\geq ", "≠": "\\neq ",
+    "·": "\\cdot ", "×": "\\times ", "÷": "\\div ",
+    "±": "\\pm ", "∞": "\\infty ",
+};
+
+// Известные LaTeX-команды математики
+const MATH_CMD_RE = /\\(?:l(?:or|and|not|eq|eftarrow|eftrightarrow)|r(?:ightarrow|eq)|n(?:eg|ot|eq|otin)|equiv|oplus|forall|exists|in(?:fty)?|notin|subset|supset|cup|cap|cdot|times|div|pm|geq|leq|overline|underline|hat|bar|vec|alpha|beta|gamma|delta|epsilon|lambda|mu|pi|sigma|tau|phi|omega|sum|prod|sqrt|frac)(?![a-zA-Z])/;
+
+// Добавляет пробел после LaTeX-команды, если следующий символ — буква/цифра
+function fixConcatenatedCommands(formula: string): string {
+    return formula.replace(
+        /\\(lor|land|neg|lnot|equiv|rightarrow|leftarrow|leftrightarrow|oplus|forall|exists|leq|geq|neq|in|notin|subset|cup|cap|cdot|times|div|pm|overline|underline|hat|bar|vec)([a-zA-Z0-9])/g,
+        "\\$1 $2"
+    );
+}
+
 // Декодируем HTML-сущности внутри формулы в LaTeX-команды
 function decodeHtmlEntitiesInFormula(formula: string): string {
     return formula.replace(htmlEntityPattern, (match) => {
         return HTML_ENTITY_TO_LATEX[match.toLowerCase()] || match;
+    });
+}
+
+// Конвертирует Unicode-символы в LaTeX-команды внутри строки
+function unicodeToLatex(text: string): string {
+    for (const [sym, cmd] of Object.entries(UNICODE_TO_LATEX)) {
+        text = text.split(sym).join(cmd);
+    }
+    return text;
+}
+
+// Обрабатывает текстовые узлы между HTML-тегами, содержащие LaTeX-команды без $...$
+function autoWrapUndelimitedLatex(html: string): string {
+    // Находим текстовые сегменты между тегами (не содержат <)
+    return html.replace(/(?<=>|^)([^<]+)(?=<|$)/gm, (textNode) => {
+        // Уже есть разделители — пропускаем
+        if (/\$|\\\(|\\\[/.test(textNode)) return textNode;
+        // Нет LaTeX-команд — пропускаем
+        if (!MATH_CMD_RE.test(textNode)) return textNode;
+        // Если содержит кириллицу — пропускаем (это проза, не формула)
+        if (/[А-Яа-яЁё]/.test(textNode)) return textNode;
+
+        const formula = fixConcatenatedCommands(
+            decodeHtmlEntitiesInFormula(
+                unicodeToLatex(textNode.trim())
+            )
+        );
+        try {
+            return katex.renderToString(formula, { throwOnError: false, displayMode: false });
+        } catch {
+            return textNode;
+        }
     });
 }
 
@@ -89,7 +144,7 @@ function renderLatex(text: string): string {
     // Обрабатываем inline-формулы $...$
     text = text.replace(/\$([^\$\n]+?)\$/g, (match, formula) => {
         try {
-            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: false, throwOnError: false });
+            return katex.renderToString(decodeHtmlEntitiesInFormula(fixConcatenatedCommands(formula)), { displayMode: false, throwOnError: false });
         } catch (e) {
             return match;
         }
@@ -112,6 +167,9 @@ function renderLatex(text: string): string {
             return match;
         }
     });
+
+    // Обрабатываем текстовые узлы с LaTeX-командами без $...$ (смешанный формат)
+    text = autoWrapUndelimitedLatex(text);
 
     return text;
 }
