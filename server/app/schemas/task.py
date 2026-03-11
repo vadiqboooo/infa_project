@@ -59,7 +59,7 @@ class AnswerIn(BaseModel):
       table         → {"val": [[1, 2], [3, 4]]}
       text          → {"val": "xwyz"}
     """
-    val: float | list[float] | list[list[float]] | str
+    val: float | list[float] | list[list[float | str]] | str
 
 
 class CheckResult(BaseModel):
