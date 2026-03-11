@@ -130,6 +130,7 @@ export interface TaskResult {
     is_correct: boolean;
     points: number;
     max_points?: number;
+    auto_checked?: boolean;
     code_solution?: string | null;
     file_solution_url?: string | null;
 }

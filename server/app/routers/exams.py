@@ -246,8 +246,9 @@ async def submit_exam(
         user_answer = user_answers_map.get(task_id)
         is_correct = False
         task_points = 0
+        has_correct_answer = bool(task.correct_answer and task.correct_answer.get("val") is not None)
 
-        if user_answer:
+        if user_answer and has_correct_answer:
             if task.ege_number and task.ege_number >= 26:
                 # Partial scoring for tasks 26-27
                 task_points = _partial_score(task.correct_answer, user_answer, task.ege_number)
@@ -270,6 +271,7 @@ async def submit_exam(
             "is_correct": is_correct,
             "points": task_points,
             "max_points": max_points,
+            "auto_checked": has_correct_answer,
             "code_solution": code_solutions_map.get(task.id),
             "file_solution_url": None,
         })
@@ -481,6 +483,143 @@ async def analyze_exam_attempt(
                 raise HTTPException(status_code=502, detail=f"LLM API error {resp.status_code}: {resp.text[:200]}")
             data = resp.json()
             analysis = data["choices"][0]["message"]["content"]
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"LLM connection error: {str(exc)}")
+
+    return {"analysis": analysis}
+
+
+@router.post("/attempt/{attempt_id}/code/{task_id}")
+async def save_task_code_solution(
+    attempt_id: int,
+    task_id: int,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save or update a code solution for a task in a finished attempt."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_not(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Finished attempt not found")
+
+    code = body.get("code", "")
+    results = dict(attempt.results_json or {})
+    updated = False
+    for tr in results.get("task_results", []):
+        if tr.get("task_id") == task_id:
+            tr["code_solution"] = code
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Task not found in attempt results")
+
+    attempt.results_json = results
+    flag_modified(attempt, "results_json")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/attempt/{attempt_id}/task/{task_id}/check-code")
+async def check_task_code(
+    attempt_id: int,
+    task_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Compare student's code solution with the reference solution via LLM."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_not(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Finished attempt not found")
+
+    # Find task result
+    task_result_entry = None
+    for tr in (attempt.results_json or {}).get("task_results", []):
+        if tr.get("task_id") == task_id:
+            task_result_entry = tr
+            break
+    if task_result_entry is None:
+        raise HTTPException(status_code=404, detail="Task not found in attempt")
+
+    student_code = task_result_entry.get("code_solution") or ""
+    if not student_code.strip():
+        raise HTTPException(status_code=400, detail="No student code to check")
+
+    # Load reference solution
+    task_res = await db.execute(select(Task).where(Task.id == task_id))
+    task = task_res.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    ref_code = task.full_solution_code or ""
+    if not ref_code.strip():
+        raise HTTPException(status_code=400, detail="No reference solution for this task")
+
+    task_condition = _strip_html(task.content_html or "", 400) if task.content_html else ""
+
+    prompt = f"""Сравни код ученика с эталонным решением задачи ЕГЭ по информатике (задание №{task.ege_number or '?'}).
+
+{"Условие задачи: " + task_condition if task_condition else ""}
+
+**Эталонное решение:**
+```python
+{ref_code[:800]}
+```
+
+**Код ученика:**
+```python
+{student_code[:800]}
+```
+
+Проанализируй код ученика:
+1. **Верно ли решение?** — кратко да/нет и почему
+2. **Ошибки** — если есть, объясни каждую: что именно не так и почему это ошибка
+3. **Что исправить** — конкретные правки (можно показать исправленный фрагмент)
+4. **Что сделано правильно** — отметь верные части
+
+Отвечай на русском языке, используй markdown."""
+
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            headers = {
+                "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "Edu Platform",
+            }
+            payload = {
+                "model": settings.LLM_MODEL,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "Ты преподаватель информатики. Анализируешь код ученика на Python для задач ЕГЭ. Отвечай на русском языке.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            }
+            resp = await client.post(
+                f"{settings.LLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            if resp.status_code != 200:
+                err_body = resp.text[:300]
+                raise HTTPException(status_code=502, detail=f"LLM error {resp.status_code}: {err_body}")
+            analysis = resp.json()["choices"][0]["message"]["content"]
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"LLM connection error: {str(exc)}")
 

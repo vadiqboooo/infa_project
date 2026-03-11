@@ -3,9 +3,10 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles } from "lucide-react";
 import { clsx } from "clsx";
-import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
+import ReactMarkdown from "react-markdown";
+import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
 import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
@@ -41,12 +42,23 @@ export default function ExamPage() {
     const [localCode, setLocalCode] = useState("");
     const [viewingCode, setViewingCode] = useState<string | null>(null);
 
+    // Review panel state (view task after exam)
+    const [reviewTaskId, setReviewTaskId] = useState<number | null>(null);
+    const [reviewCodeEdits, setReviewCodeEdits] = useState<Record<number, string>>({});
+    const [codeCheckResults, setCodeCheckResults] = useState<Record<number, string>>({});
+    const [reviewFileUploading, setReviewFileUploading] = useState<Record<number, boolean>>({});
+    const [reviewSavedCodes, setReviewSavedCodes] = useState<Record<number, string>>({});
+
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
-    
+    const { data: reviewTask, isLoading: reviewTaskLoading } = useTask(reviewTaskId);
+
     const startExamMutation = useStartExam(examInfo?.id ?? 0);
     const submitExamMutation = useSubmitExam(examInfo?.id ?? 0);
+    const finishedAttemptId = (examResult?.attempt_id) ?? (examInfo?.finished_attempt?.id) ?? 0;
+    const saveCodeMutation = useSaveCodeSolution(finishedAttemptId);
+    const checkCodeMutation = useCheckCode(finishedAttemptId);
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -248,15 +260,18 @@ export default function ExamPage() {
 
         const ResultRow = ({ tr, idx }: { tr: TaskResult; idx: number }) => {
             const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
+            const notAutoChecked = tr.auto_checked === false;
+            const hasAttachment = tr.code_solution || tr.file_solution_url || reviewSavedCodes[tr.task_id];
             return (
                 <tr
                     key={tr.task_id}
                     className={clsx(
-                        "transition-colors",
+                        "transition-colors cursor-pointer",
                         tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
                             : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
                             : "hover:bg-gray-50/80"
                     )}
+                    onClick={() => setReviewTaskId(tr.task_id)}
                 >
                     <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8 border-b border-gray-200">
                         {tr.ege_number || idx + 1}
@@ -265,39 +280,42 @@ export default function ExamPage() {
                         {formatAnswer(tr.user_answer)}
                     </td>
                     <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate border-b border-gray-200">
-                        {formatAnswer(tr.correct_answer)}
+                        {notAutoChecked
+                            ? <span className="text-[10px] text-gray-400 italic">по решению</span>
+                            : formatAnswer(tr.correct_answer)
+                        }
                     </td>
                     <td className="py-2 px-2 text-center border-b border-gray-200">
                         <div className="flex items-center justify-center gap-1">
-                            <span className={clsx(
-                                "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
-                                tr.points === max
-                                    ? "bg-[#3F8C62] text-white"
-                                    : tr.points > 0
-                                        ? "bg-amber-100 text-amber-700"
-                                        : "bg-gray-100 text-gray-400"
-                            )}>
-                                {tr.points}/{max}
-                            </span>
-                            {tr.code_solution && (
-                                <button
-                                    onClick={() => setViewingCode(tr.code_solution!)}
-                                    title="Посмотреть решение (код)"
-                                    className="text-purple-400 hover:text-purple-600 transition-colors"
-                                >
+                            {notAutoChecked ? (
+                                <span className="inline-flex items-center justify-center px-1.5 h-6 rounded-md text-[10px] font-bold bg-gray-100 text-gray-400">
+                                    —
+                                </span>
+                            ) : (
+                                <span className={clsx(
+                                    "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
+                                    tr.points === max
+                                        ? "bg-[#3F8C62] text-white"
+                                        : tr.points > 0
+                                            ? "bg-amber-100 text-amber-700"
+                                            : "bg-gray-100 text-gray-400"
+                                )}>
+                                    {tr.points}/{max}
+                                </span>
+                            )}
+                            {hasAttachment && (
+                                <span title="Есть решение" className="text-purple-400">
                                     <Code size={13} />
-                                </button>
+                                </span>
                             )}
                             {tr.file_solution_url && (
-                                <a
-                                    href={tr.file_solution_url}
-                                    download
-                                    title="Скачать файл решения"
-                                    className="text-blue-400 hover:text-blue-600 transition-colors"
-                                >
+                                <span title="Прикреплён файл" className="text-blue-400">
                                     <Paperclip size={13} />
-                                </a>
+                                </span>
                             )}
+                            <span className="text-gray-300 hover:text-gray-500 transition-colors ml-0.5">
+                                <Eye size={12} />
+                            </span>
                         </div>
                     </td>
                 </tr>
@@ -396,32 +414,195 @@ export default function ExamPage() {
                     )}
                 </div>
 
-            {/* Modal: view code solution */}
-            {viewingCode && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setViewingCode(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                            <div className="flex items-center gap-2 text-purple-600 font-bold text-sm">
-                                <Code size={16} />
-                                Решение (код)
+            {/* Review Panel — slide-out for viewing task after exam */}
+            {reviewTaskId && (() => {
+                const currentTR = sortedResults.find(r => r.task_id === reviewTaskId);
+                const max = currentTR ? (currentTR.max_points ?? ((currentTR.ege_number && currentTR.ege_number >= 26) ? 2 : 1)) : 1;
+                const notAutoChecked = currentTR?.auto_checked === false;
+                const egeNum = currentTR?.ege_number ?? null;
+                const isCodeTask = egeNum !== null && CODE_TASK_NUMS.has(egeNum);
+                const isFileTask = egeNum !== null && FILE_TASK_NUMS.has(egeNum);
+                const currentCode = reviewCodeEdits[reviewTaskId] ?? currentTR?.code_solution ?? reviewSavedCodes[reviewTaskId] ?? "";
+                const checkResult = codeCheckResults[reviewTaskId];
+                const isCheckLoading = checkCodeMutation.isPending;
+                const isSaveLoading = saveCodeMutation.isPending;
+                const isFileUploading = reviewFileUploading[reviewTaskId] ?? false;
+
+                const handleSaveCode = async () => {
+                    try {
+                        await saveCodeMutation.mutateAsync({ taskId: reviewTaskId, code: currentCode });
+                        setReviewSavedCodes(prev => ({ ...prev, [reviewTaskId]: currentCode }));
+                    } catch { /* ignore */ }
+                };
+
+                const handleCheckCode = async () => {
+                    try {
+                        const res = await checkCodeMutation.mutateAsync({ taskId: reviewTaskId });
+                        setCodeCheckResults(prev => ({ ...prev, [reviewTaskId]: res.analysis }));
+                    } catch { /* ignore */ }
+                };
+
+                const handleFileUpload = async (file: File) => {
+                    setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: true }));
+                    try {
+                        const token = localStorage.getItem("jwt_token");
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        const res = await fetch(`/api/exams/attempt/${finishedAttemptId}/upload/${reviewTaskId}`, {
+                            method: "POST",
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                            body: formData,
+                        });
+                        if (res.ok) {
+                            // update local result
+                            const data = await res.json();
+                            if (examResult) {
+                                const updated = { ...examResult };
+                                const tr = updated.task_results?.find((r: TaskResult) => r.task_id === reviewTaskId);
+                                if (tr) tr.file_solution_url = data.file_url;
+                                setExamResult(updated);
+                            }
+                        }
+                    } catch { /* ignore */ }
+                    setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: false }));
+                };
+
+                return (
+                    <>
+                        <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setReviewTaskId(null)} />
+                        <div className="fixed top-0 right-0 h-full w-[600px] max-w-[95vw] bg-white z-50 shadow-2xl flex flex-col">
+                            {/* Header */}
+                            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
+                                        <Eye size={15} className="text-gray-500" />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-bold text-gray-900 text-sm">Задание №{egeNum ?? reviewTaskId}</h2>
+                                        <p className="text-[11px] text-gray-400 mt-0.5">Просмотр (только чтение)</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setReviewTaskId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                                    <X size={18} />
+                                </button>
                             </div>
-                            <button onClick={() => setViewingCode(null)} className="text-gray-400 hover:text-gray-700 transition-colors">
-                                <X size={18} />
-                            </button>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto">
+                                {reviewTaskLoading ? (
+                                    <div className="p-6 space-y-3">
+                                        <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
+                                        <div className="h-4 bg-gray-100 rounded animate-pulse w-full" />
+                                        <div className="h-4 bg-gray-100 rounded animate-pulse w-2/3" />
+                                    </div>
+                                ) : reviewTask ? (
+                                    <div className="px-6 py-4 space-y-4">
+                                        {/* Task content */}
+                                        <TaskView content={reviewTask.content_html} />
+
+                                        {/* Answer summary */}
+                                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                            <div className="flex flex-wrap gap-6 text-xs">
+                                                <div>
+                                                    <div className="text-[10px] text-gray-400 font-bold uppercase mb-1">Ваш ответ</div>
+                                                    <div className="font-mono text-gray-700">{formatAnswer(currentTR?.user_answer)}</div>
+                                                </div>
+                                                {!notAutoChecked && (
+                                                    <div>
+                                                        <div className="text-[10px] text-gray-400 font-bold uppercase mb-1">Верный ответ</div>
+                                                        <div className="font-mono text-gray-700">{formatAnswer(currentTR?.correct_answer)}</div>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="text-[10px] text-gray-400 font-bold uppercase mb-1">Баллы</div>
+                                                    <div className={clsx("font-bold", notAutoChecked ? "text-gray-400" : currentTR?.points === max ? "text-[#3F8C62]" : currentTR?.points ?? 0 > 0 ? "text-amber-600" : "text-gray-400")}>
+                                                        {notAutoChecked ? "Не проверено" : `${currentTR?.points ?? 0}/${max}`}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Code solution section */}
+                                        {isCodeTask && (
+                                            <div>
+                                                <div className="text-[10px] font-bold text-gray-400 uppercase mb-2">Решение (код Python)</div>
+                                                <div className="rounded-xl overflow-hidden border border-gray-200">
+                                                    <CodeMirror
+                                                        value={currentCode}
+                                                        onChange={val => setReviewCodeEdits(prev => ({ ...prev, [reviewTaskId]: val }))}
+                                                        extensions={[python()]}
+                                                        theme={githubLight}
+                                                        basicSetup={{ lineNumbers: true, foldGutter: false }}
+                                                        style={{ fontSize: "13px" }}
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <button
+                                                        onClick={handleSaveCode}
+                                                        disabled={isSaveLoading || !currentCode.trim()}
+                                                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#3F8C62] text-white hover:bg-[#357A54] disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {isSaveLoading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                                        Сохранить
+                                                    </button>
+                                                    {reviewTask.full_solution_code && currentCode.trim() && (
+                                                        <button
+                                                            onClick={handleCheckCode}
+                                                            disabled={isCheckLoading}
+                                                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 disabled:opacity-50 transition-colors"
+                                                        >
+                                                            {isCheckLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                                            Проверить ошибки
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {checkResult && (
+                                                    <div className="mt-3 p-4 bg-purple-50 rounded-xl border border-purple-100 prose prose-sm max-w-none text-gray-700">
+                                                        <ReactMarkdown>{checkResult}</ReactMarkdown>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* File solution section */}
+                                        {isFileTask && (
+                                            <div>
+                                                <div className="text-[10px] font-bold text-gray-400 uppercase mb-2">Файл решения</div>
+                                                {currentTR?.file_solution_url ? (
+                                                    <a
+                                                        href={currentTR.file_solution_url}
+                                                        download
+                                                        className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                                    >
+                                                        <Paperclip size={12} />
+                                                        Скачать файл
+                                                    </a>
+                                                ) : null}
+                                                <label className={clsx("inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ml-2", isFileUploading ? "opacity-50 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100")}>
+                                                    {isFileUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                                                    {currentTR?.file_solution_url ? "Заменить файл" : "Прикрепить файл"}
+                                                    <input
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept=".xlsx,.xls,.csv,.ods"
+                                                        disabled={isFileUploading}
+                                                        onChange={e => {
+                                                            const f = e.target.files?.[0];
+                                                            if (f) handleFileUpload(f);
+                                                        }}
+                                                    />
+                                                </label>
+                                                <p className="text-[10px] text-gray-400 mt-1">Поддерживаемые форматы: xlsx, xls, csv, ods</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </div>
                         </div>
-                        <div className="overflow-auto flex-1 rounded-b-2xl">
-                            <CodeMirror
-                                value={viewingCode}
-                                extensions={[python()]}
-                                theme={githubLight}
-                                editable={false}
-                                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
-                                style={{ fontSize: "13px" }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                );
+            })()}
+
             </div>
         );
     }

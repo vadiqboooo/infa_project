@@ -92,6 +92,25 @@ export function useSubmitExam(examId: number) {
     });
 }
 
+export function useSaveCodeSolution(attemptId: number) {
+    return useMutation<{ ok: boolean }, Error, { taskId: number; code: string }>({
+        mutationFn: ({ taskId, code }) =>
+            api(`/exams/attempt/${attemptId}/code/${taskId}`, {
+                method: "POST",
+                body: JSON.stringify({ code }),
+            }),
+    });
+}
+
+export function useCheckCode(attemptId: number) {
+    return useMutation<{ analysis: string }, Error, { taskId: number }>({
+        mutationFn: ({ taskId }) =>
+            api(`/exams/attempt/${attemptId}/task/${taskId}/check-code`, {
+                method: "POST",
+            }),
+    });
+}
+
 /* ── Statistics ──────────────────────────────────────── */
 export function useUserStats() {
     return useQuery<UserStats>({
