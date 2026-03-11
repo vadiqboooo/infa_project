@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models.task import AnswerType
 
@@ -60,6 +60,14 @@ class AnswerIn(BaseModel):
       text          → {"val": "xwyz"}
     """
     val: float | list[float] | list[list[float | str]] | str
+
+    @field_validator("val", mode="after")
+    @classmethod
+    def strip_empty_table_rows(cls, v):
+        """Remove rows where all cells are empty strings from table answers."""
+        if isinstance(v, list) and v and isinstance(v[0], list):
+            v = [row for row in v if any(cell != "" for cell in row)]
+        return v
 
 
 class CheckResult(BaseModel):
