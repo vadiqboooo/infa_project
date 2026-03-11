@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import katex from 'katex';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight,
@@ -184,9 +185,10 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
                         >
                           {i + 1}
                         </div>
-                        <p className="font-semibold text-gray-800 pt-0.5">
-                          {step.title}
-                        </p>
+                        <p
+                          className="font-semibold text-gray-800 pt-0.5"
+                          dangerouslySetInnerHTML={{ __html: renderMath(step.title) }}
+                        />
                       </div>
 
                       {/* Explanation */}
@@ -196,9 +198,9 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
                             size={14}
                             className="text-amber-500 mt-0.5 shrink-0"
                           />
-                          <div 
+                          <div
                             className="text-sm text-gray-600 leading-relaxed prose prose-sm max-w-none"
-                            dangerouslySetInnerHTML={{ __html: step.explanation }}
+                            dangerouslySetInnerHTML={{ __html: renderMath(step.explanation) }}
                           />
                         </div>
 
@@ -329,6 +331,19 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
       )}
     </AnimatePresence>
   );
+}
+
+/** Convert $...$ and $$...$$ in a string (plain text or HTML) to KaTeX HTML. */
+function renderMath(text: string): string {
+  // Block math $$...$$
+  let result = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) =>
+    katex.renderToString(math, { throwOnError: false, displayMode: true })
+  );
+  // Inline math $...$
+  result = result.replace(/\$([^\$\n]+?)\$/g, (_, math) =>
+    katex.renderToString(math, { throwOnError: false, displayMode: false })
+  );
+  return result;
 }
 
 // Simple Python syntax highlighting via JSX spans
