@@ -470,7 +470,7 @@ export default function ExamPage() {
                 return (
                     <>
                         <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setReviewTaskId(null)} />
-                        <div className="fixed top-0 right-0 h-full w-[600px] max-w-[95vw] bg-white z-50 shadow-2xl flex flex-col">
+                        <div className="fixed top-0 right-0 h-full w-1/2 min-w-[400px] bg-white z-50 shadow-2xl flex flex-col">
                             {/* Header */}
                             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
