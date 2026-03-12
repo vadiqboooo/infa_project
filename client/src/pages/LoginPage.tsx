@@ -53,19 +53,21 @@ export default function LoginPage() {
     };
 
     const handleSwitchAccount = () => {
-        // Open Telegram's actual auth popup — embed=0 shows the account selection UI,
-        // where the user can choose "Use a different account".
-        // The popup calls window.opener.onTelegramAuth(user) on success,
-        // so our existing callback will fire with the new user and show the confirmation card.
-        const botId = import.meta.env.VITE_BOT_ID;
-        const origin = encodeURIComponent(window.location.origin);
+        // The widget iframe (created by telegram-widget.js) listens for postMessage.
+        // Sending {event: 'logout'} is exactly what TelegramWidget.prototype.logout() does
+        // internally — it clears the oauth.telegram.org session cookie via the trusted iframe.
+        const container = document.getElementById("telegram-login-container");
+        const iframe = container?.querySelector<HTMLIFrameElement>("iframe");
+        if (iframe?.contentWindow) {
+            iframe.contentWindow.postMessage(
+                JSON.stringify({ event: "logout" }),
+                "https://oauth.telegram.org"
+            );
+        }
         setPending(null);
-        window.open(
-            `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${origin}&request_access=write&embed=0`,
-            'tg_auth',
-            'width=550,height=470,scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,left=' +
-            Math.round(window.screen.width / 2 - 275) + ',top=' + Math.round(window.screen.height / 2 - 235)
-        );
+        // Give a moment for logout to be processed, then reload so the widget
+        // shows a fresh login button (without auto-firing the cached session).
+        setTimeout(() => window.location.reload(), 800);
     };
 
     useEffect(() => {
@@ -130,12 +132,25 @@ export default function LoginPage() {
                         </div>
 
                         <div className="auth-section">
-                            {loading ? (
+                            {/* Always keep widget container in DOM so its iframe stays alive.
+                                We need the iframe reference to send the logout postMessage. */}
+                            <div
+                                id="telegram-login-container"
+                                className="tg-widget-wrapper"
+                                style={{ display: loading || pending ? "none" : undefined }}
+                            />
+                            {!loading && !pending && (
+                                <p className="auth-hint">Нажимая кнопку, вы подтверждаете согласие с правилами платформы</p>
+                            )}
+
+                            {loading && (
                                 <div className="auth-loading">
                                     <div className="spinner"></div>
                                     <span>Авторизация...</span>
                                 </div>
-                            ) : pending ? (
+                            )}
+
+                            {pending && !loading && (
                                 /* ── Account confirmation ── */
                                 <div className="tg-confirm-card">
                                     {pending.photo_url ? (
@@ -166,11 +181,6 @@ export default function LoginPage() {
                                         Это не я — сменить аккаунт
                                     </button>
                                 </div>
-                            ) : (
-                                <>
-                                    <div id="telegram-login-container" className="tg-widget-wrapper"></div>
-                                    <p className="auth-hint">Нажимая кнопку, вы подтверждаете согласие с правилами платформы</p>
-                                </>
                             )}
                         </div>
                     </div>
