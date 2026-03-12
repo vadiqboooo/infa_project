@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   Save,
@@ -16,6 +16,9 @@ import {
   ArrowDown,
   Search,
   Clock,
+  ImageIcon,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
@@ -327,6 +330,8 @@ function TaskEditModal({ task, onClose, onSave }: { task: Partial<TaskAdmin>, on
         solution_steps: task.solution_steps || [],
         full_solution_code: task.full_solution_code || ""
     });
+    const [uploadingStep, setUploadingStep] = useState<number | null>(null);
+    const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     const handleSave = () => {
         onSave({
@@ -334,6 +339,50 @@ function TaskEditModal({ task, onClose, onSave }: { task: Partial<TaskAdmin>, on
             ...form,
             correct_answer: { val: form.correct_answer }
         });
+    };
+
+    const uploadStepImage = async (stepIdx: number, file: File) => {
+        if (!task.id) return;
+        setUploadingStep(stepIdx);
+        try {
+            const token = localStorage.getItem('jwt_token');
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch(`/api/admin/tasks/${task.id}/steps/${stepIdx}/upload-image`, {
+                method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: fd,
+            });
+            if (!res.ok) throw new Error('Upload failed');
+            const data = await res.json();
+            const newSteps = [...form.solution_steps];
+            const step = { ...newSteps[stepIdx] };
+            step.images = [...(step.images || []), data.url];
+            newSteps[stepIdx] = step;
+            setForm({ ...form, solution_steps: newSteps });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setUploadingStep(null);
+        }
+    };
+
+    const removeStepImage = async (stepIdx: number, url: string) => {
+        if (!task.id) return;
+        try {
+            const token = localStorage.getItem('jwt_token');
+            await fetch(`/api/admin/tasks/${task.id}/steps/${stepIdx}/images?url=${encodeURIComponent(url)}`, {
+                method: 'DELETE',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+        } catch (e) {
+            console.error(e);
+        }
+        const newSteps = [...form.solution_steps];
+        const step = { ...newSteps[stepIdx] };
+        step.images = (step.images || []).filter((i: string) => i !== url);
+        newSteps[stepIdx] = step;
+        setForm({ ...form, solution_steps: newSteps });
     };
 
     const addStep = () => {
@@ -500,13 +549,66 @@ function TaskEditModal({ task, onClose, onSave }: { task: Partial<TaskAdmin>, on
                                         />
                                         <div className="relative">
                                             <Code2 className="absolute right-3 top-3 text-gray-300" size={14} />
-                                            <textarea 
+                                            <textarea
                                                 value={step.code}
                                                 onChange={e => updateStep(idx, 'code', e.target.value)}
                                                 placeholder="Код (опционально)..."
                                                 rows={2}
                                                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:border-[#3F8C62] transition-all"
                                             />
+                                        </div>
+
+                                        {/* Images */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                                                    <ImageIcon size={10} /> Иллюстрации
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRefs.current[idx]?.click()}
+                                                    disabled={uploadingStep === idx || !task.id}
+                                                    className="flex items-center gap-1 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50"
+                                                >
+                                                    {uploadingStep === idx ? (
+                                                        <Loader2 size={10} className="animate-spin" />
+                                                    ) : (
+                                                        <Upload size={10} />
+                                                    )}
+                                                    Добавить
+                                                </button>
+                                                <input
+                                                    ref={el => { fileInputRefs.current[idx] = el; }}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={e => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) uploadStepImage(idx, file);
+                                                        e.target.value = '';
+                                                    }}
+                                                />
+                                            </div>
+                                            {(step.images || []).length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(step.images || []).map((url: string, imgIdx: number) => (
+                                                        <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                                                            <img
+                                                                src={url.startsWith('http') ? url : `/api${url}`}
+                                                                alt=""
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeStepImage(idx, url)}
+                                                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                                            >
+                                                                <X size={8} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

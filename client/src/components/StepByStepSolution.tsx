@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
   Code2,
   Lightbulb,
   RotateCcw,
@@ -12,6 +13,7 @@ import {
   Lock,
   Eye,
   X,
+  ImageIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SolutionStep } from '../store';
@@ -217,7 +219,7 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
                                 <div className="w-2.5 h-2.5 rounded-full bg-[#f9e2af]" />
                               </div>
                             </div>
-                            <pre 
+                            <pre
                               className="p-4 overflow-x-auto select-none"
                               onContextMenu={(e) => e.preventDefault()}
                             >
@@ -226,6 +228,11 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
                               </code>
                             </pre>
                           </div>
+                        )}
+
+                        {/* Image carousel */}
+                        {step.images && step.images.length > 0 && (
+                          <StepImageCarousel images={step.images} />
                         )}
                       </div>
                     </div>
@@ -330,6 +337,118 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+// ── Image carousel ────────────────────────────────────────────────────────────
+
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
+function StepImageCarousel({ images }: { images: string[] }) {
+  const [index, setIndex] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
+
+  if (images.length === 0) return null;
+
+  const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
+  const next = () => setIndex((i) => (i + 1) % images.length);
+
+  const src = images[index].startsWith('http') ? images[index] : `${API_BASE}${images[index]}`;
+
+  return (
+    <>
+      <div className="mt-3 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+        {/* Image header */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-white border-b border-gray-100">
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium">
+            <ImageIcon size={12} />
+            Иллюстрации
+          </div>
+          <span className="text-[11px] text-gray-400">
+            {index + 1} / {images.length}
+          </span>
+        </div>
+
+        {/* Image */}
+        <div className="relative group">
+          <img
+            src={src}
+            alt={`Step image ${index + 1}`}
+            className="w-full max-h-64 object-contain cursor-zoom-in bg-gray-50"
+            onClick={() => setLightbox(true)}
+          />
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={prev}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-600 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button
+                onClick={next}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/90 shadow-md flex items-center justify-center text-gray-600 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Dot indicators */}
+        {images.length > 1 && (
+          <div className="flex items-center justify-center gap-1.5 py-2">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIndex(i)}
+                className={clsx(
+                  'rounded-full transition-all',
+                  i === index ? 'w-4 h-1.5 bg-[#3F8C62]' : 'w-1.5 h-1.5 bg-gray-300'
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center"
+          onClick={() => setLightbox(false)}
+        >
+          <img
+            src={src}
+            alt="Lightbox"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+            onClick={() => setLightbox(false)}
+          >
+            <X size={18} />
+          </button>
+          {images.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); prev(); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); next(); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -65,6 +65,7 @@ export interface SolutionStep {
     title: string;
     explanation: string;
     code: string;
+    images?: string[];
 }
 
 export interface TaskOut {

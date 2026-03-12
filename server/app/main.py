@@ -15,6 +15,7 @@ from app.routers import admin, auth, content, exams, solving, stats
 logger = logging.getLogger(__name__)
 
 os.makedirs("uploads/exam_solutions", exist_ok=True)
+os.makedirs("uploads/step_images", exist_ok=True)
 
 
 @asynccontextmanager

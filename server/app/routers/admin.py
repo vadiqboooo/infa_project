@@ -1,9 +1,13 @@
 """Admin router — CRUD for topics and tasks."""
 
+import os
+import uuid
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.dependencies import get_db, verify_parser_api_key
 from app.models.exam import Exam, exam_tasks
@@ -725,6 +729,84 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     await db.delete(task)
     await db.commit()
+
+
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+
+os.makedirs("uploads/step_images", exist_ok=True)
+
+
+@router.post("/tasks/{task_id}/steps/{step_index}/upload-image")
+async def upload_step_image(
+    task_id: int,
+    step_index: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload an image for a specific solution step and attach its URL to the step."""
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+
+    file_name = f"{uuid.uuid4().hex}{suffix}"
+    file_path = Path(f"uploads/step_images/{file_name}")
+    file_path.write_bytes(await file.read())
+    url = f"/uploads/step_images/{file_name}"
+
+    # Attach URL to the step's images list
+    steps = list(task.solution_steps or [])
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid step index")
+
+    step = dict(steps[step_index])
+    imgs = list(step.get("images") or [])
+    imgs.append(url)
+    step["images"] = imgs
+    steps[step_index] = step
+    task.solution_steps = steps
+    flag_modified(task, "solution_steps")
+    await db.commit()
+
+    return {"url": url}
+
+
+@router.delete("/tasks/{task_id}/steps/{step_index}/images")
+async def delete_step_image(
+    task_id: int,
+    step_index: int,
+    url: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove an image URL from a solution step (and delete file)."""
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    steps = list(task.solution_steps or [])
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid step index")
+
+    step = dict(steps[step_index])
+    imgs = [i for i in (step.get("images") or []) if i != url]
+    step["images"] = imgs
+    steps[step_index] = step
+    task.solution_steps = steps
+    flag_modified(task, "solution_steps")
+    await db.commit()
+
+    # Try to delete the file
+    if url.startswith("/uploads/step_images/"):
+        file_path = Path(url.lstrip("/"))
+        if file_path.exists():
+            file_path.unlink(missing_ok=True)
+
+    return {"ok": True}
 
 
 @router.post("/tasks/{task_id}/move-up", status_code=status.HTTP_204_NO_CONTENT)
