@@ -53,21 +53,19 @@ export default function LoginPage() {
     };
 
     const handleSwitchAccount = () => {
-        // Telegram widget internally uses a hidden iframe with &logout=1 to clear the OAuth session
-        // (same as TelegramLoginWidget.logout() in telegram-widget.js)
+        // Open Telegram's actual auth popup — embed=0 shows the account selection UI,
+        // where the user can choose "Use a different account".
+        // The popup calls window.opener.onTelegramAuth(user) on success,
+        // so our existing callback will fire with the new user and show the confirmation card.
         const botId = import.meta.env.VITE_BOT_ID;
         const origin = encodeURIComponent(window.location.origin);
-
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = `https://oauth.telegram.org/auth/widget?bot_id=${botId}&origin=${origin}&logout=1`;
-        document.body.appendChild(iframe);
-
-        // After session is cleared, reload so the widget shows fresh login button
-        setTimeout(() => {
-            document.body.removeChild(iframe);
-            window.location.reload();
-        }, 1500);
+        setPending(null);
+        window.open(
+            `https://oauth.telegram.org/auth?bot_id=${botId}&origin=${origin}&request_access=write&embed=0`,
+            'tg_auth',
+            'width=550,height=470,scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,left=' +
+            Math.round(window.screen.width / 2 - 275) + ',top=' + Math.round(window.screen.height / 2 - 235)
+        );
     };
 
     useEffect(() => {
