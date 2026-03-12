@@ -14,20 +14,38 @@ interface Props {
     onRefresh?: () => void;
 }
 
-function Cell({ status }: { status: string | undefined }) {
-    if (status === "solved") return (
-        <td className="px-2 py-3 text-center" style={{ borderBottom: "1px solid #f9fafb" }}>
-            <CheckCircle2 size={16} className="text-emerald-500 mx-auto" />
-        </td>
-    );
-    if (status === "failed") return (
-        <td className="px-2 py-3 text-center" style={{ borderBottom: "1px solid #f9fafb" }}>
-            <XCircle size={16} className="text-red-400 mx-auto" />
-        </td>
-    );
+/** Format {"val": ...} answer to a compact display string */
+function fmtAnswer(ans: { val: any } | null | undefined): string {
+    if (!ans) return "";
+    const v = ans.val;
+    if (v == null) return "";
+    if (Array.isArray(v)) {
+        if (Array.isArray(v[0])) {
+            // table: each row on its own line
+            return (v as any[][]).map((row: any[]) => row.join(",")).join(" / ");
+        }
+        return (v as any[]).join(", ");
+    }
+    return String(v);
+}
+
+function Cell({ status, answer }: { status: string | undefined; answer: string }) {
+    const border = { borderBottom: "1px solid #f9fafb" };
     return (
-        <td className="px-2 py-3 text-center" style={{ borderBottom: "1px solid #f9fafb" }}>
-            <Circle size={14} className="text-gray-200 mx-auto" />
+        <td className="text-center" style={{ padding: "6px 2px", ...border }}>
+            <div className="flex flex-col items-center gap-0.5">
+                {status === "solved" && <CheckCircle2 size={14} className="text-emerald-500" />}
+                {status === "failed" && <XCircle size={14} className="text-red-400" />}
+                {!status && <Circle size={12} className="text-gray-200" />}
+                {answer && (
+                    <span className={clsx(
+                        "text-[9px] font-mono leading-tight max-w-[56px] truncate",
+                        status === "solved" ? "text-emerald-600" : status === "failed" ? "text-red-400" : "text-gray-400"
+                    )}>
+                        {answer}
+                    </span>
+                )}
+            </div>
         </td>
     );
 }
@@ -87,7 +105,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
     });
 
     const nameColW = 160;
-    const taskColW = 44;
+    const taskColW = 64;
     const countColW = 56;
     const actionsColW = 80;
     const totalW = nameColW + stats.tasks.length * taskColW + countColW + actionsColW;
@@ -141,6 +159,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                         <div className="overflow-x-auto rounded-2xl">
                             <table className="border-collapse" style={{ width: `${Math.max(totalW, 600)}px` }}>
                                 <thead>
+                                    {/* Row 1: column headers */}
                                     <tr className="bg-gray-50" style={{ borderBottom: "1px solid #e5e7eb" }}>
                                         <th className="text-left text-xs font-bold text-gray-500 bg-gray-50"
                                             style={{ width: nameColW, minWidth: nameColW, padding: "10px 16px", position: "sticky", left: 0, zIndex: 10 }}>
@@ -155,21 +174,30 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: countColW, padding: "10px 8px" }}>Итог</th>
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: actionsColW, padding: "10px 8px" }}>Действия</th>
                                     </tr>
-                                    {/* % solved per task */}
+
+                                    {/* Row 2: % solved + correct answer */}
                                     <tr className="bg-emerald-50/40" style={{ borderBottom: "2px solid #f3f4f6" }}>
-                                        <td className="text-[10px] font-bold text-gray-400 uppercase tracking-wide bg-emerald-50/40"
-                                            style={{ padding: "6px 16px", position: "sticky", left: 0 }}>
-                                            % решили
+                                        <td className="bg-emerald-50/40" style={{ padding: "6px 16px", position: "sticky", left: 0 }}>
+                                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">% решили</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">верный ответ</div>
                                         </td>
                                         {stats.tasks.map(task => {
                                             const n = filteredStudents.length;
                                             const pct = n === 0 ? 0 : Math.round((solvedCounts[task.task_id] / n) * 100);
+                                            const correct = fmtAnswer(task.correct_answer);
                                             return (
                                                 <td key={task.task_id} className="text-center" style={{ padding: "6px 4px" }}>
-                                                    <span className={clsx("text-[10px] font-bold",
-                                                        pct >= 70 ? "text-emerald-600" : pct >= 40 ? "text-amber-500" : "text-red-400")}>
-                                                        {pct}%
-                                                    </span>
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className={clsx("text-[10px] font-bold",
+                                                            pct >= 70 ? "text-emerald-600" : pct >= 40 ? "text-amber-500" : "text-red-400")}>
+                                                            {pct}%
+                                                        </span>
+                                                        {correct && (
+                                                            <span className="text-[9px] font-mono text-gray-500 bg-gray-100 rounded px-1 max-w-[56px] truncate" title={correct}>
+                                                                {correct}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             );
                                         })}
@@ -199,7 +227,11 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                     </div>
                                                 </td>
                                                 {stats.tasks.map(task => (
-                                                    <Cell key={task.task_id} status={student.results[task.task_id]} />
+                                                    <Cell
+                                                        key={task.task_id}
+                                                        status={student.results[task.task_id]}
+                                                        answer={fmtAnswer(student.answers?.[task.task_id])}
+                                                    />
                                                 ))}
                                                 <td className="text-center" style={{ padding: "10px 8px", borderBottom: "1px solid #f9fafb" }}>
                                                     <span className={clsx("text-xs font-bold",
@@ -209,7 +241,6 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                 </td>
                                                 <td className="text-center" style={{ padding: "8px 8px", borderBottom: "1px solid #f9fafb" }}>
                                                     <div className="flex items-center justify-center gap-1">
-                                                        {/* AI Analysis button — only if attempt exists */}
                                                         {student.attempt_id && (
                                                             <button
                                                                 onClick={() => setAnalysisFor({
@@ -223,7 +254,6 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                                 <Sparkles size={14} />
                                                             </button>
                                                         )}
-                                                        {/* Delete button */}
                                                         <button
                                                             onClick={() => handleDelete(student.student_id, student.student_name)}
                                                             title="Сбросить результаты"

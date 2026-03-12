@@ -311,6 +311,7 @@ export interface TopicStatsTaskInfo {
     task_id: number;
     ege_number: number | null;
     order_index: number;
+    correct_answer: { val: any } | null;
 }
 
 export interface TopicStatsStudentRow {
@@ -320,6 +321,7 @@ export interface TopicStatsStudentRow {
     attempt_id: number | null;
     group_ids: number[];
     results: Record<number, string>;
+    answers: Record<number, { val: any }>;
 }
 
 export interface TopicStatsOut {

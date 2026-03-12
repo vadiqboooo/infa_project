@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel
 from app.models.task import AnswerType, TaskDifficulty
 
@@ -148,12 +149,14 @@ class TopicStatsStudentRow(BaseModel):
     attempt_id: int | None  # latest finished exam attempt id (for AI analysis)
     group_ids: list[int] = []
     results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
+    answers: dict[int, Any] = {}  # task_id -> user_answer {"val": ...} from exam results
 
 
 class TopicStatsTaskInfo(BaseModel):
     task_id: int
     ege_number: int | None
     order_index: int
+    correct_answer: Any | None = None  # {"val": ...} or None
 
 
 class TopicStatsOut(BaseModel):

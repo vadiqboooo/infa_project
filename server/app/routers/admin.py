@@ -566,8 +566,9 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
     for p in all_progress:
         progress_by_user.setdefault(p.user_id, {})[p.task_id] = p.status.value
 
-    # Latest finished exam attempt per user (for AI analysis)
+    # Latest finished exam attempt per user (for AI analysis + student answers)
     attempt_by_user: dict[int, int] = {}
+    answers_by_user: dict[int, dict[int, any]] = {}
     exam_res2 = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
     topic_exam = exam_res2.scalar_one_or_none()
     if topic_exam and user_ids:
@@ -583,6 +584,13 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
         for att in attempts_res.scalars().all():
             if att.user_id not in attempt_by_user:
                 attempt_by_user[att.user_id] = att.id
+                # Extract user answers from results_json
+                task_results = (att.results_json or {}).get("task_results", [])
+                answers_by_user[att.user_id] = {
+                    tr["task_id"]: tr["user_answer"]
+                    for tr in task_results
+                    if tr.get("user_answer") is not None
+                }
 
     student_rows = []
     for uid in user_ids:
@@ -597,13 +605,14 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
             attempt_id=attempt_by_user.get(uid),
             group_ids=groups_by_user.get(uid, []),
             results=progress_by_user.get(uid, {}),
+            answers=answers_by_user.get(uid, {}),
         ))
 
     # Sort students by name
     student_rows.sort(key=lambda s: s.student_name)
 
     task_infos = [
-        TopicStatsTaskInfo(task_id=t.id, ege_number=t.ege_number, order_index=t.order_index)
+        TopicStatsTaskInfo(task_id=t.id, ege_number=t.ege_number, order_index=t.order_index, correct_answer=t.correct_answer)
         for t in tasks
     ]
 
