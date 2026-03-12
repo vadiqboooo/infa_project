@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { ShieldCheck, GraduationCap, RefreshCw } from "lucide-react";
+import { ShieldCheck, GraduationCap } from "lucide-react";
 import type { TokenResponse } from "../api/types";
 import { EyeFollowCharacters } from "../components/EyeFollowCharacters";
 import "./LoginPage.css";
@@ -14,67 +14,31 @@ declare global {
     }
 }
 
-interface TelegramUser {
-    id: number;
-    first_name: string;
-    last_name?: string;
-    username?: string;
-    photo_url?: string;
-    hash: string;
-}
-
 export default function LoginPage() {
     const { login, loggedIn } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
-    // pending = user data received from Telegram widget, awaiting confirmation
-    const [pending, setPending] = useState<TelegramUser | null>(null);
 
     useEffect(() => {
         if (loggedIn) navigate("/");
     }, [loggedIn, navigate]);
 
-    const doLogin = async (user: TelegramUser) => {
-        setLoading(true);
-        try {
-            const res = await api<TokenResponse>("/auth/telegram", {
-                method: "POST",
-                body: JSON.stringify(user),
-            });
-            login(res.access_token);
-            navigate("/");
-        } catch (err: any) {
-            console.error("Auth error:", err);
-            alert("Ошибка авторизации: " + (err.message || "Неизвестная ошибка"));
-            setPending(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSwitchAccount = () => {
-        // stel_token lives on oauth.telegram.org — we can't delete it directly.
-        // Opening the logout URL as a real popup window (not iframe) forces the browser
-        // to navigate to that domain with our cookies, and Telegram's server responds
-        // with Set-Cookie: stel_token=; Max-Age=0, effectively clearing the session.
-        const botId = import.meta.env.VITE_BOT_ID;
-        const origin = encodeURIComponent(window.location.origin);
-        const logoutWin = window.open(
-            `https://oauth.telegram.org/auth/widget?bot_id=${botId}&origin=${origin}&logout=1`,
-            "tg_logout",
-            "width=10,height=10,left=-1000,top=-1000"
-        );
-        setPending(null);
-        setTimeout(() => {
-            logoutWin?.close();
-            window.location.reload();
-        }, 1500);
-    };
-
     useEffect(() => {
-        // Define the global callback for Telegram — intercept before logging in
-        window.onTelegramAuth = (user: TelegramUser) => {
-            setPending(user);
+        window.onTelegramAuth = async (user: any) => {
+            setLoading(true);
+            try {
+                const res = await api<TokenResponse>("/auth/telegram", {
+                    method: "POST",
+                    body: JSON.stringify(user),
+                });
+                login(res.access_token);
+                navigate("/");
+            } catch (err: any) {
+                console.error("Auth error:", err);
+                alert("Ошибка авторизации: " + (err.message || "Неизвестная ошибка"));
+            } finally {
+                setLoading(false);
+            }
         };
 
         // Clear container first to prevent double rendering
@@ -133,55 +97,16 @@ export default function LoginPage() {
                         </div>
 
                         <div className="auth-section">
-                            {/* Always keep widget container in DOM so its iframe stays alive.
-                                We need the iframe reference to send the logout postMessage. */}
-                            <div
-                                id="telegram-login-container"
-                                className="tg-widget-wrapper"
-                                style={{ display: loading || pending ? "none" : undefined }}
-                            />
-                            {!loading && !pending && (
-                                <p className="auth-hint">Нажимая кнопку, вы подтверждаете согласие с правилами платформы</p>
-                            )}
-
-                            {loading && (
+                            {loading ? (
                                 <div className="auth-loading">
                                     <div className="spinner"></div>
                                     <span>Авторизация...</span>
                                 </div>
-                            )}
-
-                            {pending && !loading && (
-                                /* ── Account confirmation ── */
-                                <div className="tg-confirm-card">
-                                    {pending.photo_url ? (
-                                        <img src={pending.photo_url} alt="" className="tg-confirm-avatar" />
-                                    ) : (
-                                        <div className="tg-confirm-avatar tg-confirm-avatar-placeholder">
-                                            {pending.first_name.charAt(0)}
-                                        </div>
-                                    )}
-                                    <p className="tg-confirm-label">Войти как</p>
-                                    <p className="tg-confirm-name">
-                                        {pending.first_name}{pending.last_name ? ` ${pending.last_name}` : ''}
-                                    </p>
-                                    {pending.username && (
-                                        <p className="tg-confirm-username">@{pending.username}</p>
-                                    )}
-                                    <button
-                                        className="tg-confirm-btn-primary"
-                                        onClick={() => doLogin(pending)}
-                                    >
-                                        Войти в платформу
-                                    </button>
-                                    <button
-                                        className="tg-confirm-btn-secondary"
-                                        onClick={handleSwitchAccount}
-                                    >
-                                        <RefreshCw size={13} />
-                                        Это не я — сменить аккаунт
-                                    </button>
-                                </div>
+                            ) : (
+                                <>
+                                    <div id="telegram-login-container" className="tg-widget-wrapper"></div>
+                                    <p className="auth-hint">Нажимая кнопку, вы подтверждаете согласие с правилами платформы</p>
+                                </>
                             )}
                         </div>
                     </div>
