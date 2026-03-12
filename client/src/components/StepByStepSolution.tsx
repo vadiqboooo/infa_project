@@ -342,7 +342,10 @@ export function StepByStepSolution({ steps, taskId, open, onClose, fullSolutionC
 
 // ── Image carousel ────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+function imgSrc(url: string): string {
+  if (url.startsWith('http')) return url;
+  return `/api${url}`;
+}
 
 function StepImageCarousel({ images }: { images: string[] }) {
   const [index, setIndex] = useState(0);
@@ -353,7 +356,7 @@ function StepImageCarousel({ images }: { images: string[] }) {
   const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
   const next = () => setIndex((i) => (i + 1) % images.length);
 
-  const src = images[index].startsWith('http') ? images[index] : `${API_BASE}${images[index]}`;
+  const src = imgSrc(images[index]);
 
   return (
     <>
