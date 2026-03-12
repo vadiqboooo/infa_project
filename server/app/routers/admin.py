@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.progress import UserProgress, ProgressStatus
 from app.models.exam_attempt import ExamAttempt
 from app.models.exam_analysis import ExamAnalysis
+from app.models.group import Group, user_groups
 from app.schemas.admin import (
     ImportVariantIn,
     ImportVariantResult,
@@ -34,6 +35,8 @@ from app.schemas.admin import (
     TopicStatsOut,
     TopicStatsStudentRow,
     TopicStatsTaskInfo,
+    GroupIn,
+    GroupOut,
 )
 
 router = APIRouter(
@@ -231,6 +234,12 @@ async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
 
     name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
 
+    # Group memberships
+    groups_res = await db.execute(
+        select(user_groups.c.group_id).where(user_groups.c.user_id == user.id)
+    )
+    group_ids = [row[0] for row in groups_res.all()]
+
     return StudentOut(
         id=user.id,
         name=name,
@@ -241,7 +250,8 @@ async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
         total_solved=total_solved,
         total_tasks=total_tasks,
         exam_scores=exam_scores,
-        topic_progress=topic_progress
+        topic_progress=topic_progress,
+        group_ids=group_ids,
     )
 
 
@@ -414,8 +424,94 @@ async def delete_student_topic_progress(user_id: int, topic_id: int, db: AsyncSe
     await db.commit()
 
 
+# ── Groups ────────────────────────────────────────────────────
+
+@router.get("/groups", response_model=list[GroupOut])
+async def list_groups(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Group).order_by(Group.name))
+    groups = result.scalars().all()
+
+    # Count members per group
+    counts_res = await db.execute(
+        select(user_groups.c.group_id, func.count(user_groups.c.user_id))
+        .group_by(user_groups.c.group_id)
+    )
+    counts = {row[0]: row[1] for row in counts_res.all()}
+
+    return [
+        GroupOut(id=g.id, name=g.name, color=g.color, student_count=counts.get(g.id, 0))
+        for g in groups
+    ]
+
+
+@router.post("/groups", response_model=GroupOut, status_code=status.HTTP_201_CREATED)
+async def create_group(body: GroupIn, db: AsyncSession = Depends(get_db)):
+    group = Group(name=body.name.strip(), color=body.color)
+    db.add(group)
+    await db.commit()
+    await db.refresh(group)
+    return GroupOut(id=group.id, name=group.name, color=group.color, student_count=0)
+
+
+@router.put("/groups/{group_id}", response_model=GroupOut)
+async def update_group(group_id: int, body: GroupIn, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Group).where(Group.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    group.name = body.name.strip()
+    group.color = body.color
+    await db.commit()
+    # Count members
+    cnt_res = await db.execute(
+        select(func.count(user_groups.c.user_id)).where(user_groups.c.group_id == group_id)
+    )
+    cnt = cnt_res.scalar() or 0
+    return GroupOut(id=group.id, name=group.name, color=group.color, student_count=cnt)
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_group(group_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Group).where(Group.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    await db.delete(group)
+    await db.commit()
+
+
+@router.post("/groups/{group_id}/students/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def add_student_to_group(group_id: int, user_id: int, db: AsyncSession = Depends(get_db)):
+    # Check both exist
+    g = await db.execute(select(Group).where(Group.id == group_id))
+    if not g.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Group not found")
+    u = await db.execute(select(User).where(User.id == user_id))
+    if not u.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+    # Insert if not exists
+    exists = await db.execute(
+        select(user_groups).where(
+            user_groups.c.user_id == user_id, user_groups.c.group_id == group_id
+        )
+    )
+    if not exists.first():
+        await db.execute(user_groups.insert().values(user_id=user_id, group_id=group_id))
+        await db.commit()
+
+
+@router.delete("/groups/{group_id}/students/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_student_from_group(group_id: int, user_id: int, db: AsyncSession = Depends(get_db)):
+    await db.execute(
+        user_groups.delete().where(
+            user_groups.c.user_id == user_id, user_groups.c.group_id == group_id
+        )
+    )
+    await db.commit()
+
+
 @router.get("/topics/{topic_id}/stats", response_model=TopicStatsOut)
-async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
+async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncSession = Depends(get_db)):
     """Get a student×task matrix of results for a topic."""
     topic_result = await db.execute(select(Topic).where(Topic.id == topic_id))
     topic = topic_result.scalar_one_or_none()
@@ -438,10 +534,32 @@ async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
     all_progress = progress_result.scalars().all()
 
     # Unique user ids who have any interaction
-    user_ids = list({p.user_id for p in all_progress})
+    all_user_ids = list({p.user_id for p in all_progress})
+
+    # Apply group filter if requested
+    if group_id is not None:
+        members_res = await db.execute(
+            select(user_groups.c.user_id).where(user_groups.c.group_id == group_id)
+        )
+        member_ids = {row[0] for row in members_res.all()}
+        user_ids = [uid for uid in all_user_ids if uid in member_ids]
+    else:
+        user_ids = all_user_ids
 
     users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
     users = {u.id: u for u in users_result.scalars().all()}
+
+    # Load all group memberships for these users
+    if user_ids:
+        groups_res = await db.execute(
+            select(user_groups.c.user_id, user_groups.c.group_id)
+            .where(user_groups.c.user_id.in_(user_ids))
+        )
+        groups_by_user: dict[int, list[int]] = {}
+        for uid, gid in groups_res.all():
+            groups_by_user.setdefault(uid, []).append(gid)
+    else:
+        groups_by_user = {}
 
     # Build per-user result map
     progress_by_user: dict[int, dict[int, str]] = {}
@@ -477,6 +595,7 @@ async def get_topic_stats(topic_id: int, db: AsyncSession = Depends(get_db)):
             student_name=name,
             photo_url=u.photo_url,
             attempt_id=attempt_by_user.get(uid),
+            group_ids=groups_by_user.get(uid, []),
             results=progress_by_user.get(uid, {}),
         ))
 

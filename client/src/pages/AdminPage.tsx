@@ -23,6 +23,7 @@ import type {
     StudentOut,
     StudentDetailOut,
     TopicStatsOut,
+    GroupOut,
 } from "../api/types";
 import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
@@ -189,6 +190,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const [activeTab, setActiveTab] = useState<'topics' | 'students'>('topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
+    const [groups, setGroups] = useState<GroupOut[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState<FilterCategory>("все");
@@ -200,12 +202,14 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [t, s] = await Promise.all([
+            const [t, s, g] = await Promise.all([
                 adminFetch<TopicAdmin[]>("/admin/topics", apiKey),
-                adminFetch<StudentOut[]>("/admin/students", apiKey)
+                adminFetch<StudentOut[]>("/admin/students", apiKey),
+                adminFetch<GroupOut[]>("/admin/groups", apiKey),
             ]);
             setTopics(t);
             setStudents(s);
+            setGroups(g);
         } finally {
             setLoading(false);
         }
@@ -456,6 +460,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             ) : (
                 <StudentsTable
                     students={students}
+                    groups={groups}
                     apiKey={apiKey}
                     onRefresh={loadData}
                     onViewStudent={(id) => navigate(`students/${id}`)}
@@ -508,14 +513,17 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
     const { id } = useParams();
     const navigate = useNavigate();
     const [stats, setStats] = useState<TopicStatsOut | null>(null);
+    const [groups, setGroups] = useState<GroupOut[]>([]);
     const [loading, setLoading] = useState(true);
 
     const loadStats = useCallback(async () => {
         if (!id) return;
         setLoading(true);
-        adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey)
-            .then(setStats)
-            .finally(() => setLoading(false));
+        Promise.all([
+            adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey),
+            adminFetch<GroupOut[]>(`/admin/groups`, apiKey),
+        ]).then(([s, g]) => { setStats(s); setGroups(g); })
+          .finally(() => setLoading(false));
     }, [id, apiKey]);
 
     useEffect(() => { loadStats(); }, [loadStats]);
@@ -528,6 +536,7 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
             <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                 <TopicStats
                     stats={stats}
+                    groups={groups}
                     onBack={() => navigate(-1)}
                     apiKey={apiKey}
                     onRefresh={loadStats}

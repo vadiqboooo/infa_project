@@ -25,12 +25,18 @@ async def lifespan(app: FastAPI):
     try:
         from app.database import engine
         from app.models import exam_analysis  # noqa: ensure model is registered
-        from sqlalchemy import inspect as sa_inspect
+        from app.models import group as group_module  # noqa: ensure models are registered
         async with engine.begin() as conn:
             await conn.run_sync(
                 lambda sync_conn: exam_analysis.ExamAnalysis.__table__.create(sync_conn, checkfirst=True)
             )
-        logger.info("exam_analyses table ensured.")
+            await conn.run_sync(
+                lambda sync_conn: group_module.Group.__table__.create(sync_conn, checkfirst=True)
+            )
+            await conn.run_sync(
+                lambda sync_conn: group_module.user_groups.create(sync_conn, checkfirst=True)
+            )
+        logger.info("exam_analyses, groups, user_groups tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)
     yield

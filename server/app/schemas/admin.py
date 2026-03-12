@@ -101,6 +101,7 @@ class StudentOut(BaseModel):
     total_tasks: int
     exam_scores: list[StudentExamScore]
     topic_progress: list[StudentTopicProgress]
+    group_ids: list[int] = []
 
 
 class UserRoleUpdate(BaseModel):
@@ -145,6 +146,7 @@ class TopicStatsStudentRow(BaseModel):
     student_name: str
     photo_url: str | None
     attempt_id: int | None  # latest finished exam attempt id (for AI analysis)
+    group_ids: list[int] = []
     results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
 
 
@@ -159,3 +161,19 @@ class TopicStatsOut(BaseModel):
     topic_title: str
     tasks: list[TopicStatsTaskInfo]
     students: list[TopicStatsStudentRow]
+
+
+# ── Groups ────────────────────────────────────────────────────
+
+class GroupIn(BaseModel):
+    name: str
+    color: str = "#3F8C62"
+
+
+class GroupOut(BaseModel):
+    id: int
+    name: str
+    color: str
+    student_count: int = 0
+
+    model_config = {"from_attributes": True}

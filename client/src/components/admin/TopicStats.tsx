@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, X } from "lucide-react";
 import { clsx } from "clsx";
-import type { TopicStatsOut } from "../../api/types";
+import type { TopicStatsOut, GroupOut } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
 
 const API_BASE = "/api";
 
 interface Props {
     stats: TopicStatsOut;
+    groups: GroupOut[];
     onBack: () => void;
     apiKey?: string;
     onRefresh?: () => void;
@@ -31,9 +32,14 @@ function Cell({ status }: { status: string | undefined }) {
     );
 }
 
-export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
+export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) {
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [analysisFor, setAnalysisFor] = useState<{ studentId: number; studentName: string; attemptId: number } | null>(null);
+    const [groupFilter, setGroupFilter] = useState<number | null>(null);
+
+    const filteredStudents = groupFilter === null
+        ? stats.students
+        : stats.students.filter(s => (s.group_ids ?? []).includes(groupFilter));
 
     const handleDelete = async (studentId: number, studentName: string) => {
         if (!confirm(`Сбросить все результаты «${studentName}» по этому топику? Ученик сможет пройти вариант заново.`)) return;
@@ -74,7 +80,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
 
     const solvedCounts: Record<number, number> = {};
     stats.tasks.forEach(t => { solvedCounts[t.task_id] = 0; });
-    stats.students.forEach(s => {
+    filteredStudents.forEach(s => {
         stats.tasks.forEach(t => {
             if (s.results[t.task_id] === "solved") solvedCounts[t.task_id]++;
         });
@@ -90,7 +96,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
         <>
             <div className="flex flex-col h-full">
                 {/* Header */}
-                <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-100 shrink-0 flex-wrap">
                     <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-bold transition-colors">
                         <ArrowLeft size={18} /> Назад
                     </button>
@@ -98,9 +104,35 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                     <div>
                         <div className="text-sm font-bold text-gray-900">{stats.topic_title}</div>
                         <div className="text-[11px] text-gray-400">
-                            {stats.students.length} учеников · {stats.tasks.length} заданий
+                            {filteredStudents.length}{groupFilter !== null ? `/${stats.students.length}` : ''} учеников · {stats.tasks.length} заданий
                         </div>
                     </div>
+                    {/* Group filter */}
+                    {groups.length > 0 && (
+                        <div className="ml-auto flex items-center gap-2">
+                            {groupFilter !== null ? (
+                                <button
+                                    onClick={() => setGroupFilter(null)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl text-white"
+                                    style={{ backgroundColor: groups.find(g => g.id === groupFilter)?.color ?? '#888' }}
+                                >
+                                    {groups.find(g => g.id === groupFilter)?.name}
+                                    <X size={11} />
+                                </button>
+                            ) : (
+                                <select
+                                    value=""
+                                    onChange={(e) => setGroupFilter(Number(e.target.value))}
+                                    className="text-xs font-bold px-3 py-1.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-[#3F8C62] cursor-pointer text-gray-600"
+                                >
+                                    <option value="" disabled>Фильтр по группе...</option>
+                                    {groups.map(g => (
+                                        <option key={g.id} value={g.id}>{g.name} ({g.student_count})</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Scrollable table */}
@@ -130,7 +162,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                                             % решили
                                         </td>
                                         {stats.tasks.map(task => {
-                                            const n = stats.students.length;
+                                            const n = filteredStudents.length;
                                             const pct = n === 0 ? 0 : Math.round((solvedCounts[task.task_id] / n) * 100);
                                             return (
                                                 <td key={task.task_id} className="text-center" style={{ padding: "6px 4px" }}>
@@ -145,7 +177,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {stats.students.map(student => {
+                                    {filteredStudents.map(student => {
                                         const solvedCount = stats.tasks.filter(t => student.results[t.task_id] === "solved").length;
                                         const isDeleting = deletingId === student.student_id;
                                         return (
@@ -207,7 +239,7 @@ export function TopicStats({ stats, onBack, apiKey, onRefresh }: Props) {
                                 </tbody>
                             </table>
 
-                            {stats.students.length === 0 && (
+                            {filteredStudents.length === 0 && (
                                 <div className="text-center py-16 text-gray-400">
                                     <p className="font-bold text-gray-700">Нет данных</p>
                                     <p className="text-sm">Ни один ученик ещё не решал задания этого топика</p>

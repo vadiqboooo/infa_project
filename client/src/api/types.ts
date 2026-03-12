@@ -273,6 +273,7 @@ export interface StudentOut {
     total_tasks: number;
     exam_scores: StudentExamScore[];
     topic_progress: StudentTopicProgress[];
+    group_ids: number[];
 }
 
 /* ── Student detail ─────────────────────────────────── */
@@ -317,6 +318,7 @@ export interface TopicStatsStudentRow {
     student_name: string;
     photo_url: string | null;
     attempt_id: number | null;
+    group_ids: number[];
     results: Record<number, string>;
 }
 
@@ -325,6 +327,13 @@ export interface TopicStatsOut {
     topic_title: string;
     tasks: TopicStatsTaskInfo[];
     students: TopicStatsStudentRow[];
+}
+
+export interface GroupOut {
+    id: number;
+    name: string;
+    color: string;
+    student_count: number;
 }
 
 /* ── Auth ──────────────────────────────────────────── */
