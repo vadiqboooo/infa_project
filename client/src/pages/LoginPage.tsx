@@ -53,21 +53,27 @@ export default function LoginPage() {
     };
 
     const handleSwitchAccount = () => {
-        // The widget iframe (created by telegram-widget.js) listens for postMessage.
-        // Sending {event: 'logout'} is exactly what TelegramWidget.prototype.logout() does
-        // internally — it clears the oauth.telegram.org session cookie via the trusted iframe.
+        // The session is stored in stel_token cookie on oauth.telegram.org.
+        // To clear it we must make the trusted widget iframe navigate to the logout URL —
+        // the server then responds with Set-Cookie: stel_token=; Max-Age=0.
         const container = document.getElementById("telegram-login-container");
         const iframe = container?.querySelector<HTMLIFrameElement>("iframe");
-        if (iframe?.contentWindow) {
-            iframe.contentWindow.postMessage(
+        if (iframe) {
+            // postMessage logout (TelegramWidget.prototype.logout() approach)
+            iframe.contentWindow?.postMessage(
                 JSON.stringify({ event: "logout" }),
                 "https://oauth.telegram.org"
             );
+            // Also navigate the iframe itself to the logout endpoint as a fallback —
+            // the existing iframe is already allowed cross-origin by Telegram.
+            const src = iframe.src;
+            if (src && !src.includes("logout=1")) {
+                iframe.src = src + (src.includes("?") ? "&" : "?") + "logout=1";
+            }
         }
         setPending(null);
-        // Give a moment for logout to be processed, then reload so the widget
-        // shows a fresh login button (without auto-firing the cached session).
-        setTimeout(() => window.location.reload(), 800);
+        // Wait for the logout request to complete before reloading.
+        setTimeout(() => window.location.reload(), 1500);
     };
 
     useEffect(() => {
