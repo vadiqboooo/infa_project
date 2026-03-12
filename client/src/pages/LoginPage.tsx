@@ -53,11 +53,21 @@ export default function LoginPage() {
     };
 
     const handleSwitchAccount = () => {
-        // Logout from Telegram OAuth widget session, then reload
+        // Telegram widget internally uses a hidden iframe with &logout=1 to clear the OAuth session
+        // (same as TelegramLoginWidget.logout() in telegram-widget.js)
         const botId = import.meta.env.VITE_BOT_ID;
         const origin = encodeURIComponent(window.location.origin);
-        const returnTo = encodeURIComponent(window.location.href);
-        window.location.href = `https://oauth.telegram.org/auth/logout?bot_id=${botId}&origin=${origin}&return_to=${returnTo}`;
+
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `https://oauth.telegram.org/auth/widget?bot_id=${botId}&origin=${origin}&logout=1`;
+        document.body.appendChild(iframe);
+
+        // After session is cleared, reload so the widget shows fresh login button
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+            window.location.reload();
+        }, 1500);
     };
 
     useEffect(() => {
