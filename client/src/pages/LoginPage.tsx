@@ -54,9 +54,10 @@ export default function LoginPage() {
 
     const handleSwitchAccount = () => {
         // Logout from Telegram OAuth widget session, then reload
+        const botId = import.meta.env.VITE_BOT_ID;
         const origin = encodeURIComponent(window.location.origin);
         const returnTo = encodeURIComponent(window.location.href);
-        window.location.href = `https://oauth.telegram.org/auth/logout?origin=${origin}&return_to=${returnTo}`;
+        window.location.href = `https://oauth.telegram.org/auth/logout?bot_id=${botId}&origin=${origin}&return_to=${returnTo}`;
     };
 
     useEffect(() => {
