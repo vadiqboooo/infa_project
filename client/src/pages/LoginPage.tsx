@@ -53,27 +53,22 @@ export default function LoginPage() {
     };
 
     const handleSwitchAccount = () => {
-        // The session is stored in stel_token cookie on oauth.telegram.org.
-        // To clear it we must make the trusted widget iframe navigate to the logout URL —
-        // the server then responds with Set-Cookie: stel_token=; Max-Age=0.
-        const container = document.getElementById("telegram-login-container");
-        const iframe = container?.querySelector<HTMLIFrameElement>("iframe");
-        if (iframe) {
-            // postMessage logout (TelegramWidget.prototype.logout() approach)
-            iframe.contentWindow?.postMessage(
-                JSON.stringify({ event: "logout" }),
-                "https://oauth.telegram.org"
-            );
-            // Also navigate the iframe itself to the logout endpoint as a fallback —
-            // the existing iframe is already allowed cross-origin by Telegram.
-            const src = iframe.src;
-            if (src && !src.includes("logout=1")) {
-                iframe.src = src + (src.includes("?") ? "&" : "?") + "logout=1";
-            }
-        }
+        // stel_token lives on oauth.telegram.org — we can't delete it directly.
+        // Opening the logout URL as a real popup window (not iframe) forces the browser
+        // to navigate to that domain with our cookies, and Telegram's server responds
+        // with Set-Cookie: stel_token=; Max-Age=0, effectively clearing the session.
+        const botId = import.meta.env.VITE_BOT_ID;
+        const origin = encodeURIComponent(window.location.origin);
+        const logoutWin = window.open(
+            `https://oauth.telegram.org/auth/widget?bot_id=${botId}&origin=${origin}&logout=1`,
+            "tg_logout",
+            "width=10,height=10,left=-1000,top=-1000"
+        );
         setPending(null);
-        // Wait for the logout request to complete before reloading.
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => {
+            logoutWin?.close();
+            window.location.reload();
+        }, 1500);
     };
 
     useEffect(() => {
