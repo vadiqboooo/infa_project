@@ -132,6 +132,11 @@ function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
                             {ans?.points != null && (
                                 <div className="text-[11px] text-gray-400 mt-1">{ans.points}/{ans.max_points} балл.</div>
                             )}
+                            {ans?.time_spent_seconds != null && (
+                                <div className="text-[11px] text-gray-400 mt-0.5">
+                                    ⏱ {fmtTime(ans.time_spent_seconds)} на задание
+                                </div>
+                            )}
                         </div>
 
                         {correctAnswer && (
@@ -221,14 +226,21 @@ function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
 
 // ── Main Table Cell ────────────────────────────────────────────────────────────
 
+function fmtTime(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}м ${s}с` : `${s}с`;
+}
+
 function Cell({
-    status, answer, onClick, hasDetail, hasSolution,
+    status, answer, onClick, hasDetail, hasSolution, timeSpent,
 }: {
     status: string | undefined;
     answer: string;
     onClick: () => void;
     hasDetail: boolean;
     hasSolution: boolean;
+    timeSpent: number | null | undefined;
 }) {
     return (
         <td
@@ -251,6 +263,11 @@ function Cell({
                 {hasSolution && (
                     <span className="text-[8px] font-bold text-blue-500 bg-blue-50 rounded px-1 leading-tight">
                         код
+                    </span>
+                )}
+                {timeSpent != null && (
+                    <span className="text-[8px] text-gray-400 leading-tight">
+                        {fmtTime(timeSpent)}
                     </span>
                 )}
             </div>
@@ -449,6 +466,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                             answer={ansText}
                                                             hasDetail={hasDetail}
                                                             hasSolution={hasSolution}
+                                                            timeSpent={ans?.time_spent_seconds}
                                                             onClick={() => setCellDetail({ student, task })}
                                                         />
                                                     );

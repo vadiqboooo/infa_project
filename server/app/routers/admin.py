@@ -595,6 +595,7 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
                         "is_correct": tr.get("is_correct"),
                         "points": tr.get("points", 0),
                         "max_points": tr.get("max_points", 1),
+                        "time_spent_seconds": tr.get("time_spent_seconds"),
                     }
                     for tr in task_results
                     if tr.get("user_answer") is not None

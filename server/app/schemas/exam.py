@@ -25,9 +25,16 @@ class CodeSolutionItem(BaseModel):
     code: str
 
 
+class TaskTimingItem(BaseModel):
+    task_id: int
+    opened_at_ms: int        # Unix ms when task was first opened
+    answered_at_ms: int | None = None  # Unix ms when answer was last saved
+
+
 class ExamSubmitIn(BaseModel):
     answers: list[ExamAnswerItem]
     code_solutions: list[CodeSolutionItem] = []
+    task_timings: list[TaskTimingItem] = []
 
 
 class TaskResult(BaseModel):

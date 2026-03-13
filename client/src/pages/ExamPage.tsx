@@ -29,6 +29,8 @@ export default function ExamPage() {
     const [taskIndex, setTaskIndex] = useState(0);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [currentAnswer, setCurrentAnswer] = useState<AnswerVal>("");
+    const [taskOpenedAt, setTaskOpenedAt] = useState<Record<number, number>>({});
+    const [taskAnsweredAt, setTaskAnsweredAt] = useState<Record<number, number>>({});
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,10 +64,11 @@ export default function ExamPage() {
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
 
-    // Sync currentAnswer when task changes
+    // Sync currentAnswer when task changes + record open time
     useEffect(() => {
         if (task) {
             setCurrentAnswer(examAnswers[task.id] ?? "");
+            setTaskOpenedAt(prev => prev[task.id] ? prev : { ...prev, [task.id]: Date.now() });
         }
     }, [task?.id]);
 
@@ -85,6 +88,7 @@ export default function ExamPage() {
     const handleSaveAnswer = () => {
         if (task) {
             setExamAnswers(prev => ({ ...prev, [task.id]: currentAnswer }));
+            setTaskAnsweredAt(prev => ({ ...prev, [task.id]: Date.now() }));
         }
     };
 
@@ -152,6 +156,13 @@ export default function ExamPage() {
                 code_solutions: Object.entries(codeSolutions)
                     .filter(([_, code]) => code.trim())
                     .map(([taskId, code]) => ({ task_id: Number(taskId), code })),
+                task_timings: tasks
+                    .filter(t => taskOpenedAt[t.id])
+                    .map(t => ({
+                        task_id: t.id,
+                        opened_at_ms: taskOpenedAt[t.id],
+                        answered_at_ms: taskAnsweredAt[t.id] ?? null,
+                    })),
             };
             const res = await submitExamMutation.mutateAsync(payload);
 

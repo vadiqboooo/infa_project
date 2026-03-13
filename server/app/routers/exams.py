@@ -241,6 +241,7 @@ async def submit_exam(
     task_results = []
     user_answers_map = {a.task_id: a.answer for a in body.answers}
     code_solutions_map = {item.task_id: item.code for item in body.code_solutions}
+    timings_map = {t.task_id: t for t in body.task_timings}
 
     for task_id, task in task_map.items():
         user_answer = user_answers_map.get(task_id)
@@ -263,6 +264,10 @@ async def submit_exam(
         primary_score += task_points
 
         max_points = 2 if (task.ege_number and task.ege_number >= 26) else 1
+        timing = timings_map.get(task.id)
+        time_spent_seconds = None
+        if timing and timing.answered_at_ms and timing.opened_at_ms:
+            time_spent_seconds = max(0, (timing.answered_at_ms - timing.opened_at_ms) // 1000)
         task_results.append({
             "task_id": task.id,
             "ege_number": task.ege_number,
@@ -274,6 +279,9 @@ async def submit_exam(
             "auto_checked": has_correct_answer,
             "code_solution": code_solutions_map.get(task.id),
             "file_solution_url": None,
+            "opened_at_ms": timing.opened_at_ms if timing else None,
+            "answered_at_ms": timing.answered_at_ms if timing else None,
+            "time_spent_seconds": time_spent_seconds,
         })
 
         # Sync with UserProgress

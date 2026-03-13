@@ -328,6 +328,7 @@ export interface TopicStatsStudentRow {
         is_correct?: boolean;
         points?: number;
         max_points?: number;
+        time_spent_seconds?: number | null;
     }>;
     exam_started_at: string | null;
     exam_finished_at: string | null;
