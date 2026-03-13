@@ -756,6 +756,21 @@ async def get_attempt_analysis(attempt_id: int, db: AsyncSession = Depends(get_d
     return {"analysis": rec.analysis_text, "created_at": rec.created_at}
 
 
+@router.get("/attempts/{attempt_id}/results")
+async def get_attempt_results(attempt_id: int, db: AsyncSession = Depends(get_db)):
+    """Return structured task results for an attempt (student answers, correct answers, solutions)."""
+    attempt = await db.get(ExamAttempt, attempt_id)
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    task_results = (attempt.results_json or {}).get("task_results", [])
+    return {
+        "attempt_id": attempt_id,
+        "primary_score": attempt.primary_score,
+        "score": attempt.score,
+        "task_results": task_results,
+    }
+
+
 # ── Exams ─────────────────────────────────────────────────────
 
 @router.get("/topics/{topic_id}/exam")
