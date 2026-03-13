@@ -321,7 +321,14 @@ export interface TopicStatsStudentRow {
     attempt_id: number | null;
     group_ids: number[];
     results: Record<number, string>;
-    answers: Record<number, { val: any }>;
+    answers: Record<number, {
+        user_answer: { val: any } | null;
+        code_solution?: string | null;
+        file_solution_url?: string | null;
+        is_correct?: boolean;
+        points?: number;
+        max_points?: number;
+    }>;
 }
 
 export interface TopicStatsOut {

@@ -584,12 +584,21 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
         for att in attempts_res.scalars().all():
             if att.user_id not in attempt_by_user:
                 attempt_by_user[att.user_id] = att.id
-                # Extract user answers from results_json
+                # Extract user answers + solutions from results_json
                 task_results = (att.results_json or {}).get("task_results", [])
                 answers_by_user[att.user_id] = {
-                    tr["task_id"]: tr["user_answer"]
+                    tr["task_id"]: {
+                        "user_answer": tr.get("user_answer"),
+                        "code_solution": tr.get("code_solution"),
+                        "file_solution_url": tr.get("file_solution_url"),
+                        "is_correct": tr.get("is_correct"),
+                        "points": tr.get("points", 0),
+                        "max_points": tr.get("max_points", 1),
+                    }
                     for tr in task_results
                     if tr.get("user_answer") is not None
+                        or tr.get("code_solution")
+                        or tr.get("file_solution_url")
                 }
 
     student_rows = []

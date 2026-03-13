@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, X, Loader2, ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { clsx } from "clsx";
-import type { TopicStatsOut, GroupOut } from "../../api/types";
+import type { TopicStatsOut, GroupOut, TopicStatsStudentRow, TopicStatsTaskInfo } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
 
 const API_BASE = "/api";
@@ -20,19 +20,221 @@ function fmtAnswer(ans: { val: any } | null | undefined): string {
     const v = ans.val;
     if (v == null) return "";
     if (Array.isArray(v)) {
-        if (Array.isArray(v[0])) {
-            // table: each row on its own line
-            return (v as any[][]).map((row: any[]) => row.join(",")).join(" / ");
-        }
+        if (Array.isArray(v[0])) return (v as any[][]).map((r: any[]) => r.join(",")).join(" / ");
         return (v as any[]).join(", ");
     }
     return String(v);
 }
 
-function Cell({ status, answer }: { status: string | undefined; answer: string }) {
-    const border = { borderBottom: "1px solid #f9fafb" };
+// ── Cell Detail Modal ──────────────────────────────────────────────────────────
+
+interface CellModalProps {
+    student: TopicStatsStudentRow;
+    task: TopicStatsTaskInfo;
+    onClose: () => void;
+    apiKey?: string;
+}
+
+interface TaskDetail {
+    id: number;
+    content_html: string;
+    ege_number: number | null;
+    correct_answer: { val: any } | null;
+    answer_type: string;
+    full_solution_code?: string | null;
+}
+
+function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
+    const [taskData, setTaskData] = useState<TaskDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [codeOpen, setCodeOpen] = useState(false);
+    const [solutionOpen, setSolutionOpen] = useState(false);
+
+    const ans = student.answers?.[task.task_id];
+    const status = student.results[task.task_id];
+
+    const authHeaders = (): Record<string, string> => {
+        const token = localStorage.getItem("jwt_token");
+        const h: Record<string, string> = {};
+        if (apiKey) h["X-API-Key"] = apiKey;
+        if (token) h["Authorization"] = `Bearer ${token}`;
+        return h;
+    };
+
+    // Fetch task on mount
+    useState(() => {
+        (async () => {
+            try {
+                const res = await fetch(`${API_BASE}/tasks/${task.task_id}`, { headers: authHeaders() });
+                if (res.ok) setTaskData(await res.json());
+            } finally {
+                setLoading(false);
+            }
+        })();
+    });
+
+    const userAnswer = ans?.user_answer;
+    const correctAnswer = taskData?.correct_answer ?? task.correct_answer;
+    const isCorrect = status === "solved";
+    const color = isCorrect ? "emerald" : status === "failed" ? "red" : "gray";
+
     return (
-        <td className="text-center" style={{ padding: "6px 2px", ...border }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className={clsx(
+                            "w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold",
+                            color === "emerald" && "bg-emerald-100 text-emerald-700",
+                            color === "red" && "bg-red-100 text-red-600",
+                            color === "gray" && "bg-gray-100 text-gray-500",
+                        )}>
+                            {task.ege_number ?? "?"}
+                        </div>
+                        <div>
+                            <div className="text-sm font-bold text-gray-900">Задание №{task.ege_number ?? task.order_index + 1}</div>
+                            <div className="text-[11px] text-gray-400">{student.student_name}</div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                    {/* Answer row */}
+                    <div className="flex gap-4">
+                        <div className={clsx(
+                            "flex-1 rounded-xl px-4 py-3 border",
+                            color === "emerald" && "bg-emerald-50 border-emerald-100",
+                            color === "red" && "bg-red-50 border-red-100",
+                            color === "gray" && "bg-gray-50 border-gray-100",
+                        )}>
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Ответ ученика</div>
+                            <div className="flex items-center gap-2">
+                                {isCorrect
+                                    ? <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+                                    : status === "failed"
+                                        ? <XCircle size={15} className="text-red-400 shrink-0" />
+                                        : <Circle size={15} className="text-gray-300 shrink-0" />
+                                }
+                                <span className={clsx(
+                                    "text-sm font-mono font-bold",
+                                    color === "emerald" && "text-emerald-700",
+                                    color === "red" && "text-red-600",
+                                    color === "gray" && "text-gray-400",
+                                )}>
+                                    {userAnswer ? fmtAnswer(userAnswer) : "Нет ответа"}
+                                </span>
+                            </div>
+                            {ans?.points != null && (
+                                <div className="text-[11px] text-gray-400 mt-1">{ans.points}/{ans.max_points} балл.</div>
+                            )}
+                        </div>
+
+                        {correctAnswer && (
+                            <div className="flex-1 rounded-xl px-4 py-3 border bg-gray-50 border-gray-100">
+                                <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Верный ответ</div>
+                                <div className="flex items-center gap-2">
+                                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+                                    <span className="text-sm font-mono font-bold text-emerald-700">{fmtAnswer(correctAnswer)}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Task HTML */}
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8 text-gray-400 gap-2">
+                            <Loader2 size={18} className="animate-spin" />
+                            <span className="text-sm">Загрузка задания...</span>
+                        </div>
+                    ) : taskData?.content_html ? (
+                        <div className="rounded-xl border border-gray-100 bg-gray-50/50 px-5 py-4">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-3">Условие задачи</div>
+                            <div
+                                className="task-html text-sm text-gray-700 leading-relaxed"
+                                dangerouslySetInnerHTML={{ __html: taskData.content_html }}
+                            />
+                        </div>
+                    ) : null}
+
+                    {/* Code solution */}
+                    {ans?.code_solution && (
+                        <div className="rounded-xl border border-blue-100 overflow-hidden">
+                            <button
+                                onClick={() => setCodeOpen(v => !v)}
+                                className="w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                            >
+                                <FileText size={13} />
+                                Код решения ученика
+                                {codeOpen ? <ChevronUp size={13} className="ml-auto" /> : <ChevronDown size={13} className="ml-auto" />}
+                            </button>
+                            {codeOpen && (
+                                <pre className="px-4 py-3 text-[11px] font-mono text-gray-800 bg-white overflow-x-auto whitespace-pre-wrap border-t border-blue-100">
+                                    {ans.code_solution}
+                                </pre>
+                            )}
+                        </div>
+                    )}
+
+                    {/* File solution */}
+                    {ans?.file_solution_url && (
+                        <div className="rounded-xl border border-gray-100 px-4 py-3 bg-gray-50">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Файл решения</div>
+                            <a
+                                href={ans.file_solution_url.startsWith("http") ? ans.file_solution_url : `/api${ans.file_solution_url}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline font-medium"
+                            >
+                                <ExternalLink size={13} /> Открыть файл
+                            </a>
+                        </div>
+                    )}
+
+                    {/* Etalon code solution */}
+                    {taskData?.full_solution_code && (
+                        <div className="rounded-xl border border-emerald-100 overflow-hidden">
+                            <button
+                                onClick={() => setSolutionOpen(v => !v)}
+                                className="w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                            >
+                                <FileText size={13} />
+                                Эталонное решение
+                                {solutionOpen ? <ChevronUp size={13} className="ml-auto" /> : <ChevronDown size={13} className="ml-auto" />}
+                            </button>
+                            {solutionOpen && (
+                                <pre className="px-4 py-3 text-[11px] font-mono text-gray-800 bg-white overflow-x-auto whitespace-pre-wrap border-t border-emerald-100">
+                                    {taskData.full_solution_code}
+                                </pre>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Main Table Cell ────────────────────────────────────────────────────────────
+
+function Cell({
+    status, answer, onClick, hasDetail,
+}: {
+    status: string | undefined;
+    answer: string;
+    onClick: () => void;
+    hasDetail: boolean;
+}) {
+    return (
+        <td
+            onClick={hasDetail ? onClick : undefined}
+            className={clsx("text-center", hasDetail && "cursor-pointer hover:bg-emerald-50/40 transition-colors")}
+            style={{ padding: "6px 2px", borderBottom: "1px solid #f9fafb" }}
+        >
             <div className="flex flex-col items-center gap-0.5">
                 {status === "solved" && <CheckCircle2 size={14} className="text-emerald-500" />}
                 {status === "failed" && <XCircle size={14} className="text-red-400" />}
@@ -50,10 +252,13 @@ function Cell({ status, answer }: { status: string | undefined; answer: string }
     );
 }
 
+// ── TopicStats ─────────────────────────────────────────────────────────────────
+
 export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) {
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [analysisFor, setAnalysisFor] = useState<{ studentId: number; studentName: string; attemptId: number } | null>(null);
     const [groupFilter, setGroupFilter] = useState<number | null>(null);
+    const [cellDetail, setCellDetail] = useState<{ student: TopicStatsStudentRow; task: TopicStatsTaskInfo } | null>(null);
 
     const filteredStudents = groupFilter === null
         ? stats.students
@@ -125,7 +330,6 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                             {filteredStudents.length}{groupFilter !== null ? `/${stats.students.length}` : ''} учеников · {stats.tasks.length} заданий
                         </div>
                     </div>
-                    {/* Group filter */}
                     {groups.length > 0 && (
                         <div className="ml-auto flex items-center gap-2">
                             {groupFilter !== null ? (
@@ -159,7 +363,6 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                         <div className="overflow-x-auto rounded-2xl">
                             <table className="border-collapse" style={{ width: `${Math.max(totalW, 600)}px` }}>
                                 <thead>
-                                    {/* Row 1: column headers */}
                                     <tr className="bg-gray-50" style={{ borderBottom: "1px solid #e5e7eb" }}>
                                         <th className="text-left text-xs font-bold text-gray-500 bg-gray-50"
                                             style={{ width: nameColW, minWidth: nameColW, padding: "10px 16px", position: "sticky", left: 0, zIndex: 10 }}>
@@ -175,7 +378,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: actionsColW, padding: "10px 8px" }}>Действия</th>
                                     </tr>
 
-                                    {/* Row 2: % solved + correct answer */}
+                                    {/* % solved + correct answer row */}
                                     <tr className="bg-emerald-50/40" style={{ borderBottom: "2px solid #f3f4f6" }}>
                                         <td className="bg-emerald-50/40" style={{ padding: "6px 16px", position: "sticky", left: 0 }}>
                                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">% решили</div>
@@ -226,13 +429,20 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                         </span>
                                                     </div>
                                                 </td>
-                                                {stats.tasks.map(task => (
-                                                    <Cell
-                                                        key={task.task_id}
-                                                        status={student.results[task.task_id]}
-                                                        answer={fmtAnswer(student.answers?.[task.task_id])}
-                                                    />
-                                                ))}
+                                                {stats.tasks.map(task => {
+                                                    const ans = student.answers?.[task.task_id];
+                                                    const ansText = fmtAnswer(ans?.user_answer);
+                                                    const hasDetail = !!(student.results[task.task_id] || ans);
+                                                    return (
+                                                        <Cell
+                                                            key={task.task_id}
+                                                            status={student.results[task.task_id]}
+                                                            answer={ansText}
+                                                            hasDetail={hasDetail}
+                                                            onClick={() => setCellDetail({ student, task })}
+                                                        />
+                                                    );
+                                                })}
                                                 <td className="text-center" style={{ padding: "10px 8px", borderBottom: "1px solid #f9fafb" }}>
                                                     <span className={clsx("text-xs font-bold",
                                                         solvedCount === stats.tasks.length ? "text-emerald-600" : "text-gray-700")}>
@@ -279,6 +489,16 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                     </div>
                 </div>
             </div>
+
+            {/* Cell Detail Modal */}
+            {cellDetail && (
+                <CellDetailModal
+                    student={cellDetail.student}
+                    task={cellDetail.task}
+                    apiKey={apiKey}
+                    onClose={() => setCellDetail(null)}
+                />
+            )}
 
             {/* AI Analysis Modal */}
             {analysisFor && (

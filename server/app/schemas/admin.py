@@ -149,7 +149,7 @@ class TopicStatsStudentRow(BaseModel):
     attempt_id: int | None  # latest finished exam attempt id (for AI analysis)
     group_ids: list[int] = []
     results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
-    answers: dict[int, Any] = {}  # task_id -> user_answer {"val": ...} from exam results
+    answers: dict[int, Any] = {}  # task_id -> {user_answer, code_solution, file_solution_url, is_correct, points, max_points}
 
 
 class TopicStatsTaskInfo(BaseModel):
