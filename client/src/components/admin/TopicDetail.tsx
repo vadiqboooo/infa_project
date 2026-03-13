@@ -394,7 +394,25 @@ function TaskEditPanel({
   });
   const [showPreview, setShowPreview] = useState(false);
   const [uploadingStep, setUploadingStep] = useState<number | null>(null);
+  const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
+  const [stepCodeOpen, setStepCodeOpen] = useState<Set<number>>(new Set());
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const toggleCollapse = (idx: number) => {
+    setCollapsedSteps(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleCode = (idx: number) => {
+    setStepCodeOpen(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  };
 
   const handleSave = () => {
     onSave({ ...task, ...form, correct_answer: { val: form.correct_answer } });
@@ -590,32 +608,40 @@ function TaskEditPanel({
 
   // Right panel — steps
   const RightPanel = (
-    <div className="w-1/2 shrink-0 overflow-y-auto p-4 space-y-3 border-l border-gray-100">
-      <div className="bg-white rounded-xl border border-gray-100 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            <ListChecks size={12} className="text-gray-400" />
-            <span className={labelCls}>
-              Шаги решения
-              {form.solution_steps.length > 0 && (
-                <span className="ml-1.5 px-1 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px]">
-                  {form.solution_steps.length}
-                </span>
-              )}
+    <div className="w-1/2 shrink-0 overflow-y-auto p-4 border-l border-gray-100">
+      {/* Header */}
+      <div className="flex items-center gap-1.5 mb-3">
+        <ListChecks size={12} className="text-gray-400" />
+        <span className={labelCls}>
+          Шаги решения
+          {form.solution_steps.length > 0 && (
+            <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px]">
+              {form.solution_steps.length}
             </span>
-          </div>
-          <button onClick={addStep}
-            className="flex items-center gap-1 text-[11px] font-bold text-[#3F8C62] hover:text-[#357A54] transition-colors">
-            <Plus size={12} /> Добавить шаг
-          </button>
-        </div>
+          )}
+        </span>
+      </div>
 
-        <div className="space-y-3">
-          {form.solution_steps.map((step, idx) => (
-            <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200">
-                <span className="text-[10px] font-black text-gray-500 uppercase">Шаг {idx + 1}</span>
-                <div className="flex items-center gap-0.5">
+      <div className="space-y-2">
+        {form.solution_steps.map((step, idx) => {
+          const isCollapsed = collapsedSteps.has(idx);
+          const isCodeOpen = stepCodeOpen.has(idx) || !!step.code;
+          return (
+            <div key={idx} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              {/* Step header — always visible, click to collapse */}
+              <div
+                className="flex items-center justify-between px-3 py-2.5 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+                onClick={() => toggleCollapse(idx)}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="shrink-0 w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500">
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs font-semibold text-gray-700 truncate">
+                    {step.title || <span className="text-gray-400 italic font-normal">Без заголовка</span>}
+                  </span>
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0 ml-2" onClick={e => e.stopPropagation()}>
                   <button onClick={() => moveStep(idx, 'up')} disabled={idx === 0}
                     className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
                     <ChevronUp size={13} />
@@ -628,74 +654,103 @@ function TaskEditPanel({
                     className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
                     <Trash2 size={13} />
                   </button>
+                  <div className="w-px h-4 bg-gray-200 mx-1" />
+                  <span className="p-1 text-gray-300">
+                    {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                  </span>
                 </div>
               </div>
-              <div className="p-3 space-y-2">
-                <input type="text" value={step.title}
-                  onChange={(e) => updateStep(idx, 'title', e.target.value)}
-                  placeholder="Заголовок шага..."
-                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all" />
-                <textarea value={step.explanation}
-                  onChange={(e) => updateStep(idx, 'explanation', e.target.value)}
-                  placeholder="Объяснение..."
-                  rows={3}
-                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y leading-relaxed" />
-                <div className="rounded-lg overflow-hidden border border-gray-700">
-                  <CodeMirror
-                    value={step.code}
-                    onChange={(val) => updateStep(idx, 'code', val)}
-                    extensions={[python()]}
-                    theme={githubLight}
-                    placeholder="# Код шага..."
-                    basicSetup={{ lineNumbers: false, foldGutter: false }}
-                    style={{ fontSize: '12px' }}
-                    minHeight="60px"
-                  />
-                </div>
 
-                {/* Images */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
-                      <ImageIcon size={9} /> Картинки {(step.images || []).length > 0 && `(${(step.images || []).length})`}
-                    </span>
-                    <button type="button" onClick={() => fileInputRefs.current[idx]?.click()}
-                      disabled={uploadingStep === idx || !task.id}
-                      className="flex items-center gap-0.5 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50">
-                      {uploadingStep === idx ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                      Добавить
-                    </button>
-                    <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*" className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStepImage(idx, f); e.target.value = ''; }} />
-                  </div>
-                  {(step.images || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {(step.images || []).map((url: string, imgIdx: number) => (
-                        <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200">
-                          <img src={url.startsWith('http') ? url : `/api${url}`} alt="" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => removeStepImage(idx, url)}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
-                            <X size={8} />
+              {/* Step body — collapsible */}
+              {!isCollapsed && (
+                <div className="px-3 pb-3 space-y-2 border-t border-gray-100">
+                  <input type="text" value={step.title}
+                    onChange={(e) => updateStep(idx, 'title', e.target.value)}
+                    placeholder="Заголовок шага..."
+                    className="w-full mt-2 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all" />
+                  <textarea value={step.explanation}
+                    onChange={(e) => updateStep(idx, 'explanation', e.target.value)}
+                    placeholder="Объяснение шага..."
+                    rows={6}
+                    className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y leading-relaxed" />
+
+                  {/* Code — toggled */}
+                  {isCodeOpen ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                          <Code2 size={9} /> Код Python
+                        </span>
+                        {!step.code && (
+                          <button onClick={() => toggleCode(idx)}
+                            className="text-[9px] text-gray-400 hover:text-red-400 transition-colors">
+                            Убрать
                           </button>
-                        </div>
-                      ))}
+                        )}
+                      </div>
+                      <div className="rounded-lg overflow-hidden border border-gray-200">
+                        <CodeMirror
+                          value={step.code}
+                          onChange={(val) => updateStep(idx, 'code', val)}
+                          extensions={[python()]}
+                          theme={githubLight}
+                          placeholder="# Код шага..."
+                          basicSetup={{ lineNumbers: true, foldGutter: false }}
+                          style={{ fontSize: '12px' }}
+                          minHeight="80px"
+                        />
+                      </div>
                     </div>
+                  ) : (
+                    <button onClick={() => toggleCode(idx)}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 hover:text-[#3F8C62] transition-colors border border-dashed border-gray-200 hover:border-[#3F8C62]/40 rounded-lg px-3 py-1.5 w-full justify-center">
+                      <Code2 size={11} /> Добавить код
+                    </button>
                   )}
-                </div>
-              </div>
-            </div>
-          ))}
 
-          {form.solution_steps.length === 0 && (
-            <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg">
-              <ListChecks size={24} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-[11px] text-gray-400 mb-2">Шаги не добавлены</p>
-              <button onClick={addStep} className="text-[11px] font-bold text-[#3F8C62] hover:underline">
-                Добавить первый шаг
-              </button>
+                  {/* Images */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                        <ImageIcon size={9} /> Картинки {(step.images || []).length > 0 && `(${(step.images || []).length})`}
+                      </span>
+                      <button type="button" onClick={() => fileInputRefs.current[idx]?.click()}
+                        disabled={uploadingStep === idx || !task.id}
+                        className="flex items-center gap-0.5 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50 transition-colors">
+                        {uploadingStep === idx ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                        Добавить
+                      </button>
+                      <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*" className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStepImage(idx, f); e.target.value = ''; }} />
+                    </div>
+                    {(step.images || []).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {(step.images || []).map((url: string, imgIdx: number) => (
+                          <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200">
+                            <img src={url.startsWith('http') ? url : `/api${url}`} alt="" className="w-full h-full object-cover" />
+                            <button type="button" onClick={() => removeStepImage(idx, url)}
+                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                              <X size={8} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })}
+
+        {/* Add step button — always after last step */}
+        <button
+          onClick={addStep}
+          className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-200 hover:border-[#3F8C62]/50 rounded-xl text-sm font-bold text-gray-400 hover:text-[#3F8C62] transition-all hover:bg-[#3F8C62]/5 mt-1"
+        >
+          <Plus size={15} />
+          {form.solution_steps.length === 0 ? 'Добавить первый шаг' : 'Добавить шаг'}
+        </button>
       </div>
     </div>
   );
