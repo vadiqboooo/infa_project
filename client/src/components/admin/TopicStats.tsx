@@ -222,12 +222,13 @@ function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
 // ── Main Table Cell ────────────────────────────────────────────────────────────
 
 function Cell({
-    status, answer, onClick, hasDetail,
+    status, answer, onClick, hasDetail, hasSolution,
 }: {
     status: string | undefined;
     answer: string;
     onClick: () => void;
     hasDetail: boolean;
+    hasSolution: boolean;
 }) {
     return (
         <td
@@ -245,6 +246,11 @@ function Cell({
                         status === "solved" ? "text-emerald-600" : status === "failed" ? "text-red-400" : "text-gray-400"
                     )}>
                         {answer}
+                    </span>
+                )}
+                {hasSolution && (
+                    <span className="text-[8px] font-bold text-blue-500 bg-blue-50 rounded px-1 leading-tight">
+                        код
                     </span>
                 )}
             </div>
@@ -433,12 +439,14 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                     const ans = student.answers?.[task.task_id];
                                                     const ansText = fmtAnswer(ans?.user_answer);
                                                     const hasDetail = !!(student.results[task.task_id] || ans);
+                                                    const hasSolution = !!(ans?.code_solution || ans?.file_solution_url);
                                                     return (
                                                         <Cell
                                                             key={task.task_id}
                                                             status={student.results[task.task_id]}
                                                             answer={ansText}
                                                             hasDetail={hasDetail}
+                                                            hasSolution={hasSolution}
                                                             onClick={() => setCellDetail({ student, task })}
                                                         />
                                                     );
