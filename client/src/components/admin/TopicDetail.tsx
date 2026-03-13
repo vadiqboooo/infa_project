@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from '@codemirror/lang-python';
+import { githubLight } from '@uiw/codemirror-theme-github';
 import {
   ArrowLeft,
   Save,
@@ -480,15 +483,230 @@ function TaskEditPanel({
   const inputCls = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 focus:border-[#3F8C62]/40 transition-all';
   const labelCls = 'block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1';
 
+  const hasSteps = form.solution_steps.length > 0;
+
+  // Left panel content
+  const LeftPanel = (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-0">
+
+      {/* Meta */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+        <div className="grid grid-cols-4 gap-3">
+          <div>
+            <label className={labelCls}>№ ЕГЭ</label>
+            <input type="number" value={form.ege_number}
+              onChange={(e) => setForm({ ...form, ege_number: parseInt(e.target.value) || 0 })}
+              className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Сложность</label>
+            <select value={form.difficulty}
+              onChange={(e) => setForm({ ...form, difficulty: e.target.value as TaskDifficulty })}
+              className={inputCls}>
+              <option value="easy">Лёгкая</option>
+              <option value="medium">Средняя</option>
+              <option value="hard">Сложная</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Тип ответа</label>
+            <select value={form.answer_type}
+              onChange={(e) => setForm({ ...form, answer_type: e.target.value as AnswerType })}
+              className={inputCls}>
+              <option value="single_number">Число</option>
+              <option value="text">Текст</option>
+              <option value="pair">Пара чисел</option>
+              <option value="table">Таблица</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Правильный ответ</label>
+            <input type="text" value={form.correct_answer}
+              onChange={(e) => setForm({ ...form, correct_answer: e.target.value })}
+              placeholder="Значение..."
+              className={inputCls} />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Название (опционально)</label>
+          <input type="text" value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="Напр: Задача на графы"
+            className={inputCls} />
+        </div>
+      </div>
+
+      {/* Content HTML */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className={labelCls}>Текст задачи (HTML)</span>
+          <button
+            onClick={() => setShowPreview((v) => !v)}
+            className={clsx(
+              'flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors',
+              showPreview ? 'bg-[#3F8C62]/10 text-[#3F8C62]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            )}
+          >
+            {showPreview ? <EyeOff size={11} /> : <Eye size={11} />}
+            {showPreview ? 'Редактировать' : 'Предпросмотр'}
+          </button>
+        </div>
+        {showPreview ? (
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[200px]">
+            <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html }} />
+          </div>
+        ) : (
+          <textarea
+            value={form.content_html}
+            onChange={(e) => setForm({ ...form, content_html: e.target.value })}
+            rows={12}
+            placeholder="<p>Текст задачи...</p>"
+            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 transition-all resize-y leading-relaxed"
+          />
+        )}
+      </div>
+
+      {/* Solution code — CodeMirror */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="flex items-center gap-1.5 mb-2">
+          <FileCode2 size={12} className="text-gray-400" />
+          <span className={labelCls}>Полный код решения (Python)</span>
+        </div>
+        <div className="rounded-lg overflow-hidden border border-gray-200">
+          <CodeMirror
+            value={form.full_solution_code}
+            onChange={(val) => setForm({ ...form, full_solution_code: val })}
+            extensions={[python()]}
+            theme={githubLight}
+            placeholder="# Вставьте полный код решения здесь..."
+            basicSetup={{ lineNumbers: true, foldGutter: false, autocompletion: true }}
+            style={{ fontSize: '13px' }}
+            minHeight="160px"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Right panel — steps
+  const RightPanel = (
+    <div className="w-1/2 shrink-0 overflow-y-auto p-4 space-y-3 border-l border-gray-100">
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            <ListChecks size={12} className="text-gray-400" />
+            <span className={labelCls}>
+              Шаги решения
+              {form.solution_steps.length > 0 && (
+                <span className="ml-1.5 px-1 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px]">
+                  {form.solution_steps.length}
+                </span>
+              )}
+            </span>
+          </div>
+          <button onClick={addStep}
+            className="flex items-center gap-1 text-[11px] font-bold text-[#3F8C62] hover:text-[#357A54] transition-colors">
+            <Plus size={12} /> Добавить шаг
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {form.solution_steps.map((step, idx) => (
+            <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200">
+                <span className="text-[10px] font-black text-gray-500 uppercase">Шаг {idx + 1}</span>
+                <div className="flex items-center gap-0.5">
+                  <button onClick={() => moveStep(idx, 'up')} disabled={idx === 0}
+                    className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
+                    <ChevronUp size={13} />
+                  </button>
+                  <button onClick={() => moveStep(idx, 'down')} disabled={idx === form.solution_steps.length - 1}
+                    className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
+                    <ChevronDown size={13} />
+                  </button>
+                  <button onClick={() => removeStep(idx)}
+                    className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-3 space-y-2">
+                <input type="text" value={step.title}
+                  onChange={(e) => updateStep(idx, 'title', e.target.value)}
+                  placeholder="Заголовок шага..."
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all" />
+                <textarea value={step.explanation}
+                  onChange={(e) => updateStep(idx, 'explanation', e.target.value)}
+                  placeholder="Объяснение..."
+                  rows={3}
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y leading-relaxed" />
+                <div className="rounded-lg overflow-hidden border border-gray-700">
+                  <CodeMirror
+                    value={step.code}
+                    onChange={(val) => updateStep(idx, 'code', val)}
+                    extensions={[python()]}
+                    theme={githubLight}
+                    placeholder="# Код шага..."
+                    basicSetup={{ lineNumbers: false, foldGutter: false }}
+                    style={{ fontSize: '12px' }}
+                    minHeight="60px"
+                  />
+                </div>
+
+                {/* Images */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                      <ImageIcon size={9} /> Картинки {(step.images || []).length > 0 && `(${(step.images || []).length})`}
+                    </span>
+                    <button type="button" onClick={() => fileInputRefs.current[idx]?.click()}
+                      disabled={uploadingStep === idx || !task.id}
+                      className="flex items-center gap-0.5 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50">
+                      {uploadingStep === idx ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                      Добавить
+                    </button>
+                    <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStepImage(idx, f); e.target.value = ''; }} />
+                  </div>
+                  {(step.images || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(step.images || []).map((url: string, imgIdx: number) => (
+                        <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200">
+                          <img src={url.startsWith('http') ? url : `/api${url}`} alt="" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => removeStepImage(idx, url)}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                            <X size={8} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {form.solution_steps.length === 0 && (
+            <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg">
+              <ListChecks size={24} className="mx-auto mb-2 text-gray-300" />
+              <p className="text-[11px] text-gray-400 mb-2">Шаги не добавлены</p>
+              <button onClick={addStep} className="text-[11px] font-bold text-[#3F8C62] hover:underline">
+                Добавить первый шаг
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full bg-[#F8F7F4]">
       {/* Header */}
       <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
-          >
+          <button onClick={onBack}
+            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">
             <ArrowLeft size={15} />
             К списку задач
           </button>
@@ -498,217 +716,28 @@ function TaskEditPanel({
             {form.ege_number > 0 && <span className="ml-2 font-bold text-gray-600">№{form.ege_number} ЕГЭ</span>}
           </span>
         </div>
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-[#3F8C62]/20"
-        >
+        <button onClick={handleSave}
+          className="flex items-center gap-2 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-[#3F8C62]/20">
           <Save size={14} />
           Сохранить
         </button>
       </div>
 
-      {/* Body — two columns */}
-      <div className="flex-1 overflow-hidden flex gap-0">
-
-        {/* Left: content + code */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-0">
-
-          {/* Content HTML */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className={labelCls}>Текст задачи (HTML)</span>
-              <button
-                onClick={() => setShowPreview((v) => !v)}
-                className={clsx(
-                  'flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg transition-colors',
-                  showPreview ? 'bg-[#3F8C62]/10 text-[#3F8C62]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                )}
-              >
-                {showPreview ? <EyeOff size={11} /> : <Eye size={11} />}
-                {showPreview ? 'Скрыть' : 'Предпросмотр'}
-              </button>
-            </div>
-            <div className={clsx('gap-3', showPreview ? 'grid grid-cols-2' : '')}>
-              <textarea
-                value={form.content_html}
-                onChange={(e) => setForm({ ...form, content_html: e.target.value })}
-                rows={showPreview ? 18 : 12}
-                placeholder="<p>Текст задачи...</p>"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 transition-all resize-y leading-relaxed"
-              />
-              {showPreview && (
-                <div className="border border-gray-200 rounded-lg p-3 bg-white overflow-auto">
-                  <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html }} />
-                </div>
-              )}
-            </div>
+      {/* Body */}
+      <div className="flex-1 overflow-hidden flex">
+        {LeftPanel}
+        {hasSteps && RightPanel}
+        {!hasSteps && (
+          // No steps yet — show "add steps" strip at the right edge
+          <div className="w-12 shrink-0 border-l border-gray-100 flex flex-col items-center pt-4">
+            <button onClick={addStep}
+              title="Добавить шаги решения"
+              className="flex flex-col items-center gap-1 p-2 text-gray-300 hover:text-[#3F8C62] transition-colors group">
+              <ListChecks size={18} />
+              <Plus size={12} className="group-hover:scale-110 transition-transform" />
+            </button>
           </div>
-
-          {/* Solution code */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center gap-1.5 mb-2">
-              <FileCode2 size={12} className="text-gray-400" />
-              <span className={labelCls}>Полный код решения (Python)</span>
-            </div>
-            <textarea
-              value={form.full_solution_code}
-              onChange={(e) => setForm({ ...form, full_solution_code: e.target.value })}
-              rows={10}
-              placeholder="# Вставьте полный код решения здесь..."
-              spellCheck={false}
-              className="w-full px-3 py-2 bg-gray-900 text-emerald-400 border border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/40 transition-all resize-y leading-relaxed"
-            />
-          </div>
-        </div>
-
-        {/* Right: meta + steps */}
-        <div className="w-80 shrink-0 overflow-y-auto p-4 space-y-3 border-l border-gray-100">
-
-          {/* Meta fields */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>№ ЕГЭ</label>
-                <input type="number" value={form.ege_number}
-                  onChange={(e) => setForm({ ...form, ege_number: parseInt(e.target.value) || 0 })}
-                  className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Сложность</label>
-                <select value={form.difficulty}
-                  onChange={(e) => setForm({ ...form, difficulty: e.target.value as TaskDifficulty })}
-                  className={inputCls}>
-                  <option value="easy">Лёгкая</option>
-                  <option value="medium">Средняя</option>
-                  <option value="hard">Сложная</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Тип ответа</label>
-              <select value={form.answer_type}
-                onChange={(e) => setForm({ ...form, answer_type: e.target.value as AnswerType })}
-                className={inputCls}>
-                <option value="single_number">Число</option>
-                <option value="text">Текст</option>
-                <option value="pair">Пара чисел</option>
-                <option value="table">Таблица</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Правильный ответ</label>
-              <input type="text" value={form.correct_answer}
-                onChange={(e) => setForm({ ...form, correct_answer: e.target.value })}
-                placeholder="Значение..."
-                className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Название (опционально)</label>
-              <input type="text" value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Напр: Задача на графы"
-                className={inputCls} />
-            </div>
-          </div>
-
-          {/* Solution steps */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1.5">
-                <ListChecks size={12} className="text-gray-400" />
-                <span className={labelCls}>
-                  Шаги решения
-                  {form.solution_steps.length > 0 && (
-                    <span className="ml-1.5 px-1 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px]">
-                      {form.solution_steps.length}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <button onClick={addStep}
-                className="flex items-center gap-1 text-[11px] font-bold text-[#3F8C62] hover:text-[#357A54] transition-colors">
-                <Plus size={12} /> Добавить
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {form.solution_steps.map((step, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-[10px] font-black text-gray-500 uppercase">Шаг {idx + 1}</span>
-                    <div className="flex items-center gap-0.5">
-                      <button onClick={() => moveStep(idx, 'up')} disabled={idx === 0}
-                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
-                        <ChevronUp size={13} />
-                      </button>
-                      <button onClick={() => moveStep(idx, 'down')} disabled={idx === form.solution_steps.length - 1}
-                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
-                        <ChevronDown size={13} />
-                      </button>
-                      <button onClick={() => removeStep(idx)}
-                        className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-3 space-y-2">
-                    <input type="text" value={step.title}
-                      onChange={(e) => updateStep(idx, 'title', e.target.value)}
-                      placeholder="Заголовок..."
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all" />
-                    <textarea value={step.explanation}
-                      onChange={(e) => updateStep(idx, 'explanation', e.target.value)}
-                      placeholder="Объяснение..."
-                      rows={3}
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y" />
-                    <textarea value={step.code}
-                      onChange={(e) => updateStep(idx, 'code', e.target.value)}
-                      placeholder="# Код..."
-                      rows={3}
-                      spellCheck={false}
-                      className="w-full px-2.5 py-1.5 bg-gray-900 text-emerald-400 border border-gray-700 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/30 transition-all resize-y" />
-
-                    {/* Images */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
-                          <ImageIcon size={9} /> Картинки {(step.images || []).length > 0 && `(${(step.images || []).length})`}
-                        </span>
-                        <button type="button" onClick={() => fileInputRefs.current[idx]?.click()}
-                          disabled={uploadingStep === idx || !task.id}
-                          className="flex items-center gap-0.5 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50">
-                          {uploadingStep === idx ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
-                          Добавить
-                        </button>
-                        <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*" className="hidden"
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStepImage(idx, f); e.target.value = ''; }} />
-                      </div>
-                      {(step.images || []).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {(step.images || []).map((url: string, imgIdx: number) => (
-                            <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200">
-                              <img src={url.startsWith('http') ? url : `/api${url}`} alt="" className="w-full h-full object-cover" />
-                              <button type="button" onClick={() => removeStepImage(idx, url)}
-                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
-                                <X size={8} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {form.solution_steps.length === 0 && (
-                <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg">
-                  <p className="text-[11px] text-gray-400">Шаги не добавлены</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
