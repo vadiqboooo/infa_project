@@ -3,6 +3,7 @@
 import os
 import uuid
 import httpx
+from datetime import timedelta
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import func, select
@@ -602,13 +603,19 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
                         or tr.get("code_solution")
                         or tr.get("file_solution_url")
                 }
-                # Timing info
+                # Timing info — cap at exam time limit to avoid inflated durations
+                # (finished_at is set server-side on submit, can be slightly after timer expiry)
+                eff_finished = att.finished_at
+                if att.started_at and att.finished_at and topic_exam:
+                    limit_end = att.started_at + timedelta(minutes=topic_exam.time_limit_minutes)
+                    if att.finished_at > limit_end:
+                        eff_finished = limit_end
                 duration = None
-                if att.started_at and att.finished_at:
-                    duration = int((att.finished_at - att.started_at).total_seconds() // 60)
+                if att.started_at and eff_finished:
+                    duration = int((eff_finished - att.started_at).total_seconds() // 60)
                 timing_by_user[att.user_id] = {
                     "started_at": att.started_at,
-                    "finished_at": att.finished_at,
+                    "finished_at": eff_finished,
                     "duration_minutes": duration,
                 }
 
