@@ -111,6 +111,7 @@ async def get_exam_by_topic(
             "primary_score": finished.primary_score,
             "score": finished.score,
             "task_results": (finished.results_json or {}).get("task_results", []),
+            "submitted_for_review": (finished.results_json or {}).get("submitted_for_review", False),
         } if finished else None,
     }
 
@@ -632,3 +633,29 @@ async def check_task_code(
         raise HTTPException(status_code=502, detail=f"LLM connection error: {str(exc)}")
 
     return {"analysis": analysis}
+
+
+@router.post("/attempt/{attempt_id}/submit-for-review")
+async def submit_for_review(
+    attempt_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a finished attempt as submitted for teacher review (mock exams)."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_not(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Finished attempt not found")
+
+    results = dict(attempt.results_json or {})
+    results["submitted_for_review"] = True
+    attempt.results_json = results
+    flag_modified(attempt, "results_json")
+    await db.commit()
+    return {"submitted": True}

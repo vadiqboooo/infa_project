@@ -51,6 +51,10 @@ export default function ExamPage() {
     const [reviewFileUploading, setReviewFileUploading] = useState<Record<number, boolean>>({});
     const [reviewSavedCodes, setReviewSavedCodes] = useState<Record<number, string>>({});
 
+    // Mock exam submit-for-review state
+    const [submitLoading, setSubmitLoading] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
+
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
@@ -63,6 +67,12 @@ export default function ExamPage() {
     const checkCodeMutation = useCheckCode(finishedAttemptId);
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
+
+    // Sync submitted state when exam data loads
+    useEffect(() => {
+        const alreadySubmitted = examResult?.submitted_for_review ?? examInfo?.finished_attempt?.submitted_for_review ?? false;
+        if (alreadySubmitted) setSubmitted(true);
+    }, [examResult?.submitted_for_review, examInfo?.finished_attempt?.submitted_for_review]);
 
     // Sync currentAnswer when task changes + record open time
     useEffect(() => {
@@ -222,26 +232,254 @@ export default function ExamPage() {
         );
     }
 
-    // Result Screen — mock category: hide scores, show "results recorded" message
+    // Result Screen — mock category
     const isMock = String(currentTopic?.category) === "mock";
     if (isMock && (examResult || (examInfo.finished_attempt && !examInfo.active_attempt))) {
+        const result = examResult || examInfo.finished_attempt;
+        const taskResults: TaskResult[] = result.task_results || result.results?.task_results || [];
+        const attemptId: number = result.attempt_id ?? examInfo.finished_attempt?.id ?? 0;
+        const sortedMockResults = [...taskResults].sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0));
+
+        const handleSubmitForReview = async () => {
+            if (!attemptId || submitLoading || submitted) return;
+            setSubmitLoading(true);
+            try {
+                const token = localStorage.getItem("jwt_token");
+                await fetch(`/api/exams/attempt/${attemptId}/submit-for-review`, {
+                    method: "POST",
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                setSubmitted(true);
+            } catch { /* ignore */ }
+            setSubmitLoading(false);
+        };
+
+        const formatAnswer = (answer: any): string => {
+            if (answer === null || answer === undefined) return "—";
+            const v = answer.val !== undefined ? answer.val : answer;
+            if (v === null || v === undefined || v === "") return "—";
+            if (Array.isArray(v)) {
+                if (Array.isArray(v[0])) return v.map((row: any[]) => row.join("; ")).join(" | ");
+                return v.join("; ");
+            }
+            return String(v);
+        };
+
         return (
-            <div className="min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
-                <div className="bg-white border border-gray-200 rounded-[32px] p-10 max-w-md w-full text-center shadow-xl shadow-gray-200/50">
-                    <div className="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle2 size={32} />
+            <div className="min-h-screen bg-[#F8F7F4]">
+                {/* Header */}
+                <div className="bg-white border-b border-gray-200 shadow-sm">
+                    <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-4">
+                        <button onClick={() => navigate('/exams')} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0">
+                            <ArrowLeft size={16} /> Назад
+                        </button>
+                        <div className="w-px h-8 bg-gray-200 shrink-0" />
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
+                                <CheckCircle2 size={18} />
+                            </div>
+                            <div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Пробник завершён</div>
+                                <div className="text-sm font-bold text-gray-800 truncate max-w-[260px]">{currentTopic.title}</div>
+                            </div>
+                        </div>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-3">Ответы записаны</h1>
-                    <p className="text-gray-500 text-sm leading-relaxed mb-8">
-                        Вы завершили пробный экзамен. Ваши ответы зафиксированы и будут проверены преподавателем. Результаты сообщат после проверки.
-                    </p>
-                    <button
-                        onClick={() => navigate('/exams')}
-                        className="w-full py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20"
-                    >
-                        Вернуться к вариантам
-                    </button>
                 </div>
+
+                {/* Content */}
+                <div className="max-w-3xl mx-auto px-6 py-6 space-y-4">
+                    {/* Info banner */}
+                    <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 flex items-start gap-3">
+                        <AlertCircle size={16} className="text-violet-400 mt-0.5 shrink-0" />
+                        <div className="text-sm text-violet-700">
+                            <span className="font-bold">Ваши ответы записаны.</span> Прикрепите решения к заданиям (код или файл) и отправьте работу на проверку преподавателю.
+                        </div>
+                    </div>
+
+                    {/* Task list */}
+                    {taskResults.length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                                <h2 className="text-sm font-bold text-gray-700">Ваши ответы</h2>
+                                <span className="text-xs text-gray-400">{taskResults.filter(r => r.user_answer).length} / {taskResults.length} заданий с ответом</span>
+                            </div>
+                            <table className="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50">
+                                        <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-12">№</th>
+                                        <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Ваш ответ</th>
+                                        <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Решение</th>
+                                        <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-16"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sortedMockResults.map((tr, idx) => {
+                                        const hasCode = !!(tr.code_solution || reviewSavedCodes[tr.task_id]);
+                                        const hasFile = !!tr.file_solution_url;
+                                        return (
+                                            <tr key={tr.task_id} className="hover:bg-gray-50/70 cursor-pointer transition-colors" onClick={() => setReviewTaskId(tr.task_id)}>
+                                                <td className="py-2.5 px-4 font-bold text-gray-700 border-b border-gray-100">{tr.ege_number || idx + 1}</td>
+                                                <td className="py-2.5 px-4 font-mono text-xs text-gray-600 border-b border-gray-100">
+                                                    {formatAnswer(tr.user_answer)}
+                                                </td>
+                                                <td className="py-2.5 px-4 text-center border-b border-gray-100">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        {hasCode && <span className="text-xs font-bold text-purple-500 bg-purple-50 rounded px-1.5 py-0.5">код</span>}
+                                                        {hasFile && <span className="text-xs font-bold text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">файл</span>}
+                                                        {!hasCode && !hasFile && <span className="text-[10px] text-gray-300">—</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="py-2.5 px-4 text-center border-b border-gray-100">
+                                                    <span className="text-gray-300 hover:text-gray-500 transition-colors">
+                                                        <Eye size={13} />
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Submit for review button */}
+                    <div className="flex justify-end">
+                        {submitted ? (
+                            <div className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl border border-emerald-200">
+                                <Check size={16} /> Отправлено на проверку
+                            </div>
+                        ) : (
+                            <button
+                                onClick={handleSubmitForReview}
+                                disabled={submitLoading}
+                                className="flex items-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 disabled:opacity-60"
+                            >
+                                {submitLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                Отправить на проверку
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Review Panel — same as regular exam but hide correct answer + score */}
+                {reviewTaskId && (() => {
+                    const currentTR = sortedMockResults.find(r => r.task_id === reviewTaskId);
+                    const egeNum = currentTR?.ege_number ?? null;
+                    const isCodeTask = egeNum !== null && CODE_TASK_NUMS.has(egeNum);
+                    const isFileTask = egeNum !== null && FILE_TASK_NUMS.has(egeNum);
+                    const currentCode = reviewCodeEdits[reviewTaskId] ?? currentTR?.code_solution ?? reviewSavedCodes[reviewTaskId] ?? "";
+                    const isSaveLoading = saveCodeMutation.isPending;
+                    const isFileUploading = reviewFileUploading[reviewTaskId] ?? false;
+
+                    const handleSaveCode = async () => {
+                        try {
+                            await saveCodeMutation.mutateAsync({ taskId: reviewTaskId, code: currentCode });
+                            setReviewSavedCodes(prev => ({ ...prev, [reviewTaskId]: currentCode }));
+                        } catch { /* ignore */ }
+                    };
+
+                    const handleFileUpload = async (file: File) => {
+                        setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: true }));
+                        try {
+                            const token = localStorage.getItem("jwt_token");
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            const res = await fetch(`/api/exams/attempt/${attemptId}/upload/${reviewTaskId}`, {
+                                method: "POST",
+                                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                                body: formData,
+                            });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (examResult) {
+                                    const updated = { ...examResult };
+                                    const tr = updated.task_results?.find((r: TaskResult) => r.task_id === reviewTaskId);
+                                    if (tr) tr.file_solution_url = data.file_url;
+                                    setExamResult(updated);
+                                }
+                            }
+                        } catch { /* ignore */ }
+                        setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: false }));
+                    };
+
+                    return (
+                        <>
+                            <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setReviewTaskId(null)} />
+                            <div className="fixed top-0 right-0 h-full w-1/2 min-w-[400px] bg-white z-50 shadow-2xl flex flex-col">
+                                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
+                                            <Eye size={15} className="text-violet-500" />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-bold text-gray-900 text-sm">Задание №{egeNum ?? reviewTaskId}</h2>
+                                            <p className="text-[11px] text-gray-400 mt-0.5">Ваш ответ: {formatAnswer(currentTR?.user_answer)}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setReviewTaskId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto">
+                                    {reviewTaskLoading ? (
+                                        <div className="p-6 space-y-3">
+                                            <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
+                                            <div className="h-4 bg-gray-100 rounded animate-pulse w-full" />
+                                        </div>
+                                    ) : reviewTask ? (
+                                        <div className="px-6 py-4 space-y-4">
+                                            <TaskView content={reviewTask.content_html} />
+
+                                            {/* Code solution */}
+                                            {isCodeTask && (
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-2">Решение (код Python)</div>
+                                                    <div className="rounded-xl overflow-hidden border border-gray-200">
+                                                        <CodeMirror
+                                                            value={currentCode}
+                                                            onChange={val => setReviewCodeEdits(prev => ({ ...prev, [reviewTaskId]: val }))}
+                                                            extensions={[python()]}
+                                                            theme={githubLight}
+                                                            basicSetup={{ lineNumbers: true, foldGutter: false }}
+                                                            style={{ fontSize: "13px" }}
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={handleSaveCode}
+                                                        disabled={isSaveLoading || !currentCode.trim()}
+                                                        className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 mt-2 rounded-lg bg-[#3F8C62] text-white hover:bg-[#357A54] disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {isSaveLoading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                                        Сохранить
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* File solution */}
+                                            {isFileTask && (
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-2">Файл решения</div>
+                                                    {currentTR?.file_solution_url && (
+                                                        <a href={currentTR.file_solution_url} download className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors">
+                                                            <Paperclip size={12} /> Скачать файл
+                                                        </a>
+                                                    )}
+                                                    <label className={clsx("inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ml-2", isFileUploading ? "opacity-50 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100")}>
+                                                        {isFileUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                                                        {currentTR?.file_solution_url ? "Заменить файл" : "Прикрепить файл"}
+                                                        <input type="file" className="hidden" accept=".xlsx,.xls,.csv,.ods" disabled={isFileUploading} onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
+                                                    </label>
+                                                    <p className="text-[10px] text-gray-400 mt-1">xlsx, xls, csv, ods</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </>
+                    );
+                })()}
             </div>
         );
     }
