@@ -150,6 +150,9 @@ class TopicStatsStudentRow(BaseModel):
     group_ids: list[int] = []
     results: dict[int, str]  # task_id -> "solved"|"failed"|"not_started"
     answers: dict[int, Any] = {}  # task_id -> {user_answer, code_solution, file_solution_url, is_correct, points, max_points}
+    exam_started_at: datetime | None = None
+    exam_finished_at: datetime | None = None
+    exam_duration_minutes: int | None = None  # actual time spent
 
 
 class TopicStatsTaskInfo(BaseModel):

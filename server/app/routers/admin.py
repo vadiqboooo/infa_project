@@ -566,9 +566,10 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
     for p in all_progress:
         progress_by_user.setdefault(p.user_id, {})[p.task_id] = p.status.value
 
-    # Latest finished exam attempt per user (for AI analysis + student answers)
+    # Latest finished exam attempt per user (for AI analysis + student answers + timing)
     attempt_by_user: dict[int, int] = {}
     answers_by_user: dict[int, dict[int, any]] = {}
+    timing_by_user: dict[int, dict] = {}
     exam_res2 = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
     topic_exam = exam_res2.scalar_one_or_none()
     if topic_exam and user_ids:
@@ -600,6 +601,15 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
                         or tr.get("code_solution")
                         or tr.get("file_solution_url")
                 }
+                # Timing info
+                duration = None
+                if att.started_at and att.finished_at:
+                    duration = int((att.finished_at - att.started_at).total_seconds() // 60)
+                timing_by_user[att.user_id] = {
+                    "started_at": att.started_at,
+                    "finished_at": att.finished_at,
+                    "duration_minutes": duration,
+                }
 
     student_rows = []
     for uid in user_ids:
@@ -607,6 +617,7 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
         if not u:
             continue
         name = f"{u.first_name_real or ''} {u.last_name_real or ''}".strip() or u.first_name or f"User {u.id}"
+        timing = timing_by_user.get(uid, {})
         student_rows.append(TopicStatsStudentRow(
             student_id=uid,
             student_name=name,
@@ -615,6 +626,9 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
             group_ids=groups_by_user.get(uid, []),
             results=progress_by_user.get(uid, {}),
             answers=answers_by_user.get(uid, {}),
+            exam_started_at=timing.get("started_at"),
+            exam_finished_at=timing.get("finished_at"),
+            exam_duration_minutes=timing.get("duration_minutes"),
         ))
 
     # Sort students by name

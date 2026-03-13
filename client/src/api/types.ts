@@ -329,6 +329,9 @@ export interface TopicStatsStudentRow {
         points?: number;
         max_points?: number;
     }>;
+    exam_started_at: string | null;
+    exam_finished_at: string | null;
+    exam_duration_minutes: number | null;
 }
 
 export interface TopicStatsOut {

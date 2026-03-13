@@ -318,8 +318,9 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
     const nameColW = 160;
     const taskColW = 64;
     const countColW = 56;
+    const timeColW = 80;
     const actionsColW = 80;
-    const totalW = nameColW + stats.tasks.length * taskColW + countColW + actionsColW;
+    const totalW = nameColW + stats.tasks.length * taskColW + countColW + timeColW + actionsColW;
 
     return (
         <>
@@ -381,6 +382,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                             </th>
                                         ))}
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: countColW, padding: "10px 8px" }}>Итог</th>
+                                        <th className="text-center text-xs font-bold text-gray-500" style={{ width: timeColW, padding: "10px 8px" }}>Время</th>
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: actionsColW, padding: "10px 8px" }}>Действия</th>
                                     </tr>
 
@@ -410,7 +412,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                 </td>
                                             );
                                         })}
-                                        <td /><td />
+                                        <td /><td /><td />
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -456,6 +458,26 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                         solvedCount === stats.tasks.length ? "text-emerald-600" : "text-gray-700")}>
                                                         {solvedCount}/{stats.tasks.length}
                                                     </span>
+                                                </td>
+                                                <td className="text-center" style={{ padding: "6px 4px", borderBottom: "1px solid #f9fafb" }}>
+                                                    {student.exam_started_at ? (
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <span className="text-[9px] text-gray-400">
+                                                                {new Date(student.exam_started_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                                                                {" – "}
+                                                                {student.exam_finished_at
+                                                                    ? new Date(student.exam_finished_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+                                                                    : "…"}
+                                                            </span>
+                                                            {student.exam_duration_minutes != null && (
+                                                                <span className="text-[9px] font-bold text-gray-500 bg-gray-100 rounded px-1">
+                                                                    {student.exam_duration_minutes} мин
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[9px] text-gray-200">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="text-center" style={{ padding: "8px 8px", borderBottom: "1px solid #f9fafb" }}>
                                                     <div className="flex items-center justify-center gap-1">
