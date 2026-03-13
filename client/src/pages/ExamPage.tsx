@@ -29,8 +29,9 @@ export default function ExamPage() {
     const [taskIndex, setTaskIndex] = useState(0);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [currentAnswer, setCurrentAnswer] = useState<AnswerVal>("");
-    const [taskOpenedAt, setTaskOpenedAt] = useState<Record<number, number>>({});
-    const [taskAnsweredAt, setTaskAnsweredAt] = useState<Record<number, number>>({});
+    const [taskAccumulatedMs, setTaskAccumulatedMs] = useState<Record<number, number>>({});
+    const taskSessionStartRef = useRef<number | null>(null);  // when current task view started
+    const examEndTimeRef = useRef<number | null>(null);       // absolute ms when exam ends
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,13 +75,49 @@ export default function ExamPage() {
         if (alreadySubmitted) setSubmitted(true);
     }, [examResult?.submitted_for_review, examInfo?.finished_attempt?.submitted_for_review]);
 
-    // Sync currentAnswer when task changes + record open time
+    // Sync currentAnswer when task changes + manage per-task time sessions
+    const prevTaskIdRef = useRef<number | null>(null);
     useEffect(() => {
+        const now = Date.now();
+        // Leave previous task — accumulate its session (if answer not already saved/frozen)
+        const prevId = prevTaskIdRef.current;
+        if (prevId !== null && taskSessionStartRef.current !== null) {
+            const elapsed = now - taskSessionStartRef.current;
+            setTaskAccumulatedMs(prev => ({ ...prev, [prevId]: (prev[prevId] || 0) + elapsed }));
+            taskSessionStartRef.current = null;
+        }
         if (task) {
             setCurrentAnswer(examAnswers[task.id] ?? "");
-            setTaskOpenedAt(prev => prev[task.id] ? prev : { ...prev, [task.id]: Date.now() });
+            prevTaskIdRef.current = task.id;
+            // Start new session only if answer not yet saved
+            const alreadyAnswered = examAnswers[task.id] !== undefined && examAnswers[task.id] !== "";
+            if (!alreadyAnswered) {
+                taskSessionStartRef.current = now;
+            }
         }
     }, [task?.id]);
+
+    // Pause/resume task time on tab visibility change
+    useEffect(() => {
+        const onVisibility = () => {
+            const taskId = prevTaskIdRef.current;
+            if (!taskId) return;
+            const alreadyAnswered = examAnswers[taskId] !== undefined && examAnswers[taskId] !== "";
+            if (document.visibilityState === 'hidden') {
+                if (taskSessionStartRef.current !== null) {
+                    const elapsed = Date.now() - taskSessionStartRef.current;
+                    setTaskAccumulatedMs(prev => ({ ...prev, [taskId]: (prev[taskId] || 0) + elapsed }));
+                    taskSessionStartRef.current = null;
+                }
+            } else {
+                if (!alreadyAnswered && taskSessionStartRef.current === null) {
+                    taskSessionStartRef.current = Date.now();
+                }
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, [examAnswers]);
 
     const isAnswerChanged = useMemo(() => {
         if (!task) return false;
@@ -97,30 +134,37 @@ export default function ExamPage() {
 
     const handleSaveAnswer = () => {
         if (task) {
+            // Freeze task time — add current session, stop counting
+            const now = Date.now();
+            const sessionMs = taskSessionStartRef.current ? now - taskSessionStartRef.current : 0;
+            setTaskAccumulatedMs(prev => ({ ...prev, [task.id]: (prev[task.id] || 0) + sessionMs }));
+            taskSessionStartRef.current = null; // frozen
             setExamAnswers(prev => ({ ...prev, [task.id]: currentAnswer }));
-            setTaskAnsweredAt(prev => ({ ...prev, [task.id]: Date.now() }));
         }
     };
 
-    // Timer logic
+    // Timer — based on absolute endTime, recalculates correctly after tab switch
     useEffect(() => {
-        if (examInfo?.active_attempt && timeLeft === null) {
+        if (examInfo?.active_attempt && examEndTimeRef.current === null) {
             const startedAt = new Date(examInfo.active_attempt.started_at).getTime();
-            const limitMs = examInfo.time_limit_minutes * 60 * 1000;
-            const now = new Date().getTime();
-            const remaining = Math.max(0, Math.floor((startedAt + limitMs - now) / 1000));
-            setTimeLeft(remaining);
+            examEndTimeRef.current = startedAt + examInfo.time_limit_minutes * 60 * 1000;
+            setTimeLeft(Math.max(0, Math.floor((examEndTimeRef.current - Date.now()) / 1000)));
         }
-    }, [examInfo, timeLeft]);
+    }, [examInfo]);
 
     useEffect(() => {
-        if (timeLeft !== null && timeLeft > 0 && !examResult) {
-            const timer = setInterval(() => setTimeLeft(prev => (prev !== null ? prev - 1 : null)), 1000);
-            return () => clearInterval(timer);
-        } else if (timeLeft === 0 && !examResult) {
-            handleAutoSubmit();
-        }
-    }, [timeLeft, examResult]);
+        if (examEndTimeRef.current === null || examResult) return;
+        const tick = () => {
+            const remaining = Math.max(0, Math.floor((examEndTimeRef.current! - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            if (remaining === 0) handleAutoSubmit();
+        };
+        const timer = setInterval(tick, 1000);
+        // Recalculate immediately when tab becomes visible again
+        const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+    }, [examResult]);
 
     // Auto-scroll question bar
     useEffect(() => {
@@ -138,7 +182,9 @@ export default function ExamPage() {
         if (!examInfo) return;
         try {
             const resp = await startExamMutation.mutateAsync();
-            setTimeLeft(resp.time_limit_minutes * 60);
+            const startedAt = new Date(resp.started_at).getTime();
+            examEndTimeRef.current = startedAt + resp.time_limit_minutes * 60 * 1000;
+            setTimeLeft(Math.max(0, Math.floor((examEndTimeRef.current - Date.now()) / 1000)));
             setExamAnswers({});
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (err) {
@@ -166,13 +212,23 @@ export default function ExamPage() {
                 code_solutions: Object.entries(codeSolutions)
                     .filter(([_, code]) => code.trim())
                     .map(([taskId, code]) => ({ task_id: Number(taskId), code })),
-                task_timings: tasks
-                    .filter(t => taskOpenedAt[t.id])
-                    .map(t => ({
-                        task_id: t.id,
-                        opened_at_ms: taskOpenedAt[t.id],
-                        answered_at_ms: taskAnsweredAt[t.id] ?? null,
-                    })),
+                task_timings: (() => {
+                    // Flush current task's open session before submit
+                    const now = Date.now();
+                    const currentId = prevTaskIdRef.current;
+                    const flushMs = (currentId && taskSessionStartRef.current)
+                        ? (taskAccumulatedMs[currentId] || 0) + (now - taskSessionStartRef.current)
+                        : null;
+                    return tasks
+                        .filter(t => taskAccumulatedMs[t.id] || (t.id === currentId && flushMs))
+                        .map(t => ({
+                            task_id: t.id,
+                            opened_at_ms: now, // kept for schema compat
+                            time_spent_ms: t.id === currentId && flushMs !== null
+                                ? flushMs
+                                : (taskAccumulatedMs[t.id] || 0),
+                        }));
+                })(),
             };
             const res = await submitExamMutation.mutateAsync(payload);
 

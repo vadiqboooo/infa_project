@@ -29,6 +29,7 @@ class TaskTimingItem(BaseModel):
     task_id: int
     opened_at_ms: int        # Unix ms when task was first opened
     answered_at_ms: int | None = None  # Unix ms when answer was last saved
+    time_spent_ms: int | None = None   # Accumulated active time in ms (preferred over open/answered diff)
 
 
 class ExamSubmitIn(BaseModel):

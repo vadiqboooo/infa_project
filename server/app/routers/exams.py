@@ -267,7 +267,9 @@ async def submit_exam(
         max_points = 2 if (task.ege_number and task.ege_number >= 26) else 1
         timing = timings_map.get(task.id)
         time_spent_seconds = None
-        if timing and timing.answered_at_ms and timing.opened_at_ms:
+        if timing and timing.time_spent_ms is not None:
+            time_spent_seconds = max(0, timing.time_spent_ms // 1000)
+        elif timing and timing.answered_at_ms and timing.opened_at_ms:
             time_spent_seconds = max(0, (timing.answered_at_ms - timing.opened_at_ms) // 1000)
         task_results.append({
             "task_id": task.id,
