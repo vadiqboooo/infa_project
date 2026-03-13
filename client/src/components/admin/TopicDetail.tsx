@@ -477,290 +477,220 @@ function TaskEditPanel({
     </div>
   );
 
-  const inputCls = 'w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 focus:border-[#3F8C62]/40 transition-all';
+  const inputCls = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 focus:border-[#3F8C62]/40 transition-all';
+  const labelCls = 'block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1';
 
   return (
     <div className="flex flex-col h-full bg-[#F8F7F4]">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
+      <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={15} />
             К списку задач
           </button>
-          <div className="w-px h-5 bg-gray-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              {task.id ? `Задача #${task.id}` : 'Новая задача'}
-            </span>
-            {form.ege_number > 0 && (
-              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold">
-                №{form.ege_number} ЕГЭ
-              </span>
-            )}
-          </div>
+          <div className="w-px h-4 bg-gray-200" />
+          <span className="text-xs text-gray-400">
+            {task.id ? `Задача #${task.id}` : 'Новая задача'}
+            {form.ege_number > 0 && <span className="ml-2 font-bold text-gray-600">№{form.ege_number} ЕГЭ</span>}
+          </span>
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-6 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
+          className="flex items-center gap-2 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-[#3F8C62]/20"
         >
-          <Save size={15} />
+          <Save size={14} />
           Сохранить
         </button>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+      {/* Body — two columns */}
+      <div className="flex-1 overflow-hidden flex gap-0">
 
-          {/* Row 1: meta fields */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Основное</h3>
-            <div className="grid grid-cols-4 gap-4">
-              <Field label="№ ЕГЭ" icon={<Hash size={11} />}>
-                <input
-                  type="number"
-                  value={form.ege_number}
-                  onChange={(e) => setForm({ ...form, ege_number: parseInt(e.target.value) || 0 })}
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Сложность">
-                <select
-                  value={form.difficulty}
-                  onChange={(e) => setForm({ ...form, difficulty: e.target.value as TaskDifficulty })}
-                  className={inputCls}
-                >
-                  <option value="easy">Лёгкая</option>
-                  <option value="medium">Средняя</option>
-                  <option value="hard">Сложная</option>
-                </select>
-              </Field>
-              <Field label="Тип ответа">
-                <select
-                  value={form.answer_type}
-                  onChange={(e) => setForm({ ...form, answer_type: e.target.value as AnswerType })}
-                  className={inputCls}
-                >
-                  <option value="single_number">Число</option>
-                  <option value="text">Текст</option>
-                  <option value="pair">Пара чисел</option>
-                  <option value="table">Таблица</option>
-                </select>
-              </Field>
-              <Field label="Правильный ответ">
-                <input
-                  type="text"
-                  value={form.correct_answer}
-                  onChange={(e) => setForm({ ...form, correct_answer: e.target.value })}
-                  placeholder="Значение..."
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-            <div className="mt-4">
-              <Field label="Название (опционально)" icon={<AlignLeft size={11} />}>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="Напр: Задача на графы"
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-          </div>
+        {/* Left: content + code */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-0">
 
-          {/* Row 2: content HTML */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Текст задачи (HTML)</h3>
+          {/* Content HTML */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className={labelCls}>Текст задачи (HTML)</span>
               <button
                 onClick={() => setShowPreview((v) => !v)}
                 className={clsx(
-                  'flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors',
-                  showPreview
-                    ? 'bg-[#3F8C62]/10 text-[#3F8C62]'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  'flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg transition-colors',
+                  showPreview ? 'bg-[#3F8C62]/10 text-[#3F8C62]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 )}
               >
-                {showPreview ? <EyeOff size={13} /> : <Eye size={13} />}
-                {showPreview ? 'Скрыть предпросмотр' : 'Предпросмотр'}
+                {showPreview ? <EyeOff size={11} /> : <Eye size={11} />}
+                {showPreview ? 'Скрыть' : 'Предпросмотр'}
               </button>
             </div>
-            <div className={clsx('gap-4', showPreview ? 'grid grid-cols-2' : '')}>
+            <div className={clsx('gap-3', showPreview ? 'grid grid-cols-2' : '')}>
               <textarea
                 value={form.content_html}
                 onChange={(e) => setForm({ ...form, content_html: e.target.value })}
-                rows={showPreview ? 20 : 14}
+                rows={showPreview ? 18 : 12}
                 placeholder="<p>Текст задачи...</p>"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 focus:border-[#3F8C62]/40 transition-all resize-y leading-relaxed"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 transition-all resize-y leading-relaxed"
               />
               {showPreview && (
-                <div className="border border-gray-200 rounded-xl p-4 bg-white overflow-auto max-h-[500px]">
-                  <div
-                    className="prose prose-sm max-w-none text-gray-800"
-                    dangerouslySetInnerHTML={{ __html: form.content_html }}
-                  />
+                <div className="border border-gray-200 rounded-lg p-3 bg-white overflow-auto">
+                  <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html }} />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Row 3: solution code */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <FileCode2 size={14} className="text-gray-400" />
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Полный код решения (Python)</h3>
+          {/* Solution code */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <FileCode2 size={12} className="text-gray-400" />
+              <span className={labelCls}>Полный код решения (Python)</span>
             </div>
             <textarea
               value={form.full_solution_code}
               onChange={(e) => setForm({ ...form, full_solution_code: e.target.value })}
-              rows={12}
+              rows={10}
               placeholder="# Вставьте полный код решения здесь..."
               spellCheck={false}
-              className="w-full px-4 py-3 bg-gray-900 text-emerald-400 border border-gray-700 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/40 transition-all resize-y leading-relaxed"
+              className="w-full px-3 py-2 bg-gray-900 text-emerald-400 border border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/40 transition-all resize-y leading-relaxed"
             />
           </div>
+        </div>
 
-          {/* Row 4: solution steps */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <ListChecks size={14} className="text-gray-400" />
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Пошаговое решение
+        {/* Right: meta + steps */}
+        <div className="w-80 shrink-0 overflow-y-auto p-4 space-y-3 border-l border-gray-100">
+
+          {/* Meta fields */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>№ ЕГЭ</label>
+                <input type="number" value={form.ege_number}
+                  onChange={(e) => setForm({ ...form, ege_number: parseInt(e.target.value) || 0 })}
+                  className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Сложность</label>
+                <select value={form.difficulty}
+                  onChange={(e) => setForm({ ...form, difficulty: e.target.value as TaskDifficulty })}
+                  className={inputCls}>
+                  <option value="easy">Лёгкая</option>
+                  <option value="medium">Средняя</option>
+                  <option value="hard">Сложная</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Тип ответа</label>
+              <select value={form.answer_type}
+                onChange={(e) => setForm({ ...form, answer_type: e.target.value as AnswerType })}
+                className={inputCls}>
+                <option value="single_number">Число</option>
+                <option value="text">Текст</option>
+                <option value="pair">Пара чисел</option>
+                <option value="table">Таблица</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Правильный ответ</label>
+              <input type="text" value={form.correct_answer}
+                onChange={(e) => setForm({ ...form, correct_answer: e.target.value })}
+                placeholder="Значение..."
+                className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Название (опционально)</label>
+              <input type="text" value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="Напр: Задача на графы"
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Solution steps */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <ListChecks size={12} className="text-gray-400" />
+                <span className={labelCls}>
+                  Шаги решения
                   {form.solution_steps.length > 0 && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px]">
-                      {form.solution_steps.length} шагов
+                    <span className="ml-1.5 px-1 py-0.5 bg-blue-100 text-blue-600 rounded text-[9px]">
+                      {form.solution_steps.length}
                     </span>
                   )}
-                </h3>
+                </span>
               </div>
-              <button
-                onClick={addStep}
-                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 bg-[#3F8C62]/10 text-[#3F8C62] hover:bg-[#3F8C62]/20 rounded-lg transition-colors"
-              >
-                <Plus size={13} />
-                Добавить шаг
+              <button onClick={addStep}
+                className="flex items-center gap-1 text-[11px] font-bold text-[#3F8C62] hover:text-[#357A54] transition-colors">
+                <Plus size={12} /> Добавить
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {form.solution_steps.map((step, idx) => (
-                <div
-                  key={idx}
-                  className="border border-gray-200 rounded-xl overflow-hidden"
-                >
-                  {/* Step header */}
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-[11px] font-black text-gray-500 uppercase tracking-wider">
-                      Шаг {idx + 1}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => moveStep(idx, 'up')}
-                        disabled={idx === 0}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 hover:bg-gray-200 rounded-lg transition-colors"
-                      >
-                        <ChevronUp size={14} />
+                <div key={idx} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200">
+                    <span className="text-[10px] font-black text-gray-500 uppercase">Шаг {idx + 1}</span>
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => moveStep(idx, 'up')} disabled={idx === 0}
+                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
+                        <ChevronUp size={13} />
                       </button>
-                      <button
-                        onClick={() => moveStep(idx, 'down')}
-                        disabled={idx === form.solution_steps.length - 1}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-20 hover:bg-gray-200 rounded-lg transition-colors"
-                      >
-                        <ChevronDown size={14} />
+                      <button onClick={() => moveStep(idx, 'down')} disabled={idx === form.solution_steps.length - 1}
+                        className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-20 rounded transition-colors">
+                        <ChevronDown size={13} />
                       </button>
-                      <button
-                        onClick={() => removeStep(idx)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-1"
-                      >
-                        <Trash2 size={14} />
+                      <button onClick={() => removeStep(idx)}
+                        className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors">
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
-
-                  {/* Step fields */}
-                  <div className="p-4 space-y-3">
-                    <input
-                      type="text"
-                      value={step.title}
+                  <div className="p-3 space-y-2">
+                    <input type="text" value={step.title}
                       onChange={(e) => updateStep(idx, 'title', e.target.value)}
-                      placeholder="Заголовок шага..."
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all"
-                    />
-                    <textarea
-                      value={step.explanation}
+                      placeholder="Заголовок..."
+                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all" />
+                    <textarea value={step.explanation}
                       onChange={(e) => updateStep(idx, 'explanation', e.target.value)}
-                      placeholder="Объяснение шага..."
-                      rows={4}
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y leading-relaxed"
-                    />
-                    <textarea
-                      value={step.code}
+                      placeholder="Объяснение..."
+                      rows={3}
+                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 transition-all resize-y" />
+                    <textarea value={step.code}
                       onChange={(e) => updateStep(idx, 'code', e.target.value)}
-                      placeholder="# Код шага (опционально)..."
-                      rows={4}
+                      placeholder="# Код..."
+                      rows={3}
                       spellCheck={false}
-                      className="w-full px-3 py-2.5 bg-gray-900 text-emerald-400 border border-gray-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/30 transition-all resize-y leading-relaxed"
-                    />
+                      className="w-full px-2.5 py-1.5 bg-gray-900 text-emerald-400 border border-gray-700 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/30 transition-all resize-y" />
 
                     {/* Images */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1">
-                          <ImageIcon size={10} /> Иллюстрации
-                          {(step.images || []).length > 0 && (
-                            <span className="ml-1 text-gray-500">({(step.images || []).length})</span>
-                          )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1">
+                          <ImageIcon size={9} /> Картинки {(step.images || []).length > 0 && `(${(step.images || []).length})`}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRefs.current[idx]?.click()}
+                        <button type="button" onClick={() => fileInputRefs.current[idx]?.click()}
                           disabled={uploadingStep === idx || !task.id}
-                          className="flex items-center gap-1 text-[11px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50 transition-colors"
-                        >
-                          {uploadingStep === idx ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Upload size={11} />
-                          )}
-                          Добавить картинку
+                          className="flex items-center gap-0.5 text-[10px] font-bold text-[#3F8C62] hover:text-[#357A54] disabled:opacity-50">
+                          {uploadingStep === idx ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                          Добавить
                         </button>
-                        <input
-                          ref={(el) => { fileInputRefs.current[idx] = el; }}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) uploadStepImage(idx, file);
-                            e.target.value = '';
-                          }}
-                        />
+                        <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*" className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadStepImage(idx, f); e.target.value = ''; }} />
                       </div>
                       {(step.images || []).length > 0 && (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           {(step.images || []).map((url: string, imgIdx: number) => (
-                            <div
-                              key={imgIdx}
-                              className="relative group/img w-28 h-20 rounded-xl overflow-hidden border border-gray-200 bg-gray-50"
-                            >
-                              <img
-                                src={url.startsWith('http') ? url : `/api${url}`}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeStepImage(idx, url)}
-                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity shadow"
-                              >
-                                <X size={9} />
+                            <div key={imgIdx} className="relative group/img w-20 h-14 rounded-lg overflow-hidden border border-gray-200">
+                              <img src={url.startsWith('http') ? url : `/api${url}`} alt="" className="w-full h-full object-cover" />
+                              <button type="button" onClick={() => removeStepImage(idx, url)}
+                                className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                <X size={8} />
                               </button>
                             </div>
                           ))}
@@ -772,29 +702,11 @@ function TaskEditPanel({
               ))}
 
               {form.solution_steps.length === 0 && (
-                <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-xl">
-                  <ListChecks size={28} className="mx-auto mb-2 text-gray-300" />
-                  <p className="text-xs font-bold text-gray-400">Пошаговое решение не добавлено</p>
-                  <button
-                    onClick={addStep}
-                    className="mt-3 text-xs font-bold text-[#3F8C62] hover:underline"
-                  >
-                    Добавить первый шаг
-                  </button>
+                <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg">
+                  <p className="text-[11px] text-gray-400">Шаги не добавлены</p>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Bottom save button */}
-          <div className="flex justify-end pb-4">
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-8 py-3 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
-            >
-              <Save size={16} />
-              Сохранить задачу
-            </button>
           </div>
         </div>
       </div>
