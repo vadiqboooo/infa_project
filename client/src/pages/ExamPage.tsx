@@ -31,7 +31,7 @@ export default function ExamPage() {
     const [currentAnswer, setCurrentAnswer] = useState<AnswerVal>("");
     const [taskAccumulatedMs, setTaskAccumulatedMs] = useState<Record<number, number>>({});
     const taskSessionStartRef = useRef<number | null>(null);  // when current task view started
-    const examEndTimeRef = useRef<number | null>(null);       // absolute ms when exam ends
+    const [examEndTime, setExamEndTime] = useState<number | null>(null); // absolute ms when exam ends
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,28 +143,29 @@ export default function ExamPage() {
         }
     };
 
-    // Timer — based on absolute endTime, recalculates correctly after tab switch
+    // Set exam end time once when active attempt loads
     useEffect(() => {
-        if (examInfo?.active_attempt && examEndTimeRef.current === null) {
+        if (examInfo?.active_attempt && examEndTime === null) {
             const startedAt = new Date(examInfo.active_attempt.started_at).getTime();
-            examEndTimeRef.current = startedAt + examInfo.time_limit_minutes * 60 * 1000;
-            setTimeLeft(Math.max(0, Math.floor((examEndTimeRef.current - Date.now()) / 1000)));
+            const endTime = startedAt + examInfo.time_limit_minutes * 60 * 1000;
+            setExamEndTime(endTime);
+            setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
         }
-    }, [examInfo]);
+    }, [examInfo, examEndTime]);
 
+    // Interval ticker — re-runs when examEndTime becomes available
     useEffect(() => {
-        if (examEndTimeRef.current === null || examResult) return;
+        if (examEndTime === null || examResult) return;
         const tick = () => {
-            const remaining = Math.max(0, Math.floor((examEndTimeRef.current! - Date.now()) / 1000));
+            const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             if (remaining === 0) handleAutoSubmit();
         };
         const timer = setInterval(tick, 1000);
-        // Recalculate immediately when tab becomes visible again
         const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-    }, [examResult]);
+    }, [examEndTime, examResult]);
 
     // Auto-scroll question bar
     useEffect(() => {
@@ -183,8 +184,9 @@ export default function ExamPage() {
         try {
             const resp = await startExamMutation.mutateAsync();
             const startedAt = new Date(resp.started_at).getTime();
-            examEndTimeRef.current = startedAt + resp.time_limit_minutes * 60 * 1000;
-            setTimeLeft(Math.max(0, Math.floor((examEndTimeRef.current - Date.now()) / 1000)));
+            const endTime = startedAt + resp.time_limit_minutes * 60 * 1000;
+            setExamEndTime(endTime);
+            setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
             setExamAnswers({});
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (err) {
