@@ -67,7 +67,7 @@ export function TasksListPage() {
             <TopicCard
               key={topic.id}
               id={String(topic.id)}
-              egeId={String(topic.order_index + 1)}
+              egeId={topic.ege_number != null ? String(topic.ege_number) : String(topic.order_index + 1)}
               title={topic.title}
               description={categoryFilter === 'homework' ? 'Домашнее задание' : 'Теория и практика'}
               progress={{ 

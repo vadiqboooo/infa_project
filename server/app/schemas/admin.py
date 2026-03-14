@@ -15,6 +15,7 @@ class TopicIn(BaseModel):
     category: str = "tutorial"
     time_limit_minutes: int | None = 60
     is_mock: bool = False
+    ege_number: int | None = None
 
 
 class TopicOut(BaseModel):
@@ -25,6 +26,7 @@ class TopicOut(BaseModel):
     task_count: int = 0
     time_limit_minutes: int | None = 60
     is_mock: bool = False
+    ege_number: int | None = None
 
     model_config = {"from_attributes": True}
 

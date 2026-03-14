@@ -142,6 +142,21 @@ export function TopicDetail({
                 placeholder="Название"
               />
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                <Hash size={14} className="text-gray-400" />
+                <input
+                  type="number"
+                  value={editingTopic.ege_number ?? ''}
+                  onChange={(e) =>
+                    handleTopicFieldChange('ege_number', e.target.value ? parseInt(e.target.value) : null)
+                  }
+                  className="w-12 bg-transparent text-sm font-bold focus:outline-none"
+                  placeholder="№"
+                  min={1}
+                  max={27}
+                />
+                <span className="text-[10px] font-bold text-gray-400 uppercase">ЕГЭ</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
                 <Clock size={14} className="text-gray-400" />
                 <input
                   type="number"
@@ -183,6 +198,12 @@ export function TopicDetail({
           ) : (
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-gray-900">{topic.title}</h2>
+              {topic.ege_number != null && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#3F8C62]/10 text-[#3F8C62] rounded-lg">
+                  <Hash size={12} />
+                  <span className="text-[10px] font-bold">Задание {topic.ege_number}</span>
+                </div>
+              )}
               <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-lg">
                 <Clock size={12} />
                 <span className="text-[10px] font-bold">{topic.time_limit_minutes || 60} мин</span>

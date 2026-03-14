@@ -72,6 +72,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             task_count=counts.get(t.id, 0),
             time_limit_minutes=exams.get(t.id, 60),
             is_mock=t.is_mock,
+            ege_number=t.ege_number,
         )
         for t in topics
     ]
@@ -80,28 +81,30 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
 @router.post("/topics", response_model=TopicOut, status_code=status.HTTP_201_CREATED)
 async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
     topic = Topic(
-        title=body.title, 
-        order_index=body.order_index, 
+        title=body.title,
+        order_index=body.order_index,
         category=body.category,
-        is_mock=body.is_mock
+        is_mock=body.is_mock,
+        ege_number=body.ege_number,
     )
     db.add(topic)
     await db.flush()
-    
+
     # Create exam
     exam = Exam(topic_id=topic.id, time_limit_minutes=body.time_limit_minutes or 60)
     db.add(exam)
-    
+
     await db.commit()
     await db.refresh(topic)
     return TopicOut(
-        id=topic.id, 
-        title=topic.title, 
-        order_index=topic.order_index, 
-        category=topic.category, 
+        id=topic.id,
+        title=topic.title,
+        order_index=topic.order_index,
+        category=topic.category,
         task_count=0,
         time_limit_minutes=exam.time_limit_minutes,
-        is_mock=topic.is_mock
+        is_mock=topic.is_mock,
+        ege_number=topic.ege_number,
     )
 
 
@@ -116,6 +119,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.order_index = body.order_index
     topic.category = body.category
     topic.is_mock = body.is_mock
+    topic.ege_number = body.ege_number
     
     # Update exam
     exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
@@ -134,13 +138,14 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     )
     task_count = count_result.scalar() or 0
     return TopicOut(
-        id=topic.id, 
-        title=topic.title, 
-        order_index=topic.order_index, 
-        category=topic.category, 
+        id=topic.id,
+        title=topic.title,
+        order_index=topic.order_index,
+        category=topic.category,
         task_count=task_count,
         time_limit_minutes=exam.time_limit_minutes,
-        is_mock=topic.is_mock
+        is_mock=topic.is_mock,
+        ege_number=topic.ege_number,
     )
 
 

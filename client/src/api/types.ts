@@ -53,6 +53,7 @@ export interface TopicNav {
     max_score?: number;
     time_limit_minutes?: number;
     is_mock: boolean;
+    ege_number?: number | null;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -197,6 +198,7 @@ export interface TopicAdmin {
     task_count: number;
     time_limit_minutes?: number;
     is_mock: boolean;
+    ege_number?: number | null;
 }
 
 export interface TaskAdmin {

@@ -90,6 +90,7 @@ async def get_navigation(
             max_score=len(exam.tasks) if exam and exam.tasks else len(topic.tasks),
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
+            ege_number=topic.ege_number,
         ))
     return nav
 

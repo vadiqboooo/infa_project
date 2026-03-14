@@ -14,6 +14,7 @@ class Topic(Base):
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     category: Mapped[str] = mapped_column(String(50), default="tutorial", nullable=False)
     is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
+    ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     # relationships
     tasks = relationship(

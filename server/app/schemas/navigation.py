@@ -25,5 +25,6 @@ class TopicNav(BaseModel):
     max_score: int | None = None
     time_limit_minutes: int | None = None
     is_mock: bool = False
+    ege_number: int | None = None
 
     model_config = {"from_attributes": True}
