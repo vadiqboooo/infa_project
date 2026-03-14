@@ -584,7 +584,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             order_index: data.order_index ?? topic.order_index,
             category: (data.category as TopicCategory) || topic.category,
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
-            is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock
+            is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
+            ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,
         };
         await adminFetch(`/admin/topics/${topic.id}`, apiKey, { 
             method: "PUT", 

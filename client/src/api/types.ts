@@ -223,6 +223,7 @@ export interface TopicIn {
     category: TopicCategory;
     time_limit_minutes?: number;
     is_mock: boolean;
+    ege_number?: number | null;
 }
 
 export interface ImportVariantIn {
