@@ -174,9 +174,14 @@ function renderLatex(text: string): string {
     return text;
 }
 
+// Decode double-encoded HTML entities: &amp;gt; → &gt; (which the parser then renders as >)
+function normalizeEntities(html: string): string {
+    return html.replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, "&$1");
+}
+
 export default function TaskView({ content, title, files }: Props) {
     const parsedContent = useMemo(() => {
-        const processedContent = renderLatex(content);
+        const processedContent = renderLatex(normalizeEntities(content));
         return parse(processedContent, parseOptions);
     }, [content]);
 
