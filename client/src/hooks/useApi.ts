@@ -14,6 +14,7 @@ import type {
     WeeklyActivity,
     TopicsPerformance,
     RecentSolutions,
+    SolutionStep,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -137,5 +138,23 @@ export function useRecentSolutions(limit: number = 10) {
     return useQuery<RecentSolutions>({
         queryKey: ["stats", "recent", limit],
         queryFn: () => api<RecentSolutions>(`/stats/recent-solutions?limit=${limit}`),
+    });
+}
+
+/* ── AI Step Generation ───────────────────────────────── */
+export function useGenerateSteps() {
+    return useMutation<{ steps: SolutionStep[]; examples_used: number }, Error, number>({
+        mutationFn: async (taskId: number) => {
+            const apiKey = localStorage.getItem("parser_api_key") || "";
+            const res = await fetch(`/api/admin/tasks/${taskId}/generate-steps`, {
+                method: "POST",
+                headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || "Ошибка генерации");
+            }
+            return res.json();
+        },
     });
 }

@@ -1,6 +1,8 @@
 """Admin router — CRUD for topics and tasks."""
 
+import json
 import os
+import re
 import uuid
 import httpx
 from datetime import timedelta
@@ -1032,6 +1034,118 @@ async def move_task_down(task_id: int, db: AsyncSession = Depends(get_db)):
         # Поменять местами order_index
         task.order_index, next_task.order_index = next_task.order_index, task.order_index
         await db.commit()
+
+
+# ── AI Step Generation ────────────────────────────────────────────
+
+_STEP_SYSTEM_PROMPT = """Ты — эксперт-педагог по ЕГЭ информатике (Python).
+Создаёшь пошаговые разборы задач для учеников.
+
+Правила:
+- Разбей решение на 3–6 логических шагов
+- Каждый шаг: title (краткий заголовок), explanation (подробное объяснение на русском), code (Python-код этого шага или пустая строка)
+- Объяснения детальные, понятные школьнику
+- Код в каждом шаге — только фрагмент, относящийся к этому шагу (не всё решение сразу)
+
+Верни ТОЛЬКО JSON-массив без лишнего текста:
+[{"title":"...","explanation":"...","code":"..."},...]"""
+
+
+@router.post("/tasks/{task_id}/generate-steps")
+async def generate_solution_steps(task_id: int, db: AsyncSession = Depends(get_db)):
+    """Use LLM with few-shot examples to generate solution_steps for a task."""
+    from app.config import settings
+
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    # Fetch up to 3 example tasks that have solution_steps, prefer same ege_number
+    q = select(Task).where(
+        Task.solution_steps.is_not(None),
+        Task.id != task_id,
+    )
+    if task.ege_number:
+        # Try same ege_number first
+        same_q = q.where(Task.ege_number == task.ege_number).limit(3)
+        same_res = await db.execute(same_q)
+        examples = same_res.scalars().all()
+        if len(examples) < 2:
+            # Pad with any other examples
+            extra_q = q.where(Task.ege_number != task.ege_number).limit(3 - len(examples))
+            extra_res = await db.execute(extra_q)
+            examples = list(examples) + list(extra_res.scalars().all())
+    else:
+        any_res = await db.execute(q.limit(3))
+        examples = any_res.scalars().all()
+
+    if not examples:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нет задач с готовыми шагами решения для обучения. Сначала создайте хотя бы одно пошаговое решение вручную.",
+        )
+
+    # Build few-shot conversation
+    messages: list[dict] = [{"role": "system", "content": _STEP_SYSTEM_PROMPT}]
+
+    for ex in examples[:3]:
+        user_msg = f"Условие задачи:\n{ex.content_html}"
+        if ex.full_solution_code:
+            user_msg += f"\n\nКод решения:\n```python\n{ex.full_solution_code}\n```"
+        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "assistant", "content": json.dumps(ex.solution_steps, ensure_ascii=False)})
+
+    # Target task
+    target_msg = f"Условие задачи:\n{task.content_html}"
+    if task.full_solution_code:
+        target_msg += f"\n\nКод решения:\n```python\n{task.full_solution_code}\n```"
+    target_msg += "\n\nСоздай пошаговое решение. Верни ТОЛЬКО JSON-массив."
+    messages.append({"role": "user", "content": target_msg})
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            headers = {
+                "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "Edu Platform",
+            }
+            resp = await client.post(
+                f"{settings.LLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json={"model": settings.LLM_MODEL, "messages": messages},
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"LLM error: {resp.text}")
+
+            ai_text = resp.json()["choices"][0]["message"]["content"].strip()
+
+        # Strip markdown code fences if model wrapped the JSON
+        ai_text = re.sub(r"^```[a-z]*\n?", "", ai_text)
+        ai_text = re.sub(r"\n?```$", "", ai_text).strip()
+
+        steps = json.loads(ai_text)
+        if not isinstance(steps, list):
+            raise ValueError("Expected JSON array")
+
+        # Normalise — ensure required fields
+        clean = []
+        for s in steps:
+            clean.append({
+                "title": str(s.get("title", "")),
+                "explanation": str(s.get("explanation", "")),
+                "code": str(s.get("code", "")),
+            })
+
+        return {"steps": clean, "examples_used": len(examples)}
+
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось разобрать ответ LLM как JSON: {exc}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── Variant import ────────────────────────────────────────────

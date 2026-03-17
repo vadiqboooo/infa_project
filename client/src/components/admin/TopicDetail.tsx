@@ -24,9 +24,13 @@ import {
   FileCode2,
   Hash,
   AlignLeft,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
+import { useGenerateSteps } from '../../hooks/useApi';
 
 interface TopicDetailProps {
   topic: TopicAdmin;
@@ -417,7 +421,26 @@ function TaskEditPanel({
   const [uploadingStep, setUploadingStep] = useState<number | null>(null);
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
   const [stepCodeOpen, setStepCodeOpen] = useState<Set<number>>(new Set());
+  const [generateNotice, setGenerateNotice] = useState<'success' | 'error' | null>(null);
+  const [generateError, setGenerateError] = useState('');
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const generateStepsMutation = useGenerateSteps();
+
+  const handleGenerateSteps = async () => {
+    if (!task.id) return;
+    setGenerateNotice(null);
+    try {
+      const res = await generateStepsMutation.mutateAsync(task.id);
+      setForm(f => ({ ...f, solution_steps: res.steps }));
+      setCollapsedSteps(new Set());
+      setGenerateNotice('success');
+      setTimeout(() => setGenerateNotice(null), 4000);
+    } catch (err: any) {
+      setGenerateError(err.message || 'Ошибка генерации');
+      setGenerateNotice('error');
+      setTimeout(() => setGenerateNotice(null), 6000);
+    }
+  };
 
   const toggleCollapse = (idx: number) => {
     setCollapsedSteps(prev => {
@@ -641,7 +664,37 @@ function TaskEditPanel({
             </span>
           )}
         </span>
+        <button
+          onClick={handleGenerateSteps}
+          disabled={!task.id || generateStepsMutation.isPending}
+          title={task.id ? "Сгенерировать шаги с помощью ИИ на основе похожих задач" : "Сохраните задачу перед генерацией"}
+          className={clsx(
+            "ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border",
+            generateStepsMutation.isPending
+              ? "bg-purple-50 text-purple-400 border-purple-200 cursor-wait"
+              : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:border-purple-300"
+          )}
+        >
+          {generateStepsMutation.isPending
+            ? <><Loader2 size={11} className="animate-spin" /> Генерация...</>
+            : <><Sparkles size={11} /> ИИ</>
+          }
+        </button>
       </div>
+
+      {/* Generation feedback */}
+      {generateNotice === 'success' && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium mb-3">
+          <CheckCircle2 size={13} className="shrink-0" />
+          Шаги сгенерированы. Проверьте и сохраните.
+        </div>
+      )}
+      {generateNotice === 'error' && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium mb-3">
+          <AlertCircle size={13} className="shrink-0" />
+          {generateError}
+        </div>
+      )}
 
       <div className="space-y-2">
         {form.solution_steps.map((step, idx) => {
