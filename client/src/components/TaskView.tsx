@@ -182,6 +182,7 @@ function normalizeEntities(html: string): string {
     //    &lt; is intentionally left encoded — decoding it to < before parse() would
     //    cause htmlparser2 to interpret it as a tag delimiter and break structure
     result = result.replace(/&gt;/g, ">");
+    result = result.replace(/&lt;/g, "<");
     result = result.replace(/&nbsp;/g, "\u00A0");
     return result;
 }
