@@ -615,7 +615,10 @@ function TaskEditPanel({
         </div>
         {showPreview ? (
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[200px]">
-            <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html.replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, '&$1') }} />
+            <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html
+              .replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, '&$1')
+              .replace(/&gt;/g, '>')
+              .replace(/&nbsp;/g, '\u00A0') }} />
           </div>
         ) : (
           <textarea

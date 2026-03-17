@@ -174,9 +174,16 @@ function renderLatex(text: string): string {
     return text;
 }
 
-// Decode double-encoded HTML entities: &amp;gt; → &gt; (which the parser then renders as >)
+// Decode HTML entities that the parser may not handle automatically
 function normalizeEntities(html: string): string {
-    return html.replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, "&$1");
+    // 1. Un-double-encode: &amp;gt; → &gt; etc.
+    let result = html.replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, "&$1");
+    // 2. &gt; → > is safe: a bare > in text content doesn't confuse the HTML parser
+    //    &lt; is intentionally left encoded — decoding it to < before parse() would
+    //    cause htmlparser2 to interpret it as a tag delimiter and break structure
+    result = result.replace(/&gt;/g, ">");
+    result = result.replace(/&nbsp;/g, "\u00A0");
+    return result;
 }
 
 export default function TaskView({ content, title, files }: Props) {
