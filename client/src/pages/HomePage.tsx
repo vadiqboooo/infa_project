@@ -67,11 +67,11 @@ export function HomePage() {
     : 0;
 
   return (
-    <div className="space-y-6 p-8 animate-in fade-in duration-500">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-8 animate-in fade-in duration-500">
       {/* Welcome */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">
             Привет, Студент! 👋
           </h1>
           <p className="text-gray-500 text-sm mt-1">
@@ -80,16 +80,17 @@ export function HomePage() {
         </div>
         <Link
           to="/tasks"
-          className="flex items-center gap-2 bg-[#3F8C62] hover:bg-[#357A54] text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+          className="flex items-center gap-2 bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors shrink-0"
         >
           <BookOpen size={16} />
-          Начать разбор
+          <span className="hidden sm:inline">Начать разбор</span>
+          <span className="sm:hidden">Разбор</span>
           <ChevronRight size={14} />
         </Link>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           icon={<Target size={20} />}
           iconBg="bg-emerald-100 text-emerald-600"
@@ -121,7 +122,7 @@ export function HomePage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
         {/* Weekly progress chart */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -206,7 +207,7 @@ export function HomePage() {
       </div>
 
       {/* Bottom row: recent + quick progress */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4">
         {/* Recent activity */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -308,14 +309,14 @@ function StatCard({
   sub: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-start gap-3">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
+    <div className="bg-white rounded-2xl border border-gray-100 p-3 md:p-4 flex items-start gap-2.5 md:gap-3">
+      <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
         {icon}
       </div>
-      <div>
-        <p className="text-xs text-gray-400">{label}</p>
-        <p className="text-xl font-bold text-gray-900 mt-0.5">{value}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+      <div className="min-w-0">
+        <p className="text-[11px] md:text-xs text-gray-400 truncate">{label}</p>
+        <p className="text-lg md:text-xl font-bold text-gray-900 mt-0.5 leading-tight">{value}</p>
+        <p className="text-[11px] md:text-xs text-gray-400 mt-0.5 truncate">{sub}</p>
       </div>
     </div>
   );

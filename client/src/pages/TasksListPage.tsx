@@ -34,14 +34,14 @@ export function TasksListPage() {
   };
 
   return (
-    <div className="space-y-8 p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 p-4 md:p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-[#3F8C62]/10 flex items-center justify-center text-[#3F8C62]">
               {categoryFilter === 'homework' ? <ClipboardList size={20} /> : <BookOpen size={20} />}
             </div>
-            <h1 className="text-2xl font-extrabold text-gray-900">{title}</h1>
+            <h1 className="text-xl md:text-2xl font-extrabold text-gray-900">{title}</h1>
           </div>
           <p className="text-gray-500 text-sm ml-11">{subtitle}</p>
         </div>
@@ -49,20 +49,20 @@ export function TasksListPage() {
           <input
             type="text"
             placeholder="Поиск темы..."
-            className="pl-10 pr-4 py-2.5 border border-gray-200 rounded-2xl text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62] bg-white transition-all shadow-sm"
+            className="pl-10 pr-4 py-2.5 border border-gray-200 rounded-2xl text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62] bg-white transition-all shadow-sm"
           />
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
         </div>
       </div>
 
       {isLoading ? (
-        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))] justify-start">
+        <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),400px))] justify-start">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
             <div key={i} className="h-48 bg-gray-100 rounded-3xl animate-pulse" />
           ))}
         </div>
       ) : topics.length > 0 ? (
-        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,350px),400px))] justify-start">
+        <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),400px))] justify-start">
           {topics.map((topic) => (
             <TopicCard
               key={topic.id}

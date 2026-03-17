@@ -327,25 +327,25 @@ export default function ExamPage() {
             <div className="min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-4">
+                    <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center gap-3 md:gap-4">
                         <button onClick={() => navigate('/exams')} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0">
                             <ArrowLeft size={16} /> Назад
                         </button>
                         <div className="w-px h-8 bg-gray-200 shrink-0" />
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center shrink-0">
                                 <CheckCircle2 size={18} />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Пробник завершён</div>
-                                <div className="text-sm font-bold text-gray-800 truncate max-w-[260px]">{currentTopic.title}</div>
+                                <div className="text-sm font-bold text-gray-800 truncate">{currentTopic.title}</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="max-w-3xl mx-auto px-6 py-6 space-y-4">
+                <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
                     {/* Info banner */}
                     <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 flex items-start gap-3">
                         <AlertCircle size={16} className="text-violet-400 mt-0.5 shrink-0" />
@@ -644,7 +644,7 @@ export default function ExamPage() {
             <div className="min-h-screen bg-[#F8F7F4]">
                 {/* Header — back button + score card в одной строке */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-5">
+                    <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-wrap items-center gap-3 md:gap-5">
                         {/* Кнопка назад */}
                         <button
                             onClick={() => navigate('/exams')}
@@ -654,7 +654,7 @@ export default function ExamPage() {
                             Назад
                         </button>
 
-                        <div className="w-px h-8 bg-gray-200 shrink-0" />
+                        <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
 
                         {/* Иконка + название */}
                         <div className="flex items-center gap-3 shrink-0">
@@ -663,26 +663,26 @@ export default function ExamPage() {
                             </div>
                             <div>
                                 <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Вариант завершен</div>
-                                <div className="text-sm font-bold text-gray-800 truncate max-w-[220px]">{currentTopic.title}</div>
+                                <div className="text-sm font-bold text-gray-800 truncate max-w-[160px] md:max-w-[220px]">{currentTopic.title}</div>
                             </div>
                         </div>
 
-                        <div className="w-px h-8 bg-gray-200 shrink-0" />
+                        <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
 
-                        {/* Метрики — занимают оставшееся пространство */}
-                        <div className="flex items-center gap-8 flex-1">
+                        {/* Метрики */}
+                        <div className="flex items-center gap-4 md:gap-8 flex-1 min-w-0">
                             <div>
-                                <div className="text-2xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
+                                <div className="text-xl md:text-2xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
                                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
                             </div>
                             <div className="w-px h-6 bg-gray-100" />
                             <div>
-                                <div className="text-lg font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
+                                <div className="text-base md:text-lg font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
                                 <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
                             </div>
                             <div className="w-px h-6 bg-gray-100" />
                             <div>
-                                <div className="text-lg font-bold text-gray-900 leading-none">
+                                <div className="text-base md:text-lg font-bold text-gray-900 leading-none">
                                     {result.correct_count ?? taskResults.filter(r => r.is_correct).length}
                                     <span className="text-gray-300 font-normal text-sm">/{result.total_tasks ?? taskResults.length}</span>
                                 </div>
@@ -693,13 +693,13 @@ export default function ExamPage() {
                 </div>
 
                 {/* Results Table */}
-                <div className="max-w-5xl mx-auto px-6 py-6">
+                <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 md:py-6">
                     {taskResults.length > 0 && (
                         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                             <div className="px-5 py-3 border-b border-gray-100">
                                 <h2 className="text-sm font-bold text-gray-700">Подробные результаты</h2>
                             </div>
-                            <div className="grid grid-cols-2 divide-x divide-gray-200">
+                            <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-gray-200">
                                 <table className="w-full text-sm border-collapse">
                                     <TableHead />
                                     <tbody>
@@ -978,27 +978,27 @@ export default function ExamPage() {
     return (
         <div className="h-screen flex flex-col overflow-hidden bg-[#F8F7F4]">
             {/* Header */}
-            <div className="h-14 flex items-center justify-between px-6 bg-white shrink-0 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-[#3F8C62]">
-                        <Clock size={18} />
-                        <span className="font-mono text-lg font-bold">
+            <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
+                <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                    <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
+                        <Clock size={16} />
+                        <span className="font-mono text-base md:text-lg font-bold">
                             {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
                         </span>
                     </div>
-                    <div className="w-px h-5 bg-gray-200 mx-2" />
-                    <h1 className="font-bold text-gray-900 truncate max-w-[300px]">
+                    <div className="w-px h-5 bg-gray-200 mx-1 md:mx-2 shrink-0" />
+                    <h1 className="font-bold text-gray-900 truncate text-sm md:text-base">
                         {currentTopic.title}
                     </h1>
                 </div>
-                
+
                 <button
                     onClick={handleSubmit}
                     disabled={isSubmitting}
-                    className="bg-[#3F8C62] hover:bg-[#357A54] text-white px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50 flex items-center gap-2"
+                    className="bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 md:px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50 flex items-center gap-2 shrink-0"
                 >
                     <Send size={14} />
-                    {isSubmitting ? "Отправка..." : "Завершить"}
+                    {isSubmitting ? "..." : "Завершить"}
                 </button>
             </div>
 
@@ -1009,7 +1009,7 @@ export default function ExamPage() {
                 return (
                     <div className="fixed inset-0 z-50 flex">
                         <div className="flex-1 bg-black/20" onClick={() => setSolutionPanelTaskId(null)} />
-                        <div className="w-[520px] bg-white h-full shadow-2xl flex flex-col border-l border-gray-200">
+                        <div className="w-full md:w-[520px] bg-white h-full shadow-2xl flex flex-col border-l border-gray-200">
                             <div className="p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
                                 <div>
                                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">
@@ -1099,11 +1099,11 @@ export default function ExamPage() {
 
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-8 pt-6">
+                <div className="flex-1 overflow-y-auto p-4 pt-4 md:p-8 md:pt-6">
                     {/* Navigation bar */}
-                    <div 
+                    <div
                         ref={questionsScrollRef}
-                        className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar"
+                        className="flex gap-1.5 md:gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar"
                         style={{ scrollbarWidth: 'none' }}
                     >
                         {tasks.map((t, idx) => {
@@ -1129,24 +1129,24 @@ export default function ExamPage() {
 
                     {/* Task Content Area */}
                     <div className="flex flex-col lg:flex-row gap-6 items-start">
-                        <div className="flex-1 w-full bg-white border border-gray-200 rounded-[24px] p-8 min-h-[400px] shadow-sm relative">
+                        <div className="flex-1 w-full bg-white border border-gray-200 rounded-[24px] p-4 md:p-8 min-h-[300px] md:min-h-[400px] shadow-sm relative">
                             {taskLoading ? (
                                 <Skeleton />
                             ) : task ? (
                                 <>
-                                    <div className="flex items-center gap-2 mb-6">
+                                    <div className="flex items-center flex-wrap gap-2 mb-4 md:mb-6">
                                         <span className="bg-gray-100 text-gray-500 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
                                             Задание {taskIndex + 1}
                                         </span>
                                         <span className="bg-emerald-50 text-[#3F8C62] px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
                                             {(taskIndex + 1) >= 26 ? "2 балла" : "1 балл"}
                                         </span>
-                                        <span className="text-gray-300 mx-1">•</span>
-                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-tight">
+                                        <span className="hidden sm:inline text-gray-300 mx-1">•</span>
+                                        <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-tight">
                                             {task.title || "Вариант ЕГЭ"}
                                         </span>
                                     </div>
-                                    <div className="prose prose-slate max-w-none text-gray-800 leading-relaxed text-lg">
+                                    <div className="prose prose-slate max-w-none text-gray-800 leading-relaxed text-base md:text-lg">
                                         <TaskView
                                             content={task.content_html}
                                             files={task.media_resources?.files}
@@ -1158,7 +1158,7 @@ export default function ExamPage() {
 
                         {/* Right Panel: Answer */}
                         <div className="w-full lg:w-[320px] shrink-0">
-                            <div className="bg-white border border-gray-200 rounded-[24px] p-6 shadow-sm">
+                            <div className="bg-white border border-gray-200 rounded-[24px] p-4 md:p-6 shadow-sm">
                                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 ml-1">
                                     Ваш ответ
                                 </label>

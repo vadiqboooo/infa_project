@@ -60,7 +60,7 @@ function ExamCard({ variant, badge, badgeClass }: { variant: TopicNav; badge: st
     return (
         <button
             onClick={() => navigate(`/exams/${variant.id}`)}
-            className="group bg-white border border-gray-200 rounded-2xl p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full max-w-[400px] h-full min-h-[200px]"
+            className="group bg-white border border-gray-200 rounded-2xl p-4 md:p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full max-w-[400px] h-full min-h-[180px] md:min-h-[200px]"
         >
             {/* Large Score for non-mock solved */}
             {isSolved && !isMock && (
@@ -163,7 +163,7 @@ function Section({ sectionKey, title, subtitle, icon: Icon, color, badge, badgeC
                     <p className="text-xs text-gray-400">{subtitle}</p>
                 </div>
             </div>
-            <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),380px))] justify-start">
+            <div className="grid gap-4 md:gap-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),380px))] justify-start">
                 {topics.map(variant => (
                     <ExamCard key={variant.id} variant={variant} badge={badge} badgeClass={badgeClass} />
                 ))}
@@ -188,9 +188,9 @@ export default function ExamsListPage() {
 
     if (isLoading && !topics) {
         return (
-            <div className="p-8 space-y-6">
+            <div className="p-4 md:p-8 space-y-6">
                 <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-                <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),380px))]">
+                <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),380px))]">
                     {[1, 2, 3].map(i => <div key={i} className="h-48 bg-white border border-gray-100 rounded-2xl animate-pulse" />)}
                 </div>
             </div>
@@ -198,9 +198,9 @@ export default function ExamsListPage() {
     }
 
     return (
-        <div className="p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">Варианты ЕГЭ</h1>
+        <div className="p-4 md:p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
+            <div className="mb-6 md:mb-8">
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Варианты ЕГЭ</h1>
                 <p className="text-gray-500 text-sm">Контрольные работы, варианты и пробники</p>
             </div>
 

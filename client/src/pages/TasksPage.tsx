@@ -180,19 +180,19 @@ export default function TasksPage() {
     return (
         <div className="flex flex-col h-full overflow-hidden bg-[#F8F7F4]">
             {/* Header */}
-            <div className="h-14 flex items-center px-6 bg-white shrink-0 border-b border-gray-100">
-                <div className="flex items-center gap-3 w-full">
+            <div className="h-14 flex items-center px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
+                <div className="flex items-center gap-2 md:gap-3 w-full min-w-0">
                     <button
                         onClick={() => navigate(backPath)}
-                        className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                        className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors shrink-0"
                     >
                         <ArrowLeft size={16} />
-                        <span>Назад</span>
+                        <span className="hidden sm:inline">Назад</span>
                     </button>
-                    <div className="w-px h-5 bg-gray-200" />
-                    <h1 className="font-bold text-gray-900 truncate">{currentTopic.title}</h1>
-                    
-                    <div className="ml-auto flex items-center gap-3">
+                    <div className="w-px h-5 bg-gray-200 shrink-0" />
+                    <h1 className="font-bold text-gray-900 truncate text-sm md:text-base">{currentTopic.title}</h1>
+
+                    <div className="ml-auto flex items-center gap-2 md:gap-3 shrink-0">
                         {isVariant && examInfo?.active_attempt ? (
                             <>
                                 <ExamTimer
@@ -204,11 +204,12 @@ export default function TasksPage() {
                                     disabled={submitExam.isPending}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors"
                                 >
-                                    {submitExam.isPending ? "Отправка..." : "Завершить экзамен"}
+                                    {submitExam.isPending ? "..." : <span className="hidden sm:inline">Завершить</span>}
+                                    <span className="sm:hidden">Завершить</span>
                                 </button>
                             </>
                         ) : null}
-                        <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">
+                        <span className="hidden sm:flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">
                             <Code2 size={11} />
                             Python
                         </span>
@@ -218,11 +219,11 @@ export default function TasksPage() {
 
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-8 pt-8" style={{ minWidth: 0 }}>
+                <div className="flex-1 overflow-y-auto p-4 pt-4 md:p-8 md:pt-8" style={{ minWidth: 0 }}>
                     {!isVariant || !examInfo || (examInfo.active_attempt && !examResult) || viewingFinishedExam ? (
                         <>
                             {/* Task Navigation Row */}
-                            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                            <div className="flex gap-1.5 md:gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 scrollbar-hide">
                                 {tasks.map((t, idx) => (
                                     <button
                                         key={t.id}
@@ -252,12 +253,12 @@ export default function TasksPage() {
                             {/* Content */}
                             <div className="flex flex-col lg:flex-row gap-6 items-start">
                                 {/* Left: Task Card */}
-                                <div className="flex-1 w-full bg-white border border-gray-200 rounded-xl p-6 min-h-[300px] shadow-sm relative">
+                                <div className="flex-1 w-full bg-white border border-gray-200 rounded-xl p-4 md:p-6 min-h-[300px] shadow-sm relative">
                                     {taskLoading ? (
                                         <Skeleton />
                                     ) : task ? (
                                         <>
-                                            <div className="flex items-center gap-2 mb-3">
+                                            <div className="flex items-center gap-2 mb-3 flex-wrap">
                                                 <span className={clsx(
                                                     'px-2 py-0.5 rounded-full text-xs font-medium',
                                                     task.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' :
@@ -265,7 +266,7 @@ export default function TasksPage() {
                                                 )}>
                                                     {task.difficulty === 'easy' ? 'Лёгкая' : task.difficulty === 'medium' ? 'Средняя' : 'Сложная'}
                                                 </span>
-                                                <span className="text-xs text-gray-400">
+                                                <span className="text-xs text-gray-400 hidden sm:inline">
                                                     Задание {taskIndex + 1} — {task.title || 'Информатика'}
                                                 </span>
                                                 <div className="ml-auto flex items-center gap-2">
@@ -303,7 +304,7 @@ export default function TasksPage() {
                                             </div>
 
                                             {/* Answer section — bottom of task card */}
-                                            <div className="mt-6 pt-4 border-t border-gray-100 max-w-[40%]">
+                                            <div className="mt-6 pt-4 border-t border-gray-100 max-w-full md:max-w-[50%]">
                                                 <div className="flex items-start gap-3">
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Ваш ответ</div>
