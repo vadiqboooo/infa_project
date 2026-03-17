@@ -145,7 +145,7 @@ export function useRecentSolutions(limit: number = 10) {
 export function useGenerateSteps() {
     return useMutation<{ steps: SolutionStep[]; examples_used: number }, Error, number>({
         mutationFn: async (taskId: number) => {
-            const apiKey = localStorage.getItem("parser_api_key") || "";
+            const apiKey = localStorage.getItem("admin_api_key") || "";
             const res = await fetch(`/api/admin/tasks/${taskId}/generate-steps`, {
                 method: "POST",
                 headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
