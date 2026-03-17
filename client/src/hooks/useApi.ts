@@ -146,9 +146,14 @@ export function useGenerateSteps() {
     return useMutation<{ steps: SolutionStep[]; examples_used: number }, Error, number>({
         mutationFn: async (taskId: number) => {
             const apiKey = localStorage.getItem("admin_api_key") || "";
+            const jwt = localStorage.getItem("jwt_token") || "";
             const res = await fetch(`/api/admin/tasks/${taskId}/generate-steps`, {
                 method: "POST",
-                headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+                headers: {
+                    "X-API-Key": apiKey,
+                    "Content-Type": "application/json",
+                    ...(jwt ? { "Authorization": `Bearer ${jwt}` } : {}),
+                },
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
