@@ -360,11 +360,27 @@ export interface TokenResponse {
 
 export interface User {
     id: number;
-    tg_id: number;
+    tg_id: number | null;
     username: string | null;
     first_name: string | null;
     first_name_real: string | null;
     last_name_real: string | null;
     photo_url: string | null;
     role: string;
+    login: string | null;
+}
+
+/* ── Password auth ─────────────────────────────────── */
+export interface PasswordStudentCreate {
+    first_name: string;
+    last_name: string;
+    login?: string;
+}
+
+export interface PasswordStudentCredential {
+    id: number;
+    name: string;
+    login: string;
+    plain_password: string;
+    group_ids: number[];
 }

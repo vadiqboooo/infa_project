@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
   Search, ChevronDown, ChevronUp, ExternalLink, Shield, User as UserIcon,
-  Plus, Pencil, Trash2, X, Check, Users,
+  Plus, Pencil, Trash2, X, Check, Users, Printer, KeyRound, RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import type { StudentOut, GroupOut } from '../../api/types';
+import type { StudentOut, GroupOut, PasswordStudentCredential } from '../../api/types';
 
 interface StudentsTableProps {
   students: StudentOut[];
@@ -39,6 +39,20 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupColor, setEditGroupColor] = useState('');
   const [openAssignFor, setOpenAssignFor] = useState<number | null>(null);
+
+  // Create student state
+  const [showCreateStudent, setShowCreateStudent] = useState(false);
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
+  const [newLoginInput, setNewLoginInput] = useState('');
+  const [creatingStudent, setCreatingStudent] = useState(false);
+  const [lastCreated, setLastCreated] = useState<PasswordStudentCredential | null>(null);
+
+  // Credentials print state
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [credentials, setCredentials] = useState<PasswordStudentCredential[]>([]);
+  const [loadingCredentials, setLoadingCredentials] = useState(false);
+  const [resettingId, setResettingId] = useState<number | null>(null);
 
   const filtered = students.filter((s) => {
     const matchesSearch =
@@ -131,6 +145,65 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       headers: authHeaders(apiKey),
     });
     onRefresh?.();
+  };
+
+  const handleCreateStudent = async () => {
+    if (!newFirstName.trim() || !newLastName.trim()) return;
+    setCreatingStudent(true);
+    try {
+      const body: Record<string, string> = {
+        first_name: newFirstName.trim(),
+        last_name: newLastName.trim(),
+      };
+      if (newLoginInput.trim()) body.login = newLoginInput.trim();
+      const res = await fetch(`${API_BASE}/admin/students`, {
+        method: 'POST',
+        headers: authHeaders(apiKey),
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
+        alert(err.detail || 'Ошибка создания');
+        return;
+      }
+      const created: PasswordStudentCredential = await res.json();
+      setLastCreated(created);
+      setNewFirstName('');
+      setNewLastName('');
+      setNewLoginInput('');
+      onRefresh?.();
+    } finally {
+      setCreatingStudent(false);
+    }
+  };
+
+  const handleLoadCredentials = async () => {
+    setLoadingCredentials(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/students/credentials`, {
+        headers: authHeaders(apiKey),
+      });
+      const data: PasswordStudentCredential[] = await res.json();
+      setCredentials(data);
+      setShowCredentials(true);
+    } finally {
+      setLoadingCredentials(false);
+    }
+  };
+
+  const handleResetPassword = async (studentId: number) => {
+    setResettingId(studentId);
+    try {
+      const res = await fetch(`${API_BASE}/admin/students/${studentId}/reset-password`, {
+        method: 'POST',
+        headers: authHeaders(apiKey),
+      });
+      if (!res.ok) return;
+      const updated: PasswordStudentCredential = await res.json();
+      setCredentials((prev) => prev.map((c) => c.id === studentId ? updated : c));
+    } finally {
+      setResettingId(null);
+    }
   };
 
   const GROUP_COLORS = ['#3F8C62', '#6366f1', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6'];
@@ -248,8 +321,8 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       </div>
 
       {/* ── Filters ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
             <input
@@ -288,7 +361,24 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
             </button>
           )}
         </div>
-        <div className="text-sm text-gray-500">{sorted.length} учеников</div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500 mr-1">{sorted.length} учеников</span>
+          <button
+            onClick={handleLoadCredentials}
+            disabled={loadingCredentials}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl transition-all disabled:opacity-50"
+          >
+            <Printer size={14} />
+            Данные для входа
+          </button>
+          <button
+            onClick={() => setShowCreateStudent(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl transition-all shadow-sm"
+          >
+            <Plus size={14} />
+            Добавить ученика
+          </button>
+        </div>
       </div>
 
       {/* ── Table ─────────────────────────────────────────────────── */}
@@ -492,6 +582,166 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
           </div>
         )}
       </div>
+
+      {/* ── Create Student Modal ──────────────────────────────────── */}
+      {showCreateStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">Добавить ученика</h2>
+              <button onClick={() => { setShowCreateStudent(false); setLastCreated(null); }} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            {lastCreated ? (
+              <div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+                  <p className="text-sm font-bold text-emerald-800 mb-3">Ученик создан успешно!</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Имя</span>
+                      <span className="text-sm font-semibold text-gray-900">{lastCreated.name}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Логин</span>
+                      <span className="text-sm font-mono font-bold text-[#3F8C62]">{lastCreated.login}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Пароль</span>
+                      <span className="text-sm font-mono font-bold text-[#3F8C62]">{lastCreated.plain_password}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setLastCreated(null)}
+                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Добавить ещё
+                  </button>
+                  <button
+                    onClick={() => { setShowCreateStudent(false); setLastCreated(null); }}
+                    className="flex-1 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all"
+                  >
+                    Готово
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Имя</label>
+                  <input
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                    placeholder="Иван"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Фамилия</label>
+                  <input
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    placeholder="Иванов"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
+                    Логин <span className="text-gray-300 font-normal normal-case">(необязательно — сгенерируется автоматически)</span>
+                  </label>
+                  <input
+                    value={newLoginInput}
+                    onChange={(e) => setNewLoginInput(e.target.value)}
+                    placeholder="ivanov_i"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                  />
+                </div>
+                <button
+                  onClick={handleCreateStudent}
+                  disabled={creatingStudent || !newFirstName.trim() || !newLastName.trim()}
+                  className="w-full py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingStudent ? 'Создание...' : 'Создать ученика'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Print Credentials Modal ───────────────────────────────── */}
+      {showCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Данные для входа учеников</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl transition-all"
+                >
+                  <Printer size={14} />
+                  Печать
+                </button>
+                <button onClick={() => setShowCredentials(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6">
+              {credentials.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <KeyRound size={40} className="mx-auto mb-3 opacity-20" />
+                  <p className="font-bold text-gray-900">Нет учеников с паролем</p>
+                  <p className="text-sm">Добавьте учеников через кнопку "Добавить ученика"</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {credentials.map((cred) => {
+                    const group = groups.find(g => cred.group_ids.includes(g.id));
+                    return (
+                      <div key={cred.id} className="border border-gray-200 rounded-xl p-4 relative group/cred">
+                        {group && (
+                          <span
+                            className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-md text-white"
+                            style={{ backgroundColor: group.color }}
+                          >
+                            {group.name}
+                          </span>
+                        )}
+                        <p className="text-sm font-bold text-gray-900 mb-2 pr-16">{cred.name}</p>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 w-12">Логин</span>
+                            <span className="text-xs font-mono font-semibold text-gray-700">{cred.login}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 w-12">Пароль</span>
+                            <span className="text-xs font-mono font-semibold text-[#3F8C62]">{cred.plain_password}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleResetPassword(cred.id)}
+                          disabled={resettingId === cred.id}
+                          title="Сбросить пароль"
+                          className="absolute bottom-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-orange-500 hover:bg-orange-50 opacity-0 group-hover/cred:opacity-100 transition-all disabled:opacity-50 print:hidden"
+                        >
+                          <RefreshCw size={13} className={resettingId === cred.id ? 'animate-spin' : ''} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

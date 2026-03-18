@@ -185,3 +185,19 @@ class GroupOut(BaseModel):
     student_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+# ── Password-based student creation ───────────────────────────
+
+class PasswordStudentCreate(BaseModel):
+    first_name: str
+    last_name: str
+    login: str | None = None  # auto-generated if omitted
+
+
+class PasswordStudentCredential(BaseModel):
+    id: int
+    name: str
+    login: str
+    plain_password: str
+    group_ids: list[int] = []

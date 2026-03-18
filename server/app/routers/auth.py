@@ -1,4 +1,4 @@
-"""Auth router — Telegram Login Widget verification + JWT issuance."""
+"""Auth router — Telegram Login Widget verification + JWT issuance + login/password auth."""
 
 import hashlib
 import hmac
@@ -6,15 +6,18 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import jwt
+from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.auth import TelegramAuthData, TokenResponse, UserSchema, UserUpdate
+from app.schemas.auth import LoginAuthData, TelegramAuthData, TokenResponse, UserSchema, UserUpdate
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("/me", response_model=UserSchema)
@@ -34,7 +37,7 @@ async def update_me(
         user.first_name_real = body.first_name_real
     if body.last_name_real is not None:
         user.last_name_real = body.last_name_real
-    
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -86,6 +89,28 @@ async def auth_telegram(body: TelegramAuthData, db: AsyncSession = Depends(get_d
 
     await db.commit()
     await db.refresh(user)
+
+    token = _create_jwt(user.id)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/login", response_model=TokenResponse)
+async def auth_login(body: LoginAuthData, db: AsyncSession = Depends(get_db)):
+    """Authenticate via login and password (for students without Telegram)."""
+    result = await db.execute(select(User).where(User.login == body.login))
+    user = result.scalar_one_or_none()
+
+    if user is None or user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный логин или пароль",
+        )
+
+    if not pwd_context.verify(body.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный логин или пароль",
+        )
 
     token = _create_jwt(user.id)
     return TokenResponse(access_token=token)

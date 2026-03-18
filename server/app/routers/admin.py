@@ -3,10 +3,13 @@
 import json
 import os
 import re
+import secrets
+import string
 import uuid
 import httpx
 from datetime import timedelta
 from pathlib import Path
+from passlib.context import CryptContext
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +43,17 @@ from app.schemas.admin import (
     TopicStatsTaskInfo,
     GroupIn,
     GroupOut,
+    PasswordStudentCreate,
+    PasswordStudentCredential,
 )
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _generate_password(length: int = 8) -> str:
+    """Generate a random readable password (letters + digits)."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 router = APIRouter(
     tags=["admin"],
@@ -273,8 +286,109 @@ async def list_students(db: AsyncSession = Depends(get_db)):
     for user in users:
         student = await get_student_detail(user.id, db)
         students.append(student)
-    
+
     return students
+
+
+@router.post("/students", response_model=PasswordStudentCredential, status_code=status.HTTP_201_CREATED)
+async def create_password_student(body: PasswordStudentCreate, db: AsyncSession = Depends(get_db)):
+    """Create a new student with login/password (no Telegram required)."""
+    # Auto-generate login from name if not provided
+    if body.login:
+        login = body.login.strip().lower()
+    else:
+        base = f"{body.last_name.strip().lower()}_{body.first_name.strip().lower()[0]}"
+        # Transliterate basic Cyrillic for a readable login
+        translit = str.maketrans("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ",
+                                  "abvgdeyozhziyklmnoprstufhtschchshyyeyuyaABVGDEYOZHZIYKLMNOPRSTUFHTSCHCHSHYYEYUYA")
+        login = base.translate(translit)
+        # Keep only safe chars
+        login = re.sub(r"[^a-z0-9_]", "", login)
+        if not login:
+            login = f"student_{secrets.token_hex(4)}"
+
+    # Ensure login is unique
+    existing = await db.execute(select(User).where(User.login == login))
+    if existing.scalar_one_or_none():
+        suffix = secrets.token_hex(2)
+        login = f"{login}_{suffix}"
+
+    password = _generate_password()
+    password_hash = _pwd_context.hash(password)
+
+    name_display = f"{body.first_name} {body.last_name}".strip()
+    user = User(
+        first_name_real=body.first_name,
+        last_name_real=body.last_name,
+        first_name=name_display,
+        login=login,
+        password_hash=password_hash,
+        plain_password=password,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return PasswordStudentCredential(
+        id=user.id,
+        name=name_display,
+        login=login,
+        plain_password=password,
+    )
+
+
+@router.post("/students/{user_id}/reset-password", response_model=PasswordStudentCredential)
+async def reset_student_password(user_id: int, db: AsyncSession = Depends(get_db)):
+    """Generate a new password for a student and return it."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.login:
+        raise HTTPException(status_code=400, detail="This user does not use login/password auth")
+
+    password = _generate_password()
+    user.password_hash = _pwd_context.hash(password)
+    user.plain_password = password
+    await db.commit()
+
+    name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
+
+    # Get group ids
+    groups_res = await db.execute(select(user_groups.c.group_id).where(user_groups.c.user_id == user.id))
+    group_ids = [row[0] for row in groups_res.all()]
+
+    return PasswordStudentCredential(
+        id=user.id,
+        name=name,
+        login=user.login,
+        plain_password=password,
+        group_ids=group_ids,
+    )
+
+
+@router.get("/students/credentials", response_model=list[PasswordStudentCredential])
+async def list_student_credentials(db: AsyncSession = Depends(get_db)):
+    """Return all password-based students with their login credentials (for printing)."""
+    result = await db.execute(
+        select(User).where(User.login.is_not(None)).order_by(User.last_name_real, User.first_name_real)
+    )
+    users = result.scalars().all()
+
+    credentials = []
+    for user in users:
+        groups_res = await db.execute(select(user_groups.c.group_id).where(user_groups.c.user_id == user.id))
+        group_ids = [row[0] for row in groups_res.all()]
+        name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
+        credentials.append(PasswordStudentCredential(
+            id=user.id,
+            name=name,
+            login=user.login,
+            plain_password=user.plain_password or "",
+            group_ids=group_ids,
+        ))
+
+    return credentials
 
 
 @router.patch("/users/{user_id}/role", response_model=StudentOut)
