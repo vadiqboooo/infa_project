@@ -9,7 +9,7 @@ import uuid
 import httpx
 from datetime import timedelta
 from pathlib import Path
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +48,8 @@ from app.schemas.admin import (
     SetStudentCredentials,
 )
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def _hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
 
 
 def _generate_password(length: int = 8) -> str:
@@ -315,7 +316,7 @@ async def create_password_student(body: PasswordStudentCreate, db: AsyncSession 
         login = f"{login}_{suffix}"
 
     password = _generate_password()
-    password_hash = _pwd_context.hash(password)
+    password_hash = _hash_password(password)
 
     name_display = f"{body.first_name} {body.last_name}".strip()
     user = User(
@@ -349,7 +350,7 @@ async def reset_student_password(user_id: int, db: AsyncSession = Depends(get_db
         raise HTTPException(status_code=400, detail="This user does not use login/password auth")
 
     password = _generate_password()
-    user.password_hash = _pwd_context.hash(password)
+    user.password_hash = _hash_password(password)
     user.plain_password = password
     await db.commit()
 
@@ -384,7 +385,7 @@ async def set_student_credentials(user_id: int, body: SetStudentCredentials, db:
 
     password = _generate_password()
     user.login = login
-    user.password_hash = _pwd_context.hash(password)
+    user.password_hash = _hash_password(password)
     user.plain_password = password
     await db.commit()
 
