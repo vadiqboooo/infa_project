@@ -54,6 +54,13 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [resettingId, setResettingId] = useState<number | null>(null);
 
+  // Set credentials for existing student
+  const [setCredsFor, setSetCredsFor] = useState<{ id: number; name: string } | null>(null);
+  const [setCredsLogin, setSetCredsLogin] = useState('');
+  const [setCredsResult, setSetCredsResult] = useState<PasswordStudentCredential | null>(null);
+  const [settingCreds, setSettingCreds] = useState(false);
+  const [setCredsError, setSetCredsError] = useState('');
+
   const filtered = students.filter((s) => {
     const matchesSearch =
       s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -203,6 +210,28 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       setCredentials((prev) => prev.map((c) => c.id === studentId ? updated : c));
     } finally {
       setResettingId(null);
+    }
+  };
+
+  const handleSetCredentials = async () => {
+    if (!setCredsFor || !setCredsLogin.trim()) return;
+    setSettingCreds(true);
+    setSetCredsError('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/students/${setCredsFor.id}/credentials`, {
+        method: 'PUT',
+        headers: authHeaders(apiKey),
+        body: JSON.stringify({ login: setCredsLogin.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
+        setSetCredsError(err.detail || 'Ошибка');
+        return;
+      }
+      const result: PasswordStudentCredential = await res.json();
+      setSetCredsResult(result);
+    } finally {
+      setSettingCreds(false);
     }
   };
 
@@ -541,6 +570,18 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                           </button>
                         )}
                         <button
+                          onClick={() => {
+                            setSetCredsFor({ id: student.id, name: student.name });
+                            setSetCredsLogin('');
+                            setSetCredsResult(null);
+                            setSetCredsError('');
+                          }}
+                          title="Логин / пароль"
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-500 transition-all"
+                        >
+                          <KeyRound size={15} />
+                        </button>
+                        <button
                           onClick={() => setExpandedId(isExpanded ? null : student.id)}
                           className={clsx('p-1.5 rounded-lg transition-all', isExpanded ? 'bg-emerald-100 text-emerald-700' : 'text-gray-400 hover:bg-gray-100')}
                         >
@@ -582,6 +623,71 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
           </div>
         )}
       </div>
+
+      {/* ── Set Credentials Modal ────────────────────────────────── */}
+      {setCredsFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Логин и пароль</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{setCredsFor.name}</p>
+              </div>
+              <button
+                onClick={() => { setSetCredsFor(null); setSetCredsResult(null); }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {setCredsResult ? (
+              <div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 space-y-2">
+                  <p className="text-xs font-bold text-emerald-800 mb-2">Данные для входа установлены!</p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Логин</span>
+                    <span className="text-sm font-mono font-bold text-[#3F8C62]">{setCredsResult.login}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Пароль</span>
+                    <span className="text-sm font-mono font-bold text-[#3F8C62]">{setCredsResult.plain_password}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSetCredsFor(null); setSetCredsResult(null); }}
+                  className="w-full py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all"
+                >
+                  Готово
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Логин</label>
+                  <input
+                    value={setCredsLogin}
+                    onChange={(e) => setSetCredsLogin(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSetCredentials(); }}
+                    placeholder="ivanov_ivan"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1 ml-1">Пароль будет сгенерирован автоматически</p>
+                </div>
+                {setCredsError && <p className="text-red-500 text-xs ml-1">{setCredsError}</p>}
+                <button
+                  onClick={handleSetCredentials}
+                  disabled={settingCreds || !setCredsLogin.trim()}
+                  className="w-full py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {settingCreds ? 'Сохранение...' : 'Установить'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Create Student Modal ──────────────────────────────────── */}
       {showCreateStudent && (

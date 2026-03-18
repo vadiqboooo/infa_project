@@ -384,3 +384,7 @@ export interface PasswordStudentCredential {
     plain_password: string;
     group_ids: number[];
 }
+
+export interface SetStudentCredentials {
+    login: string;
+}

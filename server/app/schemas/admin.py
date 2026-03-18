@@ -195,6 +195,10 @@ class PasswordStudentCreate(BaseModel):
     login: str | None = None  # auto-generated if omitted
 
 
+class SetStudentCredentials(BaseModel):
+    login: str
+
+
 class PasswordStudentCredential(BaseModel):
     id: int
     name: str

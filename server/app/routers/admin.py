@@ -45,6 +45,7 @@ from app.schemas.admin import (
     GroupOut,
     PasswordStudentCreate,
     PasswordStudentCredential,
+    SetStudentCredentials,
 )
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -362,6 +363,40 @@ async def reset_student_password(user_id: int, db: AsyncSession = Depends(get_db
         id=user.id,
         name=name,
         login=user.login,
+        plain_password=password,
+        group_ids=group_ids,
+    )
+
+
+@router.put("/students/{user_id}/credentials", response_model=PasswordStudentCredential)
+async def set_student_credentials(user_id: int, body: SetStudentCredentials, db: AsyncSession = Depends(get_db)):
+    """Assign login/password to any existing user (including Telegram users)."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    login = body.login.strip().lower()
+    # Check uniqueness (ignore if it's already this user's login)
+    existing = await db.execute(select(User).where(User.login == login, User.id != user_id))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Логин уже занят")
+
+    password = _generate_password()
+    user.login = login
+    user.password_hash = _pwd_context.hash(password)
+    user.plain_password = password
+    await db.commit()
+
+    name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
+
+    groups_res = await db.execute(select(user_groups.c.group_id).where(user_groups.c.user_id == user.id))
+    group_ids = [row[0] for row in groups_res.all()]
+
+    return PasswordStudentCredential(
+        id=user.id,
+        name=name,
+        login=login,
         plain_password=password,
         group_ids=group_ids,
     )
