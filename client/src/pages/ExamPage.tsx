@@ -35,6 +35,8 @@ export default function ExamPage() {
     const [examResult, setExamResult] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
+    const autoSubmitRef = useRef<() => void>(() => {});
 
     // Solution attachment state
     const CODE_TASK_NUMS = new Set([2,5,6,7,8,9,11,13,14,15,16,17,23,24,25,26,27]);
@@ -159,7 +161,7 @@ export default function ExamPage() {
         const tick = () => {
             const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0) handleAutoSubmit();
+            if (remaining === 0) autoSubmitRef.current();
         };
         const timer = setInterval(tick, 1000);
         const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
@@ -194,16 +196,11 @@ export default function ExamPage() {
         }
     };
 
-    const handleAutoSubmit = () => {
-        if (!examResult) {
-            handleSubmit();
-        }
-    };
+    const handleSubmit = async (skipConfirm = false) => {
+        if (!examInfo || isSubmittingRef.current) return;
+        if (!skipConfirm && timeLeft !== 0 && !confirm("Вы уверены, что хотите завершить экзамен и отправить ответы?")) return;
 
-    const handleSubmit = async () => {
-        if (!examInfo || isSubmitting) return;
-        if (timeLeft !== 0 && !confirm("Вы уверены, что хотите завершить экзамен и отправить ответы?")) return;
-
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             const payload = {
@@ -256,9 +253,20 @@ export default function ExamPage() {
         } catch (err) {
             alert("Ошибка при отправке ответов");
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
+
+    // Keep autoSubmitRef pointing to the latest version of handleSubmit on every render
+    // so the setInterval timer never uses a stale closure
+    useEffect(() => {
+        autoSubmitRef.current = () => {
+            if (!examResult && !isSubmittingRef.current) {
+                handleSubmit(true);
+            }
+        };
+    });
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
