@@ -12,8 +12,7 @@ export function Sidebar() {
 
   const links = [
     { icon: Home, label: 'Главная', path: '/dashboard' },
-    { icon: BookOpen, label: 'Разбор', path: '/tasks' },
-    { icon: ClipboardList, label: 'Домашняя работа', path: '/homework' },
+    { icon: BookOpen, label: 'Задания', path: '/tasks' },
     { icon: FileText, label: 'Варианты', path: '/exams' },
   ];
 
@@ -21,9 +20,11 @@ export function Sidebar() {
     if (path === '/dashboard')
       return location.pathname === '/dashboard' || location.pathname === '/';
     if (path === '/tasks')
-      return location.pathname === '/tasks' || location.pathname.startsWith('/task/');
-    if (path === '/exam')
-      return location.pathname === '/exam' || location.pathname.startsWith('/exam/');
+      return location.pathname === '/tasks'
+        || location.pathname.startsWith('/tasks/')
+        || location.pathname.startsWith('/homework/');
+    if (path === '/exams')
+      return location.pathname === '/exams' || location.pathname.startsWith('/exams/');
     return location.pathname.startsWith(path);
   };
 

@@ -7,8 +7,7 @@ import { useAuth } from '../context/AuthContext';
 
 const links = [
     { icon: Home, label: 'Главная', path: '/dashboard' },
-    { icon: BookOpen, label: 'Разбор', path: '/tasks' },
-    { icon: ClipboardList, label: 'Домашка', path: '/homework' },
+    { icon: BookOpen, label: 'Задания', path: '/tasks' },
     { icon: FileText, label: 'Варианты', path: '/exams' },
 ];
 
@@ -20,8 +19,9 @@ export function BottomNav() {
 
     const isActive = (path: string) => {
         if (path === '/dashboard') return location.pathname === '/dashboard' || location.pathname === '/';
-        if (path === '/tasks') return location.pathname === '/tasks' || location.pathname.startsWith('/tasks/');
-        if (path === '/homework') return location.pathname === '/homework' || location.pathname.startsWith('/homework/');
+        if (path === '/tasks') return location.pathname === '/tasks'
+            || location.pathname.startsWith('/tasks/')
+            || location.pathname.startsWith('/homework/');
         return location.pathname.startsWith(path);
     };
 
