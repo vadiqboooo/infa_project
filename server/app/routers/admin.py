@@ -941,7 +941,31 @@ async def get_attempt_analysis(attempt_id: int, db: AsyncSession = Depends(get_d
     rec = result.scalar_one_or_none()
     if rec is None:
         raise HTTPException(status_code=404, detail="No analysis found")
-    return {"analysis": rec.analysis_text, "created_at": rec.created_at}
+    return {
+        "analysis": rec.analysis_text,
+        "comment": rec.comment,
+        "is_published": rec.is_published,
+        "created_at": rec.created_at,
+    }
+
+
+@router.post("/attempts/{attempt_id}/publish")
+async def publish_attempt_analysis(
+    attempt_id: int,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save teacher comment and publish/unpublish analysis for a student."""
+    result = await db.execute(
+        select(ExamAnalysis).where(ExamAnalysis.attempt_id == attempt_id)
+    )
+    rec = result.scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(status_code=404, detail="No analysis found — generate it first")
+    rec.comment = body.get("comment", rec.comment)
+    rec.is_published = bool(body.get("is_published", rec.is_published))
+    await db.commit()
+    return {"is_published": rec.is_published, "comment": rec.comment}
 
 
 @router.get("/attempts/{attempt_id}/results")

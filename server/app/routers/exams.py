@@ -15,6 +15,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
+from app.models.exam_analysis import ExamAnalysis
 from app.models.exam_attempt import ExamAttempt
 from app.models.task import Task
 from app.models.user import User
@@ -661,3 +662,36 @@ async def submit_for_review(
     flag_modified(attempt, "results_json")
     await db.commit()
     return {"submitted": True}
+
+
+@router.get("/attempt/{attempt_id}/analysis")
+async def get_published_analysis(
+    attempt_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return published teacher analysis for a student's own attempt."""
+    attempt_res = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+        )
+    )
+    if attempt_res.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    analysis_res = await db.execute(
+        select(ExamAnalysis).where(
+            ExamAnalysis.attempt_id == attempt_id,
+            ExamAnalysis.is_published.is_(True),
+        )
+    )
+    rec = analysis_res.scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(status_code=404, detail="No published analysis")
+
+    return {
+        "analysis_text": rec.analysis_text,
+        "comment": rec.comment,
+        "published_at": rec.updated_at,
+    }

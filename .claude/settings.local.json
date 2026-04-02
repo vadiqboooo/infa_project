@@ -14,7 +14,8 @@
       "mcp__figma-remote-mcp__whoami",
       "Bash(npm install:*)",
       "Bash(grep:*)",
-      "Bash(npx vite)"
+      "Bash(npx vite)",
+      "Bash(\"c:/Users/user/Desktop/infa_project/server/app/routers/exams.py\")"
     ]
   }
 }

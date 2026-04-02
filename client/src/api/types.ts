@@ -54,6 +54,7 @@ export interface TopicNav {
     time_limit_minutes?: number;
     is_mock: boolean;
     ege_number?: number | null;
+    analysis_published?: boolean;
 }
 
 /* ── Task ──────────────────────────────────────────── */

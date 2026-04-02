@@ -64,13 +64,13 @@ export function TasksListPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),400px))] justify-start">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-52 bg-gray-100 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : filtered.length > 0 ? (
-        <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),400px))] justify-start">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map(g => (
             <TopicCard
               key={g.egeNum}

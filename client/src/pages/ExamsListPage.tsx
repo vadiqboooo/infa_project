@@ -39,6 +39,7 @@ function ExamCard({ variant, badge, badgeClass }: { variant: TopicNav; badge: st
     const navigate = useNavigate();
     const isSolved = variant.latest_score !== undefined && variant.latest_score !== null;
     const isMock = String(variant.category) === 'mock';
+    const isPublished = isMock && !!variant.analysis_published;
     const solvedTasksCount = variant.tasks.filter(t => t.status === 'solved').length;
     const totalTasksCount = variant.tasks.length;
 
@@ -62,10 +63,10 @@ function ExamCard({ variant, badge, badgeClass }: { variant: TopicNav; badge: st
             onClick={() => navigate(`/exams/${variant.id}`)}
             className="group bg-white border border-gray-200 rounded-2xl p-4 md:p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full max-w-[400px] h-full min-h-[180px] md:min-h-[200px]"
         >
-            {/* Large Score for non-mock solved */}
-            {isSolved && !isMock && (
+            {/* Large Score background */}
+            {isSolved && (!isMock || isPublished) && (
                 <div className="absolute right-4 bottom-2 select-none pointer-events-none z-0 transition-transform group-hover:scale-105 duration-700">
-                    <span className="text-[120px] font-black text-[#3F8C62] leading-none tracking-tighter">
+                    <span className={cn("text-[120px] font-black leading-none tracking-tighter", isPublished ? "text-violet-200" : "text-[#3F8C62]")}>
                         {variant.latest_score?.toFixed(0)}
                     </span>
                 </div>
@@ -107,10 +108,30 @@ function ExamCard({ variant, badge, badgeClass }: { variant: TopicNav; badge: st
                 )}
 
                 {isMock && isSolved ? (
-                    <div className="flex items-center gap-1.5 text-violet-600 text-[10px] font-bold uppercase pt-1">
-                        <Trophy size={12} />
-                        Ответы записаны
-                    </div>
+                    isPublished ? (
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-3">
+                                <div>
+                                    <div className="text-xl font-black text-violet-600 leading-none">{variant.latest_score?.toFixed(0)}</div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
+                                </div>
+                                <div className="w-px h-6 bg-gray-100" />
+                                <div>
+                                    <div className="text-base font-bold text-gray-900 leading-none">{variant.latest_primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-violet-500 text-[10px] font-bold uppercase pt-1">
+                                <Trophy size={12} />
+                                Проверено учителем
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 text-violet-600 text-[10px] font-bold uppercase pt-1">
+                            <Trophy size={12} />
+                            Ответы записаны
+                        </div>
+                    )
                 ) : (
                     <div className="space-y-2 w-full relative z-20">
                         <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-tight">

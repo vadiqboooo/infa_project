@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
@@ -68,6 +68,15 @@ export default function ExamPage() {
     const finishedAttemptId = (examResult?.attempt_id) ?? (examInfo?.finished_attempt?.id) ?? 0;
     const saveCodeMutation = useSaveCodeSolution(finishedAttemptId);
     const checkCodeMutation = useCheckCode(finishedAttemptId);
+    const [publishedAnalysis, setPublishedAnalysis] = useState<{ analysis_text: string; comment: string | null } | null>(null);
+
+    useEffect(() => {
+        if (!finishedAttemptId) return;
+        const token = localStorage.getItem("jwt_token");
+        fetch(`/api/exams/attempt/${finishedAttemptId}/analysis`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).then(r => r.ok ? r.json() : null).then(d => { if (d) setPublishedAnalysis(d); }).catch(() => {});
+    }, [finishedAttemptId]);
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -335,45 +344,76 @@ export default function ExamPage() {
             <div className="min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center gap-3 md:gap-4">
+                    <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-wrap items-center gap-3 md:gap-4">
                         <button onClick={() => navigate('/exams')} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0">
                             <ArrowLeft size={16} /> Назад
                         </button>
                         <div className="w-px h-8 bg-gray-200 shrink-0" />
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center shrink-0">
+                        <div className="flex items-center gap-3 min-w-0 shrink-0">
+                            <div className={clsx("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", publishedAnalysis ? "bg-emerald-100 text-emerald-600" : "bg-violet-100 text-violet-600")}>
                                 <CheckCircle2 size={18} />
                             </div>
                             <div className="min-w-0">
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Пробник завершён</div>
+                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">{publishedAnalysis ? "Проверено учителем" : "Пробник завершён"}</div>
                                 <div className="text-sm font-bold text-gray-800 truncate">{currentTopic.title}</div>
                             </div>
                         </div>
+                        {publishedAnalysis && result.primary_score != null && (
+                            <>
+                                <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
+                                <div className="flex items-center gap-4 md:gap-6">
+                                    <div>
+                                        <div className="text-xl font-black text-[#3F8C62] leading-none">{result.score?.toFixed(0) ?? "—"}</div>
+                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
+                                    </div>
+                                    <div className="w-px h-6 bg-gray-100" />
+                                    <div>
+                                        <div className="text-base font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
+                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
+                                    </div>
+                                    <div className="w-px h-6 bg-gray-100" />
+                                    <div>
+                                        <div className="text-base font-bold text-gray-900 leading-none">
+                                            {taskResults.filter(r => r.is_correct).length}<span className="text-gray-300 font-normal text-sm">/{taskResults.length}</span>
+                                        </div>
+                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">верных</div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
                 {/* Content */}
                 <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
-                    {/* Info banner */}
-                    <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 flex items-start gap-3">
-                        <AlertCircle size={16} className="text-violet-400 mt-0.5 shrink-0" />
-                        <div className="text-sm text-violet-700">
-                            <span className="font-bold">Ваши ответы записаны.</span> Прикрепите решения к заданиям (код или файл) и отправьте работу на проверку преподавателю.
+                    {/* Info banner — hide after published */}
+                    {!publishedAnalysis && (
+                        <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 flex items-start gap-3">
+                            <AlertCircle size={16} className="text-violet-400 mt-0.5 shrink-0" />
+                            <div className="text-sm text-violet-700">
+                                <span className="font-bold">Ваши ответы записаны.</span> Прикрепите решения к заданиям (код или файл) и отправьте работу на проверку преподавателю.
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Task list */}
                     {taskResults.length > 0 && (
                         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                                <h2 className="text-sm font-bold text-gray-700">Ваши ответы</h2>
-                                <span className="text-xs text-gray-400">{taskResults.filter(r => r.user_answer).length} / {taskResults.length} заданий с ответом</span>
+                                <h2 className="text-sm font-bold text-gray-700">{publishedAnalysis ? "Результаты" : "Ваши ответы"}</h2>
+                                <span className="text-xs text-gray-400">
+                                    {publishedAnalysis
+                                        ? `${taskResults.filter(r => r.is_correct).length} верных из ${taskResults.length}`
+                                        : `${taskResults.filter(r => r.user_answer).length} / ${taskResults.length} заданий с ответом`
+                                    }
+                                </span>
                             </div>
                             <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className="bg-gray-50">
                                         <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-12">№</th>
                                         <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Ваш ответ</th>
+                                        {publishedAnalysis && <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Верный ответ</th>}
                                         <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Решение</th>
                                         <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-16"></th>
                                     </tr>
@@ -382,12 +422,42 @@ export default function ExamPage() {
                                     {sortedMockResults.map((tr, idx) => {
                                         const hasCode = !!(tr.code_solution || reviewSavedCodes[tr.task_id]);
                                         const hasFile = !!tr.file_solution_url;
+                                        const isCorrect = tr.is_correct;
+                                        const isPartial = !isCorrect && (tr.points ?? 0) > 0;
                                         return (
-                                            <tr key={tr.task_id} className="hover:bg-gray-50/70 cursor-pointer transition-colors" onClick={() => setReviewTaskId(tr.task_id)}>
-                                                <td className="py-2.5 px-4 font-bold text-gray-700 border-b border-gray-100">{tr.ege_number || idx + 1}</td>
-                                                <td className="py-2.5 px-4 font-mono text-xs text-gray-600 border-b border-gray-100">
+                                            <tr
+                                                key={tr.task_id}
+                                                className={clsx(
+                                                    "cursor-pointer transition-colors",
+                                                    publishedAnalysis
+                                                        ? isCorrect ? "bg-emerald-50/40 hover:bg-emerald-50/70"
+                                                        : isPartial ? "bg-amber-50/40 hover:bg-amber-50/70"
+                                                        : "bg-red-50/30 hover:bg-red-50/60"
+                                                        : "hover:bg-gray-50/70"
+                                                )}
+                                                onClick={() => setReviewTaskId(tr.task_id)}
+                                            >
+                                                <td className="py-2.5 px-4 border-b border-gray-100">
+                                                    <div className="flex items-center gap-2">
+                                                        {publishedAnalysis && (
+                                                            isCorrect
+                                                                ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                                                                : isPartial
+                                                                    ? <CheckCircle2 size={13} className="text-amber-400 shrink-0" />
+                                                                    : <XCircle size={13} className="text-red-400 shrink-0" />
+                                                        )}
+                                                        <span className="font-bold text-gray-700">{tr.ege_number || idx + 1}</span>
+                                                        {publishedAnalysis && <span className={clsx("text-[9px] font-bold ml-auto tabular-nums", isCorrect ? "text-emerald-600" : isPartial ? "text-amber-600" : "text-red-500")}>{tr.points ?? 0}/{tr.max_points ?? 1}</span>}
+                                                    </div>
+                                                </td>
+                                                <td className={clsx("py-2.5 px-4 font-mono text-xs border-b border-gray-100", publishedAnalysis && !isCorrect ? "text-red-500" : "text-gray-600")}>
                                                     {formatAnswer(tr.user_answer)}
                                                 </td>
+                                                {publishedAnalysis && (
+                                                    <td className="py-2.5 px-4 font-mono text-xs text-emerald-700 border-b border-gray-100">
+                                                        {tr.auto_checked !== false ? formatAnswer(tr.correct_answer) : <span className="text-gray-400 text-[10px] not-italic font-sans">проверка учителем</span>}
+                                                    </td>
+                                                )}
                                                 <td className="py-2.5 px-4 text-center border-b border-gray-100">
                                                     <div className="flex items-center justify-center gap-1.5">
                                                         {hasCode && <span className="text-xs font-bold text-purple-500 bg-purple-50 rounded px-1.5 py-0.5">код</span>}
@@ -425,6 +495,37 @@ export default function ExamPage() {
                             </button>
                         )}
                     </div>
+
+                    {/* Published teacher analysis */}
+                    {publishedAnalysis && (
+                        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 border-b border-violet-50 bg-violet-50/50 flex items-center gap-2">
+                                <div className="w-7 h-7 bg-violet-100 text-violet-600 rounded-lg flex items-center justify-center">
+                                    <Sparkles size={14} />
+                                </div>
+                                <h2 className="text-sm font-bold text-violet-800">Разбор от учителя</h2>
+                            </div>
+                            <div className="p-5 space-y-4">
+                                {publishedAnalysis.comment && (
+                                    <div className="flex gap-3 p-4 bg-violet-50 rounded-xl border border-violet-100">
+                                        <MessageSquare size={16} className="text-violet-500 shrink-0 mt-0.5" />
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{publishedAnalysis.comment}</p>
+                                    </div>
+                                )}
+                                <div className="prose prose-sm max-w-none text-gray-700
+                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
+                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
+                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
+                                    [&>p]:leading-relaxed [&>p]:mb-2
+                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
+                                    [&>li]:mb-1
+                                    [&>strong]:text-gray-900
+                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+                                    <ReactMarkdown>{publishedAnalysis.analysis_text}</ReactMarkdown>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Review Panel — same as regular exam but hide correct answer + score */}
@@ -724,6 +825,37 @@ export default function ExamPage() {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Published teacher analysis */}
+                    {publishedAnalysis && (
+                        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 border-b border-violet-50 bg-violet-50/50 flex items-center gap-2">
+                                <div className="w-7 h-7 bg-violet-100 text-violet-600 rounded-lg flex items-center justify-center">
+                                    <Sparkles size={14} />
+                                </div>
+                                <h2 className="text-sm font-bold text-violet-800">Разбор от учителя</h2>
+                            </div>
+                            <div className="p-5 space-y-4">
+                                {publishedAnalysis.comment && (
+                                    <div className="flex gap-3 p-4 bg-violet-50 rounded-xl border border-violet-100">
+                                        <MessageSquare size={16} className="text-violet-500 shrink-0 mt-0.5" />
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{publishedAnalysis.comment}</p>
+                                    </div>
+                                )}
+                                <div className="prose prose-sm max-w-none text-gray-700
+                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
+                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
+                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
+                                    [&>p]:leading-relaxed [&>p]:mb-2
+                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
+                                    [&>li]:mb-1
+                                    [&>strong]:text-gray-900
+                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+                                    <ReactMarkdown>{publishedAnalysis.analysis_text}</ReactMarkdown>
+                                </div>
                             </div>
                         </div>
                     )}

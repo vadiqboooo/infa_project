@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Sparkles, Loader2, X, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp, FileText, ExternalLink } from "lucide-react";
+import { Sparkles, Loader2, X, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Send, Globe, GlobeLock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { clsx } from "clsx";
 
@@ -145,6 +145,10 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
     const [results, setResults] = useState<{ primary_score: number | null; score: number | null; task_results: TaskResult[] } | null>(null);
     const [resultsLoading, setResultsLoading] = useState(true);
     const [resultsError, setResultsError] = useState<string | null>(null);
+    const [comment, setComment] = useState("");
+    const [isPublished, setIsPublished] = useState(false);
+    const [publishLoading, setPublishLoading] = useState(false);
+    const [publishSuccess, setPublishSuccess] = useState(false);
 
     const authHeaders = (): Record<string, string> => {
         const token = localStorage.getItem("jwt_token");
@@ -171,7 +175,8 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
 
     // Auto-load saved AI analysis
     useEffect(() => {
-        if (!cached && hasAnalysis) fetchSavedAnalysis();
+        if (hasAnalysis) fetchSavedAnalysis();
+        else if (cached) { /* already set */ }
     }, []);
 
     async function fetchSavedAnalysis() {
@@ -182,6 +187,8 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
             if (!res.ok) throw new Error(`Ошибка ${res.status}`);
             const data = await res.json();
             setAnalysis(data.analysis);
+            setComment(data.comment ?? "");
+            setIsPublished(data.is_published ?? false);
             localStorage.setItem(CACHE_KEY(attemptId), data.analysis);
         } catch (e: any) {
             setAiError(e.message || "Не удалось загрузить анализ");
@@ -206,6 +213,26 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
             setAiError(e.message || "Не удалось получить анализ");
         } finally {
             setAiLoading(false);
+        }
+    }
+
+    async function handlePublish(publish: boolean) {
+        setPublishLoading(true);
+        setPublishSuccess(false);
+        try {
+            const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/publish`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders() },
+                body: JSON.stringify({ comment, is_published: publish }),
+            });
+            if (!res.ok) throw new Error(`Ошибка ${res.status}`);
+            const data = await res.json();
+            setIsPublished(data.is_published);
+            setComment(data.comment ?? "");
+            setPublishSuccess(true);
+            setTimeout(() => setPublishSuccess(false), 3000);
+        } catch { /* ignore */ } finally {
+            setPublishLoading(false);
         }
     }
 
@@ -289,18 +316,79 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
                                 <span className="text-sm">Загружаю анализ...</span>
                             </div>
                         ) : analysis ? (
-                            <div className="prose prose-sm max-w-none text-gray-700
-                                [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
-                                [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
-                                [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
-                                [&>p]:leading-relaxed [&>p]:mb-2
-                                [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
-                                [&>li]:mb-1
-                                [&>strong]:text-gray-900
-                                [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs
-                                [&>pre]:bg-gray-50 [&>pre]:rounded-xl [&>pre]:p-4 [&>pre]:text-xs [&>pre]:overflow-x-auto
-                                [&>blockquote]:border-l-4 [&>blockquote]:border-violet-200 [&>blockquote]:pl-4 [&>blockquote]:text-gray-500">
-                                <ReactMarkdown>{analysis}</ReactMarkdown>
+                            <div className="space-y-4">
+                                {/* AI Analysis text */}
+                                <div className="prose prose-sm max-w-none text-gray-700
+                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
+                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
+                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
+                                    [&>p]:leading-relaxed [&>p]:mb-2
+                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
+                                    [&>li]:mb-1
+                                    [&>strong]:text-gray-900
+                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs
+                                    [&>pre]:bg-gray-50 [&>pre]:rounded-xl [&>pre]:p-4 [&>pre]:text-xs [&>pre]:overflow-x-auto
+                                    [&>blockquote]:border-l-4 [&>blockquote]:border-violet-200 [&>blockquote]:pl-4 [&>blockquote]:text-gray-500">
+                                    <ReactMarkdown>{analysis}</ReactMarkdown>
+                                </div>
+
+                                {/* Comment + Publish section */}
+                                <div className="border-t border-gray-100 pt-4 space-y-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-600 mb-1.5 block">
+                                            Комментарий учителя
+                                        </label>
+                                        <textarea
+                                            value={comment}
+                                            onChange={e => setComment(e.target.value)}
+                                            placeholder="Напишите личный комментарий ученику по результатам пробника..."
+                                            rows={3}
+                                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 placeholder:text-gray-300 transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        {isPublished ? (
+                                            <>
+                                                <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg font-semibold flex-1">
+                                                    <Globe size={12} /> Опубликовано — ученик видит результат
+                                                </div>
+                                                <button
+                                                    onClick={() => handlePublish(false)}
+                                                    disabled={publishLoading}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                                                >
+                                                    {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <GlobeLock size={12} />}
+                                                    Снять
+                                                </button>
+                                                <button
+                                                    onClick={() => handlePublish(true)}
+                                                    disabled={publishLoading}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-600 hover:bg-violet-50 border border-violet-200 rounded-lg transition-colors disabled:opacity-50"
+                                                >
+                                                    {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                                    Обновить
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {publishSuccess && (
+                                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 flex-1">
+                                                        <CheckCircle2 size={12} /> Сохранено
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={() => handlePublish(true)}
+                                                    disabled={publishLoading}
+                                                    className="flex items-center gap-2 px-4 py-2 text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all shadow-sm shadow-violet-600/20 disabled:opacity-50 ml-auto"
+                                                >
+                                                    {publishLoading ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                                                    Опубликовать
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         ) : aiError ? (
                             <div className="text-sm text-red-500 text-center py-8">{aiError}</div>

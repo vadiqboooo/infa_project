@@ -39,6 +39,7 @@ async def get_navigation(
     # Fetch all exams to get time limits and task counts
     from app.models.exam import Exam
     from app.models.exam_attempt import ExamAttempt
+    from app.models.exam_analysis import ExamAnalysis
 
     all_exams_result = await db.execute(
         select(Exam).options(selectinload(Exam.tasks))
@@ -52,15 +53,28 @@ async def get_navigation(
         .where(ExamAttempt.user_id == user.id)
         .order_by(ExamAttempt.finished_at.desc())
     )
-    
+
     # Map topic_id -> latest attempt data
-    latest_attempts = {}
+    latest_attempts: dict[int, dict] = {}
     for attempt, exam in attempts_query.all():
         if exam.topic_id not in latest_attempts:
             latest_attempts[exam.topic_id] = {
                 "score": attempt.score,
                 "primary_score": attempt.primary_score,
+                "attempt_id": attempt.id,
             }
+
+    # Check which latest attempts have a published analysis
+    attempt_ids = [v["attempt_id"] for v in latest_attempts.values() if v.get("attempt_id")]
+    published_ids: set[int] = set()
+    if attempt_ids:
+        pub_res = await db.execute(
+            select(ExamAnalysis.attempt_id).where(
+                ExamAnalysis.attempt_id.in_(attempt_ids),
+                ExamAnalysis.is_published.is_(True),
+            )
+        )
+        published_ids = {row[0] for row in pub_res.all()}
 
     nav: list[TopicNav] = []
     for topic in topics:
@@ -78,6 +92,7 @@ async def get_navigation(
         exam = all_exams.get(topic.id)
         latest_attempt = latest_attempts.get(topic.id, {})
         
+        attempt_id = latest_attempt.get("attempt_id")
         nav.append(TopicNav(
             id=topic.id,
             title=topic.title,
@@ -91,6 +106,7 @@ async def get_navigation(
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
             ege_number=topic.ege_number,
+            analysis_published=attempt_id in published_ids if attempt_id else False,
         ))
     return nav
 

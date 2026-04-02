@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { clsx } from "clsx";
-import { ArrowRight, Hash, Network, Code2, GitBranch, Sparkles, CheckCircle2, BookOpen, ClipboardList, FlaskConical, PenTool, Lock } from "lucide-react";
+import { Hash, Network, Code2, GitBranch, Sparkles, CheckCircle2, BookOpen, ClipboardList, FlaskConical, PenTool, Lock } from "lucide-react";
 
 type AnimationType = 'binary' | 'network' | 'code' | 'logic' | 'none';
 
@@ -140,52 +140,69 @@ function TopicCanvas({ title }: { title: string }) {
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full rounded-2xl pointer-events-none opacity-40" />;
 }
 
-// ── Section chip ──────────────────────────────────────────────────────────────
-interface SectionChipProps {
+// ── Circular progress ─────────────────────────────────────────────────────────
+interface CircleProgressProps {
   icon: React.ElementType;
   label: string;
   to?: string;
   solved?: number;
   total?: number;
   disabled?: boolean;
-  color: 'green' | 'blue' | 'purple' | 'orange';
+  color: 'green' | 'blue';
 }
 
-const CHIP_COLORS = {
-  green:  'text-[#3F8C62] bg-white border-[#3F8C62]/20',
-  blue:   'text-blue-600  bg-white border-blue-200',
-  purple: 'text-gray-400  bg-gray-50 border-gray-200',
-  orange: 'text-gray-400  bg-gray-50 border-gray-200',
+const CIRCLE_COLORS = {
+  green: { stroke: '#3F8C62', bg: '#d6ede1', text: '#3F8C62' },
+  blue:  { stroke: '#3b82f6', bg: '#dbeafe', text: '#3b82f6' },
 };
 
-function SectionChip({ icon: Icon, label, to, solved, total, disabled, color }: SectionChipProps) {
-  const percent = total && total > 0 ? Math.round((solved ?? 0) / total * 100) : 0;
+function CircleProgress({ icon: Icon, label, to, solved, total, disabled, color }: CircleProgressProps) {
+  const size = 44;
+  const r = 17;
+  const circ = 2 * Math.PI * r;
+  const pct = !disabled && total && total > 0 ? (solved ?? 0) / total : 0;
+  const offset = circ * (1 - pct);
   const isComplete = !disabled && total != null && total > 0 && solved === total;
+  const colors = CIRCLE_COLORS[color];
 
   const inner = (
     <div className={clsx(
-      'flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all',
-      disabled ? 'text-gray-300 bg-gray-50 border-gray-100' : CHIP_COLORS[color],
-      !disabled && 'hover:brightness-95',
+      'flex flex-col items-center gap-1 w-full transition-all',
+      disabled ? 'opacity-40' : 'cursor-pointer hover:scale-105',
     )}>
-      <div className="flex items-center gap-1.5 min-w-0">
-        {isComplete
-          ? <CheckCircle2 size={12} className="text-[#3F8C62] shrink-0" />
-          : <Icon size={12} className="shrink-0" />
-        }
-        <span className="truncate">{label}</span>
+      <div className="relative mx-auto" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size/2} cy={size/2} r={r}
+            fill={disabled ? '#f3f4f6' : colors.bg}
+            stroke={disabled ? '#e5e7eb' : '#ffffff'} strokeWidth={2} />
+          {!disabled && (
+            <circle cx={size/2} cy={size/2} r={r}
+              fill="none"
+              stroke={isComplete ? '#3F8C62' : colors.stroke}
+              strokeWidth={3} strokeDasharray={circ} strokeDashoffset={offset}
+              strokeLinecap="round"
+              style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+          )}
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          {isComplete
+            ? <CheckCircle2 size={13} className="text-[#3F8C62]" />
+            : <Icon size={12} className={disabled ? 'text-gray-300' : colors.text} />
+          }
+        </div>
       </div>
-      {disabled
-        ? <Lock size={10} className="text-gray-300 shrink-0" />
-        : total != null
-          ? <span className="tabular-nums text-[10px] opacity-60 shrink-0">{solved}/{total}</span>
-          : null
-      }
+      <div className="text-center w-full">
+        <div className={clsx('text-[9px] font-semibold leading-tight', disabled ? 'text-gray-300' : 'text-gray-600')}>{label}</div>
+        {!disabled && total != null
+          ? <div className="text-[8px] tabular-nums text-gray-400">{solved}/{total}</div>
+          : disabled && <Lock size={7} className="text-gray-300 mx-auto mt-0.5" />
+        }
+      </div>
     </div>
   );
 
   if (disabled || !to) return inner;
-  return <Link to={to} onClick={e => e.stopPropagation()} className="block">{inner}</Link>;
+  return <Link to={to} onClick={e => e.stopPropagation()} className="contents">{inner}</Link>;
 }
 
 // ── Main card ─────────────────────────────────────────────────────────────────
@@ -206,16 +223,12 @@ export function TopicCard({ egeId, title, tutorial, homework }: TopicCardProps) 
   const totalSolved = (tutorial?.solved ?? 0) + (homework?.solved ?? 0);
   const totalTasks = (tutorial?.total ?? 0) + (homework?.total ?? 0);
   const isComplete = totalTasks > 0 && totalSolved === totalTasks;
-  const percent = totalTasks > 0 ? Math.round(totalSolved / totalTasks * 100) : 0;
-
   const animType = detectAnimation(title);
   const Icon = ANIMATION_ICON[animType];
-  const mainTo = tutorial ? `/tasks/${tutorial.id}` : homework ? `/homework/${homework.id}` : '#';
 
   return (
     <div
-      className="group relative w-full max-w-[400px] rounded-2xl overflow-hidden bg-[#D6E4DA] border border-[#C4D8C9] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-gray-400/40 transition-all duration-300"
-      style={{ minHeight: 210 }}
+      className="group relative w-full rounded-2xl overflow-hidden bg-[#D6E4DA] border border-[#C4D8C9] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-gray-400/40 transition-all duration-300"
     >
       {/* Blob shapes */}
       <div className="absolute -bottom-10 -right-10 w-52 h-52 pointer-events-none"
@@ -225,7 +238,7 @@ export function TopicCard({ egeId, title, tutorial, homework }: TopicCardProps) 
 
       <TopicCanvas title={title} />
 
-      <div className="relative z-10 p-5 flex flex-col" style={{ minHeight: 210 }}>
+      <div className="relative z-10 p-5 flex flex-col min-h-[230px]">
         {/* Header row */}
         <div className="flex items-center justify-between mb-4">
           <div className={clsx(
@@ -260,35 +273,15 @@ export function TopicCard({ egeId, title, tutorial, homework }: TopicCardProps) 
           {title}
         </h3>
 
-        {/* 4 section chips */}
-        <div className="grid grid-cols-2 gap-1.5 mb-4">
-          <SectionChip icon={BookOpen}    label="Разбор"   to={tutorial ? `/tasks/${tutorial.id}` : undefined}     solved={tutorial?.solved}  total={tutorial?.total}  disabled={!tutorial}  color="green"  />
-          <SectionChip icon={ClipboardList} label="Домашка" to={homework ? `/homework/${homework.id}` : undefined}  solved={homework?.solved}  total={homework?.total}  disabled={!homework}  color="blue"   />
-          <SectionChip icon={FlaskConical} label="Теория"   disabled color="purple" />
-          <SectionChip icon={PenTool}      label="Тесты"    disabled color="orange" />
+        {/* Section circles */}
+        <div className="grid grid-cols-5 gap-1 mb-4 mt-auto">
+          <CircleProgress icon={FlaskConical}  label="Теория"  disabled color="green" />
+          <CircleProgress icon={PenTool}       label="Тест"    disabled color="blue"  />
+          <CircleProgress icon={BookOpen}      label="Разбор"  to={tutorial ? `/tasks/${tutorial.id}` : undefined}    solved={tutorial?.solved} total={tutorial?.total} disabled={!tutorial} color="green" />
+          <CircleProgress icon={PenTool}       label="Тест"    disabled color="blue"  />
+          <CircleProgress icon={ClipboardList} label="Домашка" to={homework ? `/homework/${homework.id}` : undefined} solved={homework?.solved} total={homework?.total} disabled={!homework} color="blue"  />
         </div>
 
-        {/* Footer: progress bar + arrow */}
-        <div className="flex items-center justify-between mt-auto">
-          <div className="flex items-center gap-2 flex-1 mr-3">
-            <div className="flex-1 bg-white/50 h-1.5 rounded-full overflow-hidden">
-              <div
-                className={clsx("h-full rounded-full transition-all duration-500",
-                  percent >= 80 ? "bg-[#3F8C62]" : percent >= 50 ? "bg-amber-400" : "bg-red-300"
-                )}
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            <span className="text-gray-500 text-[11px] shrink-0 tabular-nums">{percent}%</span>
-          </div>
-
-          <Link
-            to={mainTo}
-            className="w-9 h-9 rounded-full bg-[#3F8C62] flex items-center justify-center shadow-md shadow-[#3F8C62]/20 group-hover:scale-110 group-hover:bg-[#357a55] transition-all duration-200 shrink-0"
-          >
-            <ArrowRight size={15} className="text-white translate-x-px" />
-          </Link>
-        </div>
       </div>
     </div>
   );
