@@ -99,6 +99,7 @@ class StudentOut(BaseModel):
     username: str | None
     photo_url: str | None
     role: str
+    login: str | None = None
     last_active_at: datetime
     total_solved: int
     total_tasks: int

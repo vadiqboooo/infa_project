@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Sparkles, Loader2, X, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Send, Globe, GlobeLock } from "lucide-react";
+import { Sparkles, Loader2, X, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Send, Globe, GlobeLock, Wand2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { clsx } from "clsx";
 
@@ -149,6 +149,7 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
     const [isPublished, setIsPublished] = useState(false);
     const [publishLoading, setPublishLoading] = useState(false);
     const [publishSuccess, setPublishSuccess] = useState(false);
+    const [polishLoading, setPolishLoading] = useState(false);
 
     const authHeaders = (): Record<string, string> => {
         const token = localStorage.getItem("jwt_token");
@@ -233,6 +234,23 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
             setTimeout(() => setPublishSuccess(false), 3000);
         } catch { /* ignore */ } finally {
             setPublishLoading(false);
+        }
+    }
+
+    async function polishComment() {
+        if (!comment.trim()) return;
+        setPolishLoading(true);
+        try {
+            const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/polish-comment`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders() },
+                body: JSON.stringify({ comment }),
+            });
+            if (!res.ok) throw new Error(`Ошибка ${res.status}`);
+            const data = await res.json();
+            setComment(data.comment);
+        } catch { /* ignore */ } finally {
+            setPolishLoading(false);
         }
     }
 
@@ -335,9 +353,19 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
                                 {/* Comment + Publish section */}
                                 <div className="border-t border-gray-100 pt-4 space-y-3">
                                     <div>
-                                        <label className="text-xs font-bold text-gray-600 mb-1.5 block">
-                                            Комментарий учителя
-                                        </label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-xs font-bold text-gray-600">
+                                                Комментарий учителя
+                                            </label>
+                                            <button
+                                                onClick={polishComment}
+                                                disabled={polishLoading || !comment.trim()}
+                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-violet-600 hover:bg-violet-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                                {polishLoading ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
+                                                Улучшить текст
+                                            </button>
+                                        </div>
                                         <textarea
                                             value={comment}
                                             onChange={e => setComment(e.target.value)}
@@ -400,7 +428,7 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
                                 <div>
                                     <p className="font-bold text-gray-900 mb-1">ИИ-анализ работы</p>
                                     <p className="text-sm text-gray-400 max-w-xs">
-                                        ИИ разберёт каждую ошибку, сравнит с эталонным решением и подскажет что повторить
+                                        ИИ проанализирует причины ошибок и подскажет какие темы повторить
                                     </p>
                                 </div>
                                 <button

@@ -269,6 +269,7 @@ async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
         username=user.username,
         photo_url=user.photo_url,
         role=user.role,
+        login=user.login,
         last_active_at=user.last_active_at,
         total_solved=total_solved,
         total_tasks=total_tasks,
@@ -340,8 +341,8 @@ async def create_password_student(body: PasswordStudentCreate, db: AsyncSession 
 
 
 @router.post("/students/{user_id}/reset-password", response_model=PasswordStudentCredential)
-async def reset_student_password(user_id: int, db: AsyncSession = Depends(get_db)):
-    """Generate a new password for a student and return it."""
+async def reset_student_password(user_id: int, body: dict | None = None, db: AsyncSession = Depends(get_db)):
+    """Generate or set a new password for a student and return it."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -349,7 +350,8 @@ async def reset_student_password(user_id: int, db: AsyncSession = Depends(get_db
     if not user.login:
         raise HTTPException(status_code=400, detail="This user does not use login/password auth")
 
-    password = _generate_password()
+    custom_pw = (body or {}).get("password", "").strip() if body else ""
+    password = custom_pw if custom_pw else _generate_password()
     user.password_hash = _hash_password(password)
     user.plain_password = password
     await db.commit()
@@ -858,20 +860,14 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
         correct_val = c_ans.get("val") if c_ans else "?"
         pts = r.get("points", 0)
         max_pts = r.get("max_points", 1)
-        detail = f"Задание №{num}: ответ = {user_val}, верный = {correct_val} ({pts}/{max_pts} балл.)"
+        detail = f"Задание №{num}: ответ ученика = {user_val}, верный ответ = {correct_val} ({pts}/{max_pts} балл.)"
         if task and task.content_html:
             detail += f"\nУсловие: {_strip(task.content_html)}"
-        if task and task.full_solution_code:
-            detail += f"\nЭталонный код:\n```python\n{task.full_solution_code[:500]}\n```"
-        elif task and task.solution_steps and isinstance(task.solution_steps, list):
-            expl = " ".join(s.get("explanation", "") for s in task.solution_steps[:2] if isinstance(s, dict))
-            if expl:
-                detail += f"\nПояснение: {expl[:300]}"
         wrong_details.append(detail)
 
     correct_nums = [str(r.get("ege_number") or "?") for r in correct]
 
-    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика.
+    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика. Твоя задача — помочь учителю понять причины ошибок.
 
 📊 Итог:
 - Первичный балл: {primary}/29
@@ -882,13 +878,15 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
 {"❌ Задания с ошибками:" if wrong_details else "✅ Все задания решены верно!"}
 {chr(10).join(wrong_details)}
 
-Напиши развёрнутый персональный анализ на русском языке:
-1. 📈 **Краткое резюме** — оцени результат и уровень подготовки
-2. ❌ **Разбор ошибок** — для каждого неверного задания: почему возникла ошибка, что нужно понять. Если есть код — объясни ключевую идею.
-3. ✅ **Правильно решённые** — одно тёплое предложение с похвалой
-4. 🎯 **Что повторить** — конкретные темы
+ВАЖНО: НЕ давай решение и НЕ объясняй как решать. Только анализируй причину ошибки.
 
-Используй markdown (жирный, списки)."""
+Для каждого неверного задания напиши:
+1. **Вероятная причина ошибки** — проанализируй ответ ученика и условие задачи, предположи конкретно что он перепутал или не учёл (например: перепутал IP узла с широковещательным, неверно перевёл систему счисления, ошибка в логическом выражении и т.д.)
+2. **Рекомендация** — какую тему повторить (кратко, одно предложение)
+
+В конце дай общий вывод: какие темы нужно повторить в первую очередь.
+
+Формат: коротко и по делу, без воды. Используй markdown."""
 
     import httpx as _httpx
     from app.config import settings as _settings
@@ -904,7 +902,7 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
             payload = {
                 "model": _settings.LLM_MODEL,
                 "messages": [
-                    {"role": "system", "content": "Ты опытный преподаватель информатики. Анализируешь работы учеников на ЕГЭ. Отвечай на русском языке."},
+                    {"role": "system", "content": "Ты помощник учителя информатики. Анализируешь ошибки учеников на ЕГЭ. Не давай решений — только анализ причин ошибок и рекомендации что повторить. Отвечай кратко, на русском языке."},
                     {"role": "user", "content": prompt},
                 ],
             }
@@ -966,6 +964,46 @@ async def publish_attempt_analysis(
     rec.is_published = bool(body.get("is_published", rec.is_published))
     await db.commit()
     return {"is_published": rec.is_published, "comment": rec.comment}
+
+
+@router.post("/attempts/{attempt_id}/polish-comment")
+async def polish_comment(attempt_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    """Use LLM to improve teacher's comment text without changing its meaning."""
+    text = (body.get("comment") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Comment is empty")
+
+    import httpx as _httpx
+    from app.config import settings as _settings
+
+    prompt = f"""Улучши текст комментария учителя ученику. Сохрани смысл и стиль, но сделай текст грамотнее, понятнее и структурированнее. Не добавляй новую информацию. Не добавляй эмодзи. Верни только улучшенный текст, без пояснений.
+
+Исходный текст:
+{text}"""
+
+    try:
+        async with _httpx.AsyncClient(timeout=60) as client:
+            headers = {
+                "Authorization": f"Bearer {_settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "Edu Platform",
+            }
+            payload = {
+                "model": _settings.LLM_MODEL,
+                "messages": [
+                    {"role": "system", "content": "Ты редактор текста. Улучшаешь стиль и грамотность, не меняя смысл. Отвечай только улучшенным текстом."},
+                    {"role": "user", "content": prompt},
+                ],
+            }
+            resp = await client.post(f"{_settings.LLM_BASE_URL}/chat/completions", headers=headers, json=payload)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"LLM error {resp.status_code}")
+            polished = resp.json()["choices"][0]["message"]["content"]
+    except _httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {"comment": polished}
 
 
 @router.get("/attempts/{attempt_id}/results")

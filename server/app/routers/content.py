@@ -56,8 +56,15 @@ async def get_navigation(
 
     # Map topic_id -> latest attempt data
     latest_attempts: dict[int, dict] = {}
+    # Map topic_id -> draft answers count from active (unfinished) attempts
+    active_draft_counts: dict[int, int] = {}
     for attempt, exam in attempts_query.all():
-        if exam.topic_id not in latest_attempts:
+        if attempt.finished_at is None:
+            # Active attempt — count draft answers
+            drafts = (attempt.results_json or {}).get("draft_answers", {})
+            non_empty = sum(1 for v in drafts.values() if v and v.get("val") not in (None, "", []))
+            active_draft_counts[exam.topic_id] = non_empty
+        elif exam.topic_id not in latest_attempts:
             latest_attempts[exam.topic_id] = {
                 "score": attempt.score,
                 "primary_score": attempt.primary_score,
@@ -107,6 +114,7 @@ async def get_navigation(
             is_mock=topic.is_mock,
             ege_number=topic.ege_number,
             analysis_published=attempt_id in published_ids if attempt_id else False,
+            draft_count=active_draft_counts.get(topic.id, 0),
         ))
     return nav
 

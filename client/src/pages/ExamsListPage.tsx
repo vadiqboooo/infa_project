@@ -1,218 +1,284 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Clock, Trophy, ChevronRight, Inbox, ClipboardCheck, BookMarked, GraduationCap } from 'lucide-react';
+import { Clock, Trophy, ChevronRight, Inbox, ClipboardCheck, BookMarked, GraduationCap, CheckCircle2 } from 'lucide-react';
 import { useNavigation } from '../hooks/useApi';
-import { cn } from '@/lib/utils';
+import { clsx } from 'clsx';
 import type { TopicNav } from '../api/types';
 
-const SECTION_CONFIG = [
-    {
-        key: 'control',
-        title: 'Контрольные работы',
-        subtitle: 'Проверь знания по пройденным темам',
+// ── Per-category visual config ─────────────────────────────────────────────────
+const CATEGORY_STYLE = {
+    control: {
+        bg: '#D4DCE8',
+        border: '#C0CDD8',
+        blob1: '#c0cde0',
+        blob2: '#c8d4e8',
+        iconBg: 'bg-blue-100',
+        iconText: 'text-blue-600',
+        badgeBg: 'bg-white/60 border-blue-300/40 text-blue-700',
         icon: ClipboardCheck,
-        color: 'bg-blue-100 text-blue-600',
-        badge: 'КР',
-        badgeClass: 'bg-blue-100 text-blue-700',
+        label: 'КР',
     },
-    {
-        key: 'variants',
-        title: 'Варианты',
-        subtitle: 'Тренировка полного варианта ЕГЭ',
+    variants: {
+        bg: '#D6E4DA',
+        border: '#C4D8C9',
+        blob1: '#c8ddd0',
+        blob2: '#ccdfd4',
+        iconBg: 'bg-[#3F8C62]/10',
+        iconText: 'text-[#3F8C62]',
+        badgeBg: 'bg-white/60 border-[#3F8C62]/25 text-[#3F8C62]',
         icon: BookMarked,
-        color: 'bg-emerald-100 text-emerald-600',
-        badge: 'Вариант',
-        badgeClass: 'bg-emerald-100 text-emerald-700',
+        label: 'Вариант',
     },
-    {
-        key: 'mock',
-        title: 'Пробники',
-        subtitle: 'Результаты проверяются преподавателем',
+    mock: {
+        bg: '#DDD4EC',
+        border: '#CFC4DC',
+        blob1: '#d0c8e4',
+        blob2: '#d8d0ec',
+        iconBg: 'bg-violet-100',
+        iconText: 'text-violet-600',
+        badgeBg: 'bg-white/60 border-violet-300/40 text-violet-700',
         icon: GraduationCap,
-        color: 'bg-violet-100 text-violet-600',
-        badge: 'Пробник',
-        badgeClass: 'bg-violet-100 text-violet-700',
+        label: 'Пробник',
     },
-] as const;
+} as const;
 
-function ExamCard({ variant, badge, badgeClass }: { variant: TopicNav; badge: string; badgeClass: string }) {
+type CategoryKey = keyof typeof CATEGORY_STYLE;
+
+// ── Exam card ──────────────────────────────────────────────────────────────────
+function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: CategoryKey }) {
     const navigate = useNavigate();
-    const isSolved = variant.latest_score !== undefined && variant.latest_score !== null;
-    const isMock = String(variant.category) === 'mock';
-    const isPublished = isMock && !!variant.analysis_published;
-    const solvedTasksCount = variant.tasks.filter(t => t.status === 'solved').length;
-    const totalTasksCount = variant.tasks.length;
+    const style = CATEGORY_STYLE[categoryKey];
+    const CatIcon = style.icon;
 
-    const currentPoints = variant.tasks.reduce((sum, task) => {
-        if (task.status === 'solved') {
-            const num = task.ege_number || 0;
-            return sum + (num >= 26 ? 2 : 1);
-        }
-        return sum;
-    }, 0);
+    const isSolved = variant.latest_score != null;
+    const isMock = categoryKey === 'mock';
+    const isVariant = categoryKey === 'variants';
+    const isControl = categoryKey === 'control';
+    const isPublished = isMock && !!(variant as any).analysis_published;
 
-    const maxPoints = variant.tasks.reduce((sum, task) => {
-        const num = task.ege_number || 0;
-        return sum + (num >= 26 ? 2 : 1);
-    }, 0) || 29;
+    const totalTasks = variant.tasks.length;
+    const draftCount = variant.draft_count ?? 0;
+    const solvedCount = variant.tasks.filter(t => t.status === 'solved').length;
+    // For in-progress exams use draft count, for finished use solved count
+    const answeredCount = isSolved ? solvedCount : draftCount;
+    const progressPercent = totalTasks > 0 ? Math.min(100, Math.round(answeredCount / totalTasks * 100)) : 0;
 
-    const progressPercent = Math.min(100, Math.round((currentPoints / maxPoints) * 100));
+    const score = variant.latest_score;
+    const primaryScore = variant.latest_primary_score;
+    // For control works: percentage and correct/total instead of EGE scores
+    const correctCount = primaryScore ?? 0;
+    const pctScore = totalTasks > 0 ? Math.round((correctCount / totalTasks) * 100) : 0;
 
     return (
         <button
             onClick={() => navigate(`/exams/${variant.id}`)}
-            className="group bg-white border border-gray-200 rounded-2xl p-4 md:p-6 text-left hover:border-[#3F8C62]/40 hover:shadow-xl hover:shadow-gray-200/40 transition-all hover:-translate-y-1 relative overflow-hidden flex flex-col w-full max-w-[400px] h-full min-h-[180px] md:min-h-[200px]"
+            className="group relative w-full rounded-2xl overflow-hidden text-left hover:-translate-y-1.5 hover:shadow-xl hover:shadow-gray-400/40 transition-all duration-300"
+            style={{ background: style.bg, border: `1px solid ${style.border}`, minHeight: 200 }}
         >
-            {/* Large Score background */}
+            {/* Blob shapes */}
+            <div className="absolute -bottom-10 -right-10 w-52 h-52 pointer-events-none"
+                style={{ background: isSolved ? '#fef9ec' : style.blob1, borderRadius: '60% 40% 55% 45% / 35% 60% 40% 65%' }} />
+            <div className="absolute -top-6 left-10 w-36 h-36 pointer-events-none"
+                style={{ background: isSolved ? '#fefce8' : style.blob2, borderRadius: '40% 60% 70% 30% / 60% 30% 70% 40%', opacity: 0.8 }} />
+
+            {/* Large background score */}
             {isSolved && (!isMock || isPublished) && (
-                <div className="absolute right-4 bottom-2 select-none pointer-events-none z-0 transition-transform group-hover:scale-105 duration-700">
-                    <span className={cn("text-[120px] font-black leading-none tracking-tighter", isPublished ? "text-violet-200" : "text-[#3F8C62]")}>
-                        {variant.latest_score?.toFixed(0)}
+                <div className="absolute right-3 bottom-1 select-none pointer-events-none z-0 transition-transform group-hover:scale-105 duration-700">
+                    <span className={clsx(
+                        'text-[120px] font-black leading-none tracking-tighter',
+                        isPublished ? 'text-violet-400/40' : isControl ? 'text-blue-400/35' : 'text-[#3F8C62]/35'
+                    )}>
+                        {isControl ? `${pctScore}%` : score?.toFixed(0)}
                     </span>
                 </div>
             )}
 
-            {/* Top row */}
-            <div className="flex items-start justify-between mb-6 relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className={cn(
-                        'w-12 h-12 rounded-xl flex items-center justify-center transition-colors',
-                        isSolved
-                            ? 'bg-[#3F8C62] text-white shadow-lg shadow-[#3F8C62]/20'
-                            : 'bg-gray-100 text-gray-400 group-hover:bg-[#3F8C62]/10 group-hover:text-[#3F8C62]'
+            {/* Content */}
+            <div className="relative z-10 p-5 flex flex-col min-h-[200px]">
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-4">
+                    {/* Icon */}
+                    <div className={clsx(
+                        'w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0',
+                        isSolved ? 'border-amber-300 bg-amber-50' : clsx('border-white/40', style.iconBg)
                     )}>
-                        <FileText size={24} />
+                        {isSolved
+                            ? <CheckCircle2 size={15} className="text-amber-500" />
+                            : <CatIcon size={15} className={style.iconText} />
+                        }
                     </div>
-                    <div>
-                        <div className={cn('inline-block text-[10px] font-bold uppercase tracking-widest mb-0.5 px-2 py-0.5 rounded-md', badgeClass)}>
-                            {badge}
-                        </div>
-                        <div className="font-bold text-gray-900 group-hover:text-[#3F8C62] transition-colors">
-                            {variant.title}
-                        </div>
+
+                    {/* Center badge */}
+                    <div className={clsx(
+                        'px-3.5 py-1.5 rounded-full text-xs font-bold tracking-widest uppercase border',
+                        isSolved ? 'bg-amber-50 text-amber-600 border-amber-200' : style.badgeBg
+                    )}>
+                        {style.label}
+                    </div>
+
+                    {/* Right info */}
+                    <div className={clsx(
+                        'px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0',
+                        isSolved ? 'bg-amber-50 text-amber-500' : 'bg-white/50 text-gray-500'
+                    )}>
+                        {isSolved ? (isControl ? `${pctScore}%` : `${score?.toFixed(0)} б`) : `${totalTasks} зад`}
                     </div>
                 </div>
-                <ChevronRight size={20} className="text-gray-300 group-hover:text-[#3F8C62] transition-all group-hover:translate-x-1" />
-            </div>
 
-            {/* Footer */}
-            <div className="relative z-10 mt-auto w-full">
-                {!isSolved && (
-                    <div className="flex items-center gap-4 text-xs font-bold text-gray-400 mb-4">
-                        <span className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">
-                            <Clock size={14} className="text-gray-300" />
-                            {variant.time_limit_minutes || 235} мин
-                        </span>
-                        <span className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100">{totalTasksCount} задач</span>
-                    </div>
-                )}
+                {/* Title */}
+                <h3 className="text-gray-900 font-bold text-[15px] leading-snug mb-3 group-hover:text-gray-700 transition-colors line-clamp-2">
+                    {variant.title}
+                </h3>
 
-                {isMock && isSolved ? (
-                    isPublished ? (
-                        <div className="space-y-1">
-                            <div className="flex items-center gap-3">
-                                <div>
-                                    <div className="text-xl font-black text-violet-600 leading-none">{variant.latest_score?.toFixed(0)}</div>
-                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
+                {/* Status block */}
+                <div className="mt-auto">
+                    {isMock && isSolved ? (
+                        /* Mock solved */
+                        isPublished ? (
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="bg-white/60 rounded-xl px-3 py-2 text-center">
+                                    <div className="text-lg font-black text-violet-600 leading-none">{score?.toFixed(0)}</div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">балл</div>
                                 </div>
-                                <div className="w-px h-6 bg-gray-100" />
-                                <div>
-                                    <div className="text-base font-bold text-gray-900 leading-none">{variant.latest_primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
+                                <div className="bg-white/60 rounded-xl px-3 py-2 text-center">
+                                    <div className="text-base font-bold text-gray-900 leading-none">{primaryScore}<span className="text-gray-300 font-normal text-sm">/29</span></div>
                                     <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
                                 </div>
+                                <div className="flex items-center gap-1 text-violet-600 text-[10px] font-bold ml-auto">
+                                    <Trophy size={11} />
+                                    Проверено
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5 text-violet-500 text-[10px] font-bold uppercase pt-1">
+                        ) : (
+                            <div className="flex items-center gap-1.5 text-violet-600 text-[10px] font-bold uppercase mb-3">
                                 <Trophy size={12} />
-                                Проверено учителем
+                                Ответы записаны
+                            </div>
+                        )
+                    ) : isSolved ? (
+                        /* Regular solved */
+                        <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <div className="flex-1 bg-white/50 h-1.5 rounded-full overflow-hidden">
+                                    <div className="h-full bg-[#3F8C62] rounded-full" style={{ width: `${progressPercent}%` }} />
+                                </div>
+                                <div className={clsx("flex items-center gap-1 text-[10px] font-bold", isControl ? "text-blue-600" : "text-[#3F8C62]")}>
+                                    <Trophy size={11} />
+                                    {isControl ? `${pctScore}%` : `${score?.toFixed(0)} / 100`}
+                                </div>
+                            </div>
+                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                                {isControl ? `${correctCount}/${totalTasks} заданий` : `Первичный: ${primaryScore}/29`}
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1.5 text-violet-600 text-[10px] font-bold uppercase pt-1">
-                            <Trophy size={12} />
-                            Ответы записаны
-                        </div>
-                    )
-                ) : (
-                    <div className="space-y-2 w-full relative z-20">
-                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-tight">
-                            <span className="text-gray-400">Прогресс</span>
-                        </div>
-                        <div className="relative flex items-center h-6">
-                            <div className="w-full bg-gray-100/60 rounded-full h-1.5 overflow-hidden">
-                                <div className="h-full rounded-full bg-[#3F8C62] transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
+                        /* Not started / in progress */
+                        <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="flex-1 bg-white/50 h-1.5 rounded-full overflow-hidden">
+                                    <div
+                                        className={clsx('h-full rounded-full transition-all duration-500',
+                                            progressPercent >= 80 ? 'bg-[#3F8C62]' : progressPercent > 0 ? 'bg-amber-400' : 'bg-gray-300'
+                                        )}
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                </div>
+                                <span className="text-gray-500 text-[11px] tabular-nums shrink-0">{answeredCount}/{totalTasks}</span>
                             </div>
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-sm font-black text-gray-900 bg-white/60 backdrop-blur-md px-2 rounded-md shadow-sm">
-                                    {currentPoints} / {maxPoints}
+                            <div className="flex items-center gap-2">
+                                <span className="flex items-center gap-1 bg-white/50 px-2 py-1 rounded-lg text-[10px] font-bold text-gray-500 border border-white/40">
+                                    <Clock size={11} className="text-gray-400" />
+                                    {variant.time_limit_minutes || 235} мин
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                                    {answeredCount > 0 ? 'В процессе' : 'Не начат'}
                                 </span>
                             </div>
                         </div>
-                        {isSolved ? (
-                            <div className="flex items-center gap-1.5 text-[#3F8C62] text-[10px] font-bold uppercase pt-1">
-                                <Trophy size={12} />
-                                Завершено
-                            </div>
-                        ) : (
-                            <div className="flex items-center justify-between pt-1">
-                                <span className="text-[10px] font-bold text-gray-300 uppercase">
-                                    {solvedTasksCount > 0 ? "В процессе" : "Не начат"}
-                                </span>
-                                <span className="flex items-center gap-1 text-xs text-[#3F8C62] font-bold">
-                                    {solvedTasksCount > 0 ? "Продолжить" : "Начать"}
-                                    <ChevronRight size={14} />
-                                </span>
-                            </div>
-                        )}
+                    )}
+                </div>
+
+                {/* Arrow */}
+                <div className="flex justify-end mt-1">
+                    <div className="w-7 h-7 rounded-full bg-white/60 border border-white/80 flex items-center justify-center transition-all duration-200 group-hover:bg-white/90 group-hover:translate-x-0.5">
+                        <ChevronRight size={15} className={clsx(
+                            'transition-colors',
+                            isSolved ? 'text-amber-400' : 'text-gray-400 group-hover:text-[#3F8C62]'
+                        )} />
                     </div>
-                )}
+                </div>
             </div>
         </button>
     );
 }
 
-function Section({ sectionKey, title, subtitle, icon: Icon, color, badge, badgeClass, topics }: typeof SECTION_CONFIG[number] & { topics: TopicNav[] }) {
+// ── Section block ──────────────────────────────────────────────────────────────
+function Section({ categoryKey, topics }: { categoryKey: CategoryKey; topics: TopicNav[] }) {
     if (topics.length === 0) return null;
+    const cfg = CATEGORY_STYLE[categoryKey];
+    const Icon = cfg.icon;
+    const titles: Record<CategoryKey, { title: string; subtitle: string }> = {
+        control:  { title: 'Контрольные работы', subtitle: 'Проверь знания по пройденным темам' },
+        variants: { title: 'Варианты',           subtitle: 'Тренировка полного варианта ЕГЭ' },
+        mock:     { title: 'Пробники',            subtitle: 'Результаты проверяются преподавателем' },
+    };
+    const { title, subtitle } = titles[categoryKey];
 
     return (
         <div className="mb-10">
             <div className="flex items-center gap-3 mb-5">
-                <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', color)}>
-                    <Icon size={18} />
+                <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', cfg.iconBg)}>
+                    <Icon size={18} className={cfg.iconText} />
                 </div>
                 <div>
                     <h2 className="text-base font-bold text-gray-900">{title}</h2>
                     <p className="text-xs text-gray-400">{subtitle}</p>
                 </div>
             </div>
-            <div className="grid gap-4 md:gap-5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),380px))] justify-start">
+            <div className="grid gap-4 md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
                 {topics.map(variant => (
-                    <ExamCard key={variant.id} variant={variant} badge={badge} badgeClass={badgeClass} />
+                    <ExamCard key={variant.id} variant={variant} categoryKey={categoryKey} />
                 ))}
             </div>
         </div>
     );
 }
 
+// ── Tab config ────────────────────────────────────────────────────────────────
+const TABS: { key: CategoryKey; label: string }[] = [
+    { key: 'control',  label: 'Контрольные' },
+    { key: 'variants', label: 'Варианты' },
+    { key: 'mock',     label: 'Пробники' },
+];
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 export default function ExamsListPage() {
     const { data: topics, isLoading } = useNavigation();
+    const [activeTab, setActiveTab] = useState<CategoryKey>('control');
 
     const grouped = useMemo(() => {
         if (!topics) return { control: [], variants: [], mock: [] };
         return {
-            control: topics.filter(t => String(t.category) === 'control'),
+            control:  topics.filter(t => String(t.category) === 'control'),
             variants: topics.filter(t => String(t.category) === 'variants'),
-            mock: topics.filter(t => String(t.category) === 'mock'),
+            mock:     topics.filter(t => String(t.category) === 'mock'),
         };
     }, [topics]);
 
-    const totalCount = grouped.control.length + grouped.variants.length + grouped.mock.length;
+    const activeTopics = grouped[activeTab] ?? [];
+
+    const unfinished = useMemo(() => ({
+        control:  grouped.control.filter(t => t.latest_score == null).length,
+        variants: grouped.variants.filter(t => t.latest_score == null).length,
+        mock:     grouped.mock.filter(t => t.latest_score == null).length,
+    }), [grouped]);
 
     if (isLoading && !topics) {
         return (
             <div className="p-4 md:p-8 space-y-6">
                 <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-                <div className="grid gap-4 md:gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),380px))]">
-                    {[1, 2, 3].map(i => <div key={i} className="h-48 bg-white border border-gray-100 rounded-2xl animate-pulse" />)}
+                <div className="grid gap-4 md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                    {[1, 2, 3].map(i => <div key={i} className="h-48 bg-gray-100 rounded-2xl animate-pulse" />)}
                 </div>
             </div>
         );
@@ -220,25 +286,43 @@ export default function ExamsListPage() {
 
     return (
         <div className="p-4 md:p-8 animate-in fade-in duration-500 max-w-[1400px] mx-auto">
-            <div className="mb-6 md:mb-8">
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Варианты ЕГЭ</h1>
-                <p className="text-gray-500 text-sm">Контрольные работы, варианты и пробники</p>
+            {/* Tabs */}
+            <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto scrollbar-hide">
+                {TABS.map(tab => {
+                    const isActive = activeTab === tab.key;
+                    const count = unfinished[tab.key];
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={clsx(
+                                'flex items-center gap-1.5 pb-2.5 text-sm font-semibold whitespace-nowrap transition-all duration-200 border-b-2 -mb-px',
+                                isActive
+                                    ? 'border-[#3F8C62] text-gray-900'
+                                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                            )}
+                        >
+                            {tab.label}
+                            {count > 0 && (
+                                <span className={clsx(
+                                    'text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center',
+                                    isActive ? 'bg-[#3F8C62] text-white' : 'bg-gray-200 text-gray-500'
+                                )}>
+                                    {count}
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
 
-            {totalCount === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-dashed border-gray-200 text-gray-400">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                        <Inbox size={32} className="opacity-20" />
-                    </div>
-                    <p className="font-bold text-lg text-gray-900">Вариантов пока нет</p>
-                    <p className="text-sm">Администратор ещё не добавил контрольные варианты</p>
+            {activeTopics.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                    <Inbox size={40} className="opacity-20 mb-3" />
+                    <p className="font-semibold text-gray-500">В этой категории пока ничего нет</p>
                 </div>
             ) : (
-                <>
-                    {SECTION_CONFIG.map(cfg => (
-                        <Section key={cfg.key} {...cfg} topics={grouped[cfg.key]} />
-                    ))}
-                </>
+                <Section categoryKey={activeTab} topics={activeTopics} />
             )}
         </div>
     );

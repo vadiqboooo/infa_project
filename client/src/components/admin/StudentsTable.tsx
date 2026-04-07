@@ -55,8 +55,9 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [resettingId, setResettingId] = useState<number | null>(null);
 
   // Set credentials for existing student
-  const [setCredsFor, setSetCredsFor] = useState<{ id: number; name: string } | null>(null);
+  const [setCredsFor, setSetCredsFor] = useState<{ id: number; name: string; login: string | null } | null>(null);
   const [setCredsLogin, setSetCredsLogin] = useState('');
+  const [setCredsPassword, setSetCredsPassword] = useState('');
   const [setCredsResult, setSetCredsResult] = useState<PasswordStudentCredential | null>(null);
   const [settingCreds, setSettingCreds] = useState(false);
   const [setCredsError, setSetCredsError] = useState('');
@@ -198,16 +199,19 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
     }
   };
 
-  const handleResetPassword = async (studentId: number) => {
+  const handleResetPassword = async (studentId: number, customPassword?: string) => {
     setResettingId(studentId);
     try {
       const res = await fetch(`${API_BASE}/admin/students/${studentId}/reset-password`, {
         method: 'POST',
         headers: authHeaders(apiKey),
+        body: customPassword ? JSON.stringify({ password: customPassword }) : undefined,
       });
       if (!res.ok) return;
       const updated: PasswordStudentCredential = await res.json();
       setCredentials((prev) => prev.map((c) => c.id === studentId ? updated : c));
+      setResetModal(null);
+      setResetPassword('');
     } finally {
       setResettingId(null);
     }
@@ -218,18 +222,36 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
     setSettingCreds(true);
     setSetCredsError('');
     try {
-      const res = await fetch(`${API_BASE}/admin/students/${setCredsFor.id}/credentials`, {
-        method: 'PUT',
-        headers: authHeaders(apiKey),
-        body: JSON.stringify({ login: setCredsLogin.trim() }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
-        setSetCredsError(err.detail || 'Ошибка');
-        return;
+      // If student already has a login — use reset-password with optional custom password
+      if (setCredsFor.login) {
+        const res = await fetch(`${API_BASE}/admin/students/${setCredsFor.id}/reset-password`, {
+          method: 'POST',
+          headers: authHeaders(apiKey),
+          body: JSON.stringify({ password: setCredsPassword.trim() || undefined }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
+          setSetCredsError(err.detail || 'Ошибка');
+          return;
+        }
+        const result: PasswordStudentCredential = await res.json();
+        setSetCredsResult(result);
+        setCredentials((prev) => prev.map((c) => c.id === result.id ? result : c));
+      } else {
+        // New credentials — set login + auto-generate password
+        const res = await fetch(`${API_BASE}/admin/students/${setCredsFor.id}/credentials`, {
+          method: 'PUT',
+          headers: authHeaders(apiKey),
+          body: JSON.stringify({ login: setCredsLogin.trim() }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: 'Ошибка' }));
+          setSetCredsError(err.detail || 'Ошибка');
+          return;
+        }
+        const result: PasswordStudentCredential = await res.json();
+        setSetCredsResult(result);
       }
-      const result: PasswordStudentCredential = await res.json();
-      setSetCredsResult(result);
     } finally {
       setSettingCreds(false);
     }
@@ -571,8 +593,9 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                         )}
                         <button
                           onClick={() => {
-                            setSetCredsFor({ id: student.id, name: student.name });
-                            setSetCredsLogin('');
+                            setSetCredsFor({ id: student.id, name: student.name, login: student.login });
+                            setSetCredsLogin(student.login || '');
+                            setSetCredsPassword('');
                             setSetCredsResult(null);
                             setSetCredsError('');
                           }}
@@ -661,7 +684,35 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                   Готово
                 </button>
               </div>
+            ) : setCredsFor.login ? (
+              /* Student already has login — change password */
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Логин</label>
+                  <div className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 font-mono">{setCredsFor.login}</div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Новый пароль</label>
+                  <input
+                    value={setCredsPassword}
+                    onChange={(e) => setSetCredsPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSetCredentials(); }}
+                    placeholder="Оставьте пустым для авто-генерации"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                    autoFocus
+                  />
+                </div>
+                {setCredsError && <p className="text-red-500 text-xs ml-1">{setCredsError}</p>}
+                <button
+                  onClick={handleSetCredentials}
+                  disabled={settingCreds}
+                  className="w-full py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {settingCreds ? 'Сохранение...' : 'Сменить пароль'}
+                </button>
+              </div>
             ) : (
+              /* New student — set login, auto-generate password */
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Логин</label>
@@ -832,12 +883,17 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                           </div>
                         </div>
                         <button
-                          onClick={() => handleResetPassword(cred.id)}
-                          disabled={resettingId === cred.id}
-                          title="Сбросить пароль"
-                          className="absolute bottom-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-orange-500 hover:bg-orange-50 opacity-0 group-hover/cred:opacity-100 transition-all disabled:opacity-50 print:hidden"
+                          onClick={() => {
+                            setSetCredsFor({ id: cred.id, name: cred.name, login: cred.login });
+                            setSetCredsLogin(cred.login);
+                            setSetCredsPassword('');
+                            setSetCredsResult(null);
+                            setSetCredsError('');
+                          }}
+                          title="Сменить пароль"
+                          className="absolute bottom-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-orange-500 hover:bg-orange-50 opacity-0 group-hover/cred:opacity-100 transition-all print:hidden"
                         >
-                          <RefreshCw size={13} className={resettingId === cred.id ? 'animate-spin' : ''} />
+                          <RefreshCw size={13} />
                         </button>
                       </div>
                     );
@@ -848,6 +904,7 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
           </div>
         </div>
       )}
+
     </div>
   );
 }

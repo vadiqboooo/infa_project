@@ -55,6 +55,7 @@ export interface TopicNav {
     is_mock: boolean;
     ege_number?: number | null;
     analysis_published?: boolean;
+    draft_count?: number;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -109,6 +110,8 @@ export interface ExamInfo {
     active_attempt: {
         id: number;
         started_at: string;
+        draft_answers?: Record<string, { val: AnswerVal }>;
+        draft_codes?: Record<string, string>;
     } | null;
     finished_attempt: {
         id: number;
@@ -272,6 +275,7 @@ export interface StudentOut {
     username: string | null;
     photo_url: string | null;
     role: string;
+    login: string | null;
     last_active_at: string;
     total_solved: number;
     total_tasks: number;

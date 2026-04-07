@@ -151,8 +151,53 @@ export default function ExamPage() {
             setTaskAccumulatedMs(prev => ({ ...prev, [task.id]: (prev[task.id] || 0) + sessionMs }));
             taskSessionStartRef.current = null; // frozen
             setExamAnswers(prev => ({ ...prev, [task.id]: currentAnswer }));
+
+            // Persist draft to backend
+            const attemptId = examInfo?.active_attempt?.id;
+            if (attemptId) {
+                const token = localStorage.getItem("jwt_token");
+                fetch(`/api/exams/attempt/${attemptId}/save-answer`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify({ task_id: task.id, answer: { val: currentAnswer } }),
+                }).catch(() => {}); // non-blocking
+            }
         }
     };
+
+    // Restore draft answers from backend when re-entering an active exam
+    const draftsRestoredRef = useRef(false);
+    useEffect(() => {
+        if (!examInfo?.active_attempt || draftsRestoredRef.current) return;
+        draftsRestoredRef.current = true;
+        const drafts = examInfo.active_attempt.draft_answers;
+        const draftCodes = examInfo.active_attempt.draft_codes;
+        if (drafts && Object.keys(drafts).length > 0) {
+            const restored: Record<number, AnswerVal> = {};
+            for (const [taskId, ans] of Object.entries(drafts)) {
+                if (ans && ans.val !== undefined && ans.val !== "") {
+                    restored[Number(taskId)] = ans.val;
+                }
+            }
+            if (Object.keys(restored).length > 0) {
+                setExamAnswers(restored);
+                // Also set currentAnswer for the first task
+                const firstTaskId = tasks[0]?.id;
+                if (firstTaskId && restored[firstTaskId] !== undefined) {
+                    setCurrentAnswer(restored[firstTaskId]);
+                }
+            }
+        }
+        if (draftCodes && Object.keys(draftCodes).length > 0) {
+            const restoredCodes: Record<number, string> = {};
+            for (const [taskId, code] of Object.entries(draftCodes)) {
+                if (code) restoredCodes[Number(taskId)] = code;
+            }
+            if (Object.keys(restoredCodes).length > 0) {
+                setCodeSolutions(restoredCodes);
+            }
+        }
+    }, [examInfo?.active_attempt]);
 
     // Set exam end time once when active attempt loads
     useEffect(() => {
@@ -334,8 +379,8 @@ export default function ExamPage() {
             const v = answer.val !== undefined ? answer.val : answer;
             if (v === null || v === undefined || v === "") return "—";
             if (Array.isArray(v)) {
-                if (Array.isArray(v[0])) return v.map((row: any[]) => row.join("; ")).join(" | ");
-                return v.join("; ");
+                if (Array.isArray(v[0])) return (v as any[][]).map((r: any[]) => r.join("; ")).join("; ");
+                return (v as any[]).join("; ");
             }
             return String(v);
         };
@@ -344,48 +389,41 @@ export default function ExamPage() {
             <div className="min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-wrap items-center gap-3 md:gap-4">
-                        <button onClick={() => navigate('/exams')} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0">
-                            <ArrowLeft size={16} /> Назад
+                    <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
+                        <button onClick={() => navigate('/exams')} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                            <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
-                        <div className="w-px h-8 bg-gray-200 shrink-0" />
-                        <div className="flex items-center gap-3 min-w-0 shrink-0">
-                            <div className={clsx("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", publishedAnalysis ? "bg-emerald-100 text-emerald-600" : "bg-violet-100 text-violet-600")}>
-                                <CheckCircle2 size={18} />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">{publishedAnalysis ? "Проверено учителем" : "Пробник завершён"}</div>
-                                <div className="text-sm font-bold text-gray-800 truncate">{currentTopic.title}</div>
-                            </div>
+
+                        {/* Title + status */}
+                        <div className="min-w-0 flex-1 flex items-center gap-3">
+                            <span className="text-base font-bold text-gray-900 truncate">{currentTopic.title}</span>
+                            {publishedAnalysis && <span className="text-xs font-semibold text-emerald-600 shrink-0">Проверено</span>}
                         </div>
+
+                        {/* Score metrics */}
                         {publishedAnalysis && result.primary_score != null && (
-                            <>
-                                <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
-                                <div className="flex items-center gap-4 md:gap-6">
-                                    <div>
-                                        <div className="text-xl font-black text-[#3F8C62] leading-none">{result.score?.toFixed(0) ?? "—"}</div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
-                                    </div>
-                                    <div className="w-px h-6 bg-gray-100" />
-                                    <div>
-                                        <div className="text-base font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
-                                    </div>
-                                    <div className="w-px h-6 bg-gray-100" />
-                                    <div>
-                                        <div className="text-base font-bold text-gray-900 leading-none">
-                                            {taskResults.filter(r => r.is_correct).length}<span className="text-gray-300 font-normal text-sm">/{taskResults.length}</span>
-                                        </div>
-                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">верных</div>
-                                    </div>
+                            <div className="hidden sm:flex items-center gap-5 shrink-0">
+                                <div className="text-center">
+                                    <div className="text-xl font-black text-[#3F8C62] leading-none">{result.score?.toFixed(0) ?? "—"}</div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">тест. балл</div>
                                 </div>
-                            </>
+                                <div className="text-center">
+                                    <div className="text-xl font-black text-gray-800 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">первичных</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-xl font-black text-gray-800 leading-none">
+                                        {taskResults.filter(r => r.is_correct).length}<span className="text-gray-300 font-normal text-sm">/{taskResults.length}</span>
+                                    </div>
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">верных</div>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
+                <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
                     {/* Info banner — hide after published */}
                     {!publishedAnalysis && (
                         <div className="bg-violet-50 border border-violet-100 rounded-2xl px-5 py-4 flex items-start gap-3">
@@ -396,134 +434,117 @@ export default function ExamPage() {
                         </div>
                     )}
 
-                    {/* Task list */}
-                    {taskResults.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                                <h2 className="text-sm font-bold text-gray-700">{publishedAnalysis ? "Результаты" : "Ваши ответы"}</h2>
-                                <span className="text-xs text-gray-400">
-                                    {publishedAnalysis
-                                        ? `${taskResults.filter(r => r.is_correct).length} верных из ${taskResults.length}`
-                                        : `${taskResults.filter(r => r.user_answer).length} / ${taskResults.length} заданий с ответом`
-                                    }
-                                </span>
-                            </div>
-                            <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className="bg-gray-50">
-                                        <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-12">№</th>
-                                        <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Ваш ответ</th>
-                                        {publishedAnalysis && <th className="text-left py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Верный ответ</th>}
-                                        <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200">Решение</th>
-                                        <th className="text-center py-2 px-4 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-200 w-16"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                    {/* Main grid: table + teacher comment */}
+                    <div className={clsx("flex flex-col gap-4", publishedAnalysis?.comment && "lg:flex-row lg:items-start")}>
+                        {/* Results cards */}
+                        {taskResults.length > 0 && (() => {
+                            const happyFaces = ["\u25CF\u203F\u25CF", "\u25D5\u203F\u25D5", "^\u203F^", "\u25CF\u03C9\u25CF", ">\u203F<", "\u25D5\u25E1\u25D5", "^\u25E1^", "\u2606\u203F\u2606", "\u00B4\u25E1`", "\u25CF\u1D17\u25CF"];
+                            const sadFaces = ["\u25CF\uFE3F\u25CF", ">\uFE4F<", "\u00D7\uFE4F\u00D7", "\u25CF\u2570\u256E\u25CF", "T\uFE4FT", ">\u2229<", "\u25D5\uFE35\u25D5", ";\uFE4F;", "\u25CF\uFF3F\u25CF", ">\u0414<"];
+                            const pickFace = (taskId: number, faces: string[]) => faces[taskId % faces.length];
+
+                            return (
+                                <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-2">
                                     {sortedMockResults.map((tr, idx) => {
                                         const hasCode = !!(tr.code_solution || reviewSavedCodes[tr.task_id]);
                                         const hasFile = !!tr.file_solution_url;
-                                        const isCorrect = tr.is_correct;
-                                        const isPartial = !isCorrect && (tr.points ?? 0) > 0;
+                                        const isCorrect = publishedAnalysis ? tr.is_correct : undefined;
+                                        const isPartial = publishedAnalysis ? (!tr.is_correct && (tr.points ?? 0) > 0) : false;
+                                        const isWrong = publishedAnalysis ? (!tr.is_correct && !isPartial) : false;
+                                        const hasAction = hasCode || hasFile || (publishedAnalysis && !isCorrect);
+                                        const face = publishedAnalysis
+                                            ? (isCorrect ? pickFace(tr.task_id, happyFaces) : pickFace(tr.task_id, sadFaces))
+                                            : null;
+
                                         return (
-                                            <tr
+                                            <div
                                                 key={tr.task_id}
-                                                className={clsx(
-                                                    "cursor-pointer transition-colors",
-                                                    publishedAnalysis
-                                                        ? isCorrect ? "bg-emerald-50/40 hover:bg-emerald-50/70"
-                                                        : isPartial ? "bg-amber-50/40 hover:bg-amber-50/70"
-                                                        : "bg-red-50/30 hover:bg-red-50/60"
-                                                        : "hover:bg-gray-50/70"
-                                                )}
+                                                className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
+                                                style={{
+                                                    backgroundColor: isCorrect ? '#d4edd4' : isWrong ? '#f5b5a8' : isPartial ? '#fde68a' : '#ffffff',
+                                                    borderColor: isCorrect ? '#b6ddb6' : isWrong ? '#e8998a' : isPartial ? '#f5d06b' : '#e5e7eb',
+                                                }}
                                                 onClick={() => setReviewTaskId(tr.task_id)}
                                             >
-                                                <td className="py-2.5 px-4 border-b border-gray-100">
-                                                    <div className="flex items-center gap-2">
-                                                        {publishedAnalysis && (
-                                                            isCorrect
-                                                                ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                                                                : isPartial
-                                                                    ? <CheckCircle2 size={13} className="text-amber-400 shrink-0" />
-                                                                    : <XCircle size={13} className="text-red-400 shrink-0" />
-                                                        )}
-                                                        <span className="font-bold text-gray-700">{tr.ege_number || idx + 1}</span>
-                                                        {publishedAnalysis && <span className={clsx("text-[9px] font-bold ml-auto tabular-nums", isCorrect ? "text-emerald-600" : isPartial ? "text-amber-600" : "text-red-500")}>{tr.points ?? 0}/{tr.max_points ?? 1}</span>}
+                                                {/* Task number */}
+                                                <span className="text-lg font-black shrink-0 w-8 text-center text-gray-800">
+                                                    {tr.ege_number || idx + 1}
+                                                </span>
+
+                                                {/* Answers */}
+                                                <div className="flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
+                                                    <div className="min-w-0 max-w-[140px]">
+                                                        <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Ваш ответ</div>
+                                                        <div className={clsx("text-sm font-bold font-mono truncate", isWrong ? "text-red-600" : "text-gray-800")}>
+                                                            {formatAnswer(tr.user_answer)}
+                                                        </div>
                                                     </div>
-                                                </td>
-                                                <td className={clsx("py-2.5 px-4 font-mono text-xs border-b border-gray-100", publishedAnalysis && !isCorrect ? "text-red-500" : "text-gray-600")}>
-                                                    {formatAnswer(tr.user_answer)}
-                                                </td>
-                                                {publishedAnalysis && (
-                                                    <td className="py-2.5 px-4 font-mono text-xs text-emerald-700 border-b border-gray-100">
-                                                        {tr.auto_checked !== false ? formatAnswer(tr.correct_answer) : <span className="text-gray-400 text-[10px] not-italic font-sans">проверка учителем</span>}
-                                                    </td>
-                                                )}
-                                                <td className="py-2.5 px-4 text-center border-b border-gray-100">
-                                                    <div className="flex items-center justify-center gap-1.5">
-                                                        {hasCode && <span className="text-xs font-bold text-purple-500 bg-purple-50 rounded px-1.5 py-0.5">код</span>}
-                                                        {hasFile && <span className="text-xs font-bold text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">файл</span>}
-                                                        {!hasCode && !hasFile && <span className="text-[10px] text-gray-300">—</span>}
-                                                    </div>
-                                                </td>
-                                                <td className="py-2.5 px-4 text-center border-b border-gray-100">
-                                                    <span className="text-gray-300 hover:text-gray-500 transition-colors">
-                                                        <Eye size={13} />
+                                                    {publishedAnalysis && !isCorrect && (
+                                                        <div className="min-w-0 max-w-[140px]">
+                                                            <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Верный ответ</div>
+                                                            <div className="text-sm font-bold font-mono text-gray-800 truncate">
+                                                                {tr.auto_checked !== false ? formatAnswer(tr.correct_answer) : "вручную"}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Kawaii face */}
+                                                {face && (
+                                                    <span className="text-base shrink-0 opacity-40 select-none" style={{ fontFamily: "monospace" }}>
+                                                        {face}
                                                     </span>
-                                                </td>
-                                            </tr>
+                                                )}
+
+                                                {/* Action */}
+                                                {hasAction && (
+                                                    <span className={clsx(
+                                                        "text-xs font-bold shrink-0 flex items-center gap-1",
+                                                        hasCode || hasFile ? "text-[#3F8C62]" : "text-violet-500"
+                                                    )}>
+                                                        {hasCode || hasFile ? "Решение" : "Разбор"}
+                                                        <ChevronRight size={12} />
+                                                    </span>
+                                                )}
+                                            </div>
                                         );
                                     })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                </div>
+                            );
+                        })()}
 
-                    {/* Submit for review button */}
-                    <div className="flex justify-end">
-                        {submitted ? (
-                            <div className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl border border-emerald-200">
-                                <Check size={16} /> Отправлено на проверку
+                        {/* Teacher comment — right side on desktop */}
+                        {publishedAnalysis?.comment && (
+                            <div className="lg:w-72 xl:w-80 shrink-0">
+                                <div className="bg-violet-50 border border-violet-200 rounded-2xl overflow-hidden lg:sticky lg:top-4">
+                                    <div className="px-5 py-3 border-b border-violet-100 flex items-center gap-2">
+                                        <MessageSquare size={14} className="text-violet-500" />
+                                        <h2 className="text-sm font-bold text-violet-800">Комментарий учителя</h2>
+                                    </div>
+                                    <div className="p-5">
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">"{publishedAnalysis.comment}"</p>
+                                    </div>
+                                </div>
                             </div>
-                        ) : (
-                            <button
-                                onClick={handleSubmitForReview}
-                                disabled={submitLoading}
-                                className="flex items-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 disabled:opacity-60"
-                            >
-                                {submitLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                                Отправить на проверку
-                            </button>
                         )}
                     </div>
 
-                    {/* Published teacher analysis */}
-                    {publishedAnalysis && (
-                        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-                            <div className="px-5 py-3 border-b border-violet-50 bg-violet-50/50 flex items-center gap-2">
-                                <div className="w-7 h-7 bg-violet-100 text-violet-600 rounded-lg flex items-center justify-center">
-                                    <Sparkles size={14} />
+                    {/* Submit for review button */}
+                    {!publishedAnalysis && (
+                        <div className="flex justify-end">
+                            {submitted ? (
+                                <div className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl border border-emerald-200">
+                                    <Check size={16} /> Отправлено на проверку
                                 </div>
-                                <h2 className="text-sm font-bold text-violet-800">Разбор от учителя</h2>
-                            </div>
-                            <div className="p-5 space-y-4">
-                                {publishedAnalysis.comment && (
-                                    <div className="flex gap-3 p-4 bg-violet-50 rounded-xl border border-violet-100">
-                                        <MessageSquare size={16} className="text-violet-500 shrink-0 mt-0.5" />
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{publishedAnalysis.comment}</p>
-                                    </div>
-                                )}
-                                <div className="prose prose-sm max-w-none text-gray-700
-                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
-                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
-                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
-                                    [&>p]:leading-relaxed [&>p]:mb-2
-                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
-                                    [&>li]:mb-1
-                                    [&>strong]:text-gray-900
-                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
-                                    <ReactMarkdown>{publishedAnalysis.analysis_text}</ReactMarkdown>
-                                </div>
-                            </div>
+                            ) : (
+                                <button
+                                    onClick={handleSubmitForReview}
+                                    disabled={submitLoading}
+                                    className="flex items-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 disabled:opacity-60"
+                                >
+                                    {submitLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                                    Отправить на проверку
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -571,8 +592,8 @@ export default function ExamPage() {
 
                     return (
                         <>
-                            <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setReviewTaskId(null)} />
-                            <div className="fixed top-0 right-0 h-full w-1/2 min-w-[400px] bg-white z-50 shadow-2xl flex flex-col">
+                            <div className="fixed inset-0 bg-black/30 z-40 animate-in fade-in duration-200" onClick={() => setReviewTaskId(null)} />
+                            <div className="fixed top-0 right-0 h-full w-full sm:w-1/2 sm:min-w-[400px] bg-white z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
                                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
@@ -580,7 +601,12 @@ export default function ExamPage() {
                                         </div>
                                         <div>
                                             <h2 className="font-bold text-gray-900 text-sm">Задание №{egeNum ?? reviewTaskId}</h2>
-                                            <p className="text-[11px] text-gray-400 mt-0.5">Ваш ответ: {formatAnswer(currentTR?.user_answer)}</p>
+                                            <div className="flex items-center gap-3 mt-0.5">
+                                                <p className="text-[11px] text-gray-400">Ваш ответ: <span className={clsx("font-mono font-semibold", publishedAnalysis && !currentTR?.is_correct ? "text-red-500" : "text-gray-600")}>{formatAnswer(currentTR?.user_answer)}</span></p>
+                                                {publishedAnalysis && !currentTR?.is_correct && (
+                                                    <p className="text-[11px] text-gray-400">Верный: <span className="font-mono font-semibold text-emerald-600">{currentTR?.auto_checked !== false ? formatAnswer(currentTR?.correct_answer) : "вручную"}</span></p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <button onClick={() => setReviewTaskId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -670,8 +696,10 @@ export default function ExamPage() {
         };
 
         const sortedResults = [...taskResults].sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0));
-        const firstHalf = sortedResults.slice(0, 14);
-        const secondHalf = sortedResults.slice(14);
+        const isVariant = String(currentTopic?.category) === "variants";
+        const correctCount = result.correct_count ?? taskResults.filter(r => r.is_correct).length;
+        const totalCount = result.total_tasks ?? taskResults.length;
+        const pctScore = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
 
 
         const ResultRow = ({ tr, idx }: { tr: TaskResult; idx: number }) => {
@@ -751,114 +779,117 @@ export default function ExamPage() {
 
         return (
             <div className="min-h-screen bg-[#F8F7F4]">
-                {/* Header — back button + score card в одной строке */}
+                {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-wrap items-center gap-3 md:gap-5">
-                        {/* Кнопка назад */}
-                        <button
-                            onClick={() => navigate('/exams')}
-                            className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors shrink-0"
-                        >
-                            <ArrowLeft size={16} />
-                            Назад
+                    <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
+                        <button onClick={() => navigate('/exams')} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                            <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
-                        <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
-
-                        {/* Иконка + название */}
-                        <div className="flex items-center gap-3 shrink-0">
-                            <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                                <CheckCircle2 size={18} />
-                            </div>
-                            <div>
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-0.5">Вариант завершен</div>
-                                <div className="text-sm font-bold text-gray-800 truncate max-w-[160px] md:max-w-[220px]">{currentTopic.title}</div>
-                            </div>
+                        <div className="min-w-0 flex-1 flex items-center gap-3">
+                            <span className="text-base font-bold text-gray-900 truncate">{currentTopic.title}</span>
                         </div>
 
-                        <div className="w-px h-8 bg-gray-200 shrink-0 hidden sm:block" />
-
-                        {/* Метрики */}
-                        <div className="flex items-center gap-4 md:gap-8 flex-1 min-w-0">
-                            <div>
-                                <div className="text-xl md:text-2xl font-black text-[#3F8C62] leading-none">{result.score.toFixed(0)}</div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">тест. балл</div>
+                        <div className="hidden sm:flex items-center gap-5 shrink-0">
+                            <div className="text-center">
+                                <div className="text-xl font-black text-[#3F8C62] leading-none">{isVariant ? result.score.toFixed(0) : `${pctScore}%`}</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">{isVariant ? "тест. балл" : "результат"}</div>
                             </div>
-                            <div className="w-px h-6 bg-gray-100" />
-                            <div>
-                                <div className="text-base md:text-lg font-bold text-gray-900 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/29</span></div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">первичный</div>
+                            <div className="text-center">
+                                <div className="text-xl font-black text-gray-800 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/{isVariant ? 29 : totalCount}</span></div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">{isVariant ? "первичных" : "баллов"}</div>
                             </div>
-                            <div className="w-px h-6 bg-gray-100" />
-                            <div>
-                                <div className="text-base md:text-lg font-bold text-gray-900 leading-none">
-                                    {result.correct_count ?? taskResults.filter(r => r.is_correct).length}
-                                    <span className="text-gray-300 font-normal text-sm">/{result.total_tasks ?? taskResults.length}</span>
+                            <div className="text-center">
+                                <div className="text-xl font-black text-gray-800 leading-none">
+                                    {correctCount}<span className="text-gray-300 font-normal text-sm">/{totalCount}</span>
                                 </div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">верных</div>
+                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">верных</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Results Table */}
-                <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 md:py-6">
-                    {taskResults.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                            <div className="px-5 py-3 border-b border-gray-100">
-                                <h2 className="text-sm font-bold text-gray-700">Подробные результаты</h2>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-gray-200">
-                                <table className="w-full text-sm border-collapse">
-                                    <TableHead />
-                                    <tbody>
-                                        {firstHalf.map((tr, idx) => (
-                                            <ResultRow key={tr.task_id} tr={tr} idx={idx} />
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <table className="w-full text-sm border-collapse">
-                                    <TableHead />
-                                    <tbody>
-                                        {secondHalf.map((tr, idx) => (
-                                            <ResultRow key={tr.task_id} tr={tr} idx={idx + 14} />
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
+                {/* Results cards + comment */}
+                <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
+                    <div className={clsx("flex flex-col gap-4", publishedAnalysis?.comment && "lg:flex-row lg:items-start")}>
+                        {taskResults.length > 0 && (
+                            <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {sortedResults.map((tr, idx) => {
+                                    const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
+                                    const isCorrect = tr.is_correct;
+                                    const isPartial = !isCorrect && tr.points > 0;
+                                    const isWrong = !isCorrect && !isPartial;
+                                    const hasCode = !!(tr.code_solution || reviewSavedCodes[tr.task_id]);
+                                    const hasFile = !!tr.file_solution_url;
+                                    const hasAction = hasCode || hasFile || !isCorrect;
 
-                    {/* Published teacher analysis */}
-                    {publishedAnalysis && (
-                        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-                            <div className="px-5 py-3 border-b border-violet-50 bg-violet-50/50 flex items-center gap-2">
-                                <div className="w-7 h-7 bg-violet-100 text-violet-600 rounded-lg flex items-center justify-center">
-                                    <Sparkles size={14} />
-                                </div>
-                                <h2 className="text-sm font-bold text-violet-800">Разбор от учителя</h2>
+                                    return (
+                                        <div
+                                            key={tr.task_id}
+                                            className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
+                                            style={{
+                                                backgroundColor: isCorrect ? '#d4edd4' : isWrong ? '#f5b5a8' : '#fde68a',
+                                                borderColor: isCorrect ? '#b6ddb6' : isWrong ? '#e8998a' : '#f5d06b',
+                                            }}
+                                            onClick={() => setReviewTaskId(tr.task_id)}
+                                        >
+                                            <span className="text-lg font-black shrink-0 w-8 text-center text-gray-800">
+                                                {tr.ege_number || idx + 1}
+                                            </span>
+
+                                            <div className="flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
+                                                <div className="min-w-0 max-w-[140px]">
+                                                    <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Ваш ответ</div>
+                                                    <div className={clsx("text-sm font-bold font-mono truncate", isWrong ? "text-red-600" : "text-gray-800")}>
+                                                        {formatAnswer(tr.user_answer)}
+                                                    </div>
+                                                </div>
+                                                {!isCorrect && (
+                                                    <div className="min-w-0 max-w-[140px]">
+                                                        <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Верный ответ</div>
+                                                        <div className="text-sm font-bold font-mono text-gray-800 truncate">
+                                                            {tr.auto_checked !== false ? formatAnswer(tr.correct_answer) : "вручную"}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <span className={clsx(
+                                                "text-xs font-bold px-2 py-1 rounded-lg shrink-0",
+                                                isCorrect ? "text-emerald-700 bg-emerald-100/60" : isPartial ? "text-amber-700 bg-amber-100/60" : "text-red-600 bg-red-100/60"
+                                            )}>
+                                                {tr.points}/{max}
+                                            </span>
+
+                                            {hasAction && (
+                                                <span className={clsx(
+                                                    "text-xs font-bold shrink-0 flex items-center gap-1",
+                                                    hasCode || hasFile ? "text-[#3F8C62]" : "text-violet-500"
+                                                )}>
+                                                    {hasCode || hasFile ? "Решение" : "Разбор"}
+                                                    <ChevronRight size={12} />
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            <div className="p-5 space-y-4">
-                                {publishedAnalysis.comment && (
-                                    <div className="flex gap-3 p-4 bg-violet-50 rounded-xl border border-violet-100">
-                                        <MessageSquare size={16} className="text-violet-500 shrink-0 mt-0.5" />
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{publishedAnalysis.comment}</p>
+                        )}
+
+                        {publishedAnalysis?.comment && (
+                            <div className="lg:w-72 xl:w-80 shrink-0">
+                                <div className="bg-violet-50 border border-violet-200 rounded-2xl overflow-hidden lg:sticky lg:top-4">
+                                    <div className="px-5 py-3 border-b border-violet-100 flex items-center gap-2">
+                                        <MessageSquare size={14} className="text-violet-500" />
+                                        <h2 className="text-sm font-bold text-violet-800">Комментарий учителя</h2>
                                     </div>
-                                )}
-                                <div className="prose prose-sm max-w-none text-gray-700
-                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
-                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
-                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
-                                    [&>p]:leading-relaxed [&>p]:mb-2
-                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
-                                    [&>li]:mb-1
-                                    [&>strong]:text-gray-900
-                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
-                                    <ReactMarkdown>{publishedAnalysis.analysis_text}</ReactMarkdown>
+                                    <div className="p-5">
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">"{publishedAnalysis.comment}"</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
             {/* Review Panel — slide-out for viewing task after exam */}
@@ -916,17 +947,22 @@ export default function ExamPage() {
 
                 return (
                     <>
-                        <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setReviewTaskId(null)} />
-                        <div className="fixed top-0 right-0 h-full w-1/2 min-w-[400px] bg-white z-50 shadow-2xl flex flex-col">
+                        <div className="fixed inset-0 bg-black/30 z-40 animate-in fade-in duration-200" onClick={() => setReviewTaskId(null)} />
+                        <div className="fixed top-0 right-0 h-full w-full sm:w-1/2 sm:min-w-[400px] bg-white z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
                             {/* Header */}
                             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
-                                        <Eye size={15} className="text-gray-500" />
+                                    <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
+                                        <Eye size={15} className="text-violet-500" />
                                     </div>
                                     <div>
                                         <h2 className="font-bold text-gray-900 text-sm">Задание №{egeNum ?? reviewTaskId}</h2>
-                                        <p className="text-[11px] text-gray-400 mt-0.5">Просмотр (только чтение)</p>
+                                        <div className="flex items-center gap-3 mt-0.5">
+                                            <p className="text-[11px] text-gray-400">Ваш ответ: <span className={clsx("font-mono font-semibold", !currentTR?.is_correct ? "text-red-500" : "text-gray-600")}>{formatAnswer(currentTR?.user_answer)}</span></p>
+                                            {!currentTR?.is_correct && currentTR?.auto_checked !== false && (
+                                                <p className="text-[11px] text-gray-400">Верный: <span className="font-mono font-semibold text-emerald-600">{formatAnswer(currentTR?.correct_answer)}</span></p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <button onClick={() => setReviewTaskId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -1222,6 +1258,16 @@ export default function ExamPage() {
                                     onClick={() => {
                                         if (!isFileTask) {
                                             setCodeSolutions(prev => ({ ...prev, [solutionPanelTaskId]: localCode }));
+                                            // Persist code draft to backend
+                                            const attemptId = examInfo?.active_attempt?.id;
+                                            if (attemptId) {
+                                                const token = localStorage.getItem("jwt_token");
+                                                fetch(`/api/exams/attempt/${attemptId}/save-answer`, {
+                                                    method: "PUT",
+                                                    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                                    body: JSON.stringify({ task_id: solutionPanelTaskId, code: localCode }),
+                                                }).catch(() => {});
+                                            }
                                         }
                                         setSolutionPanelTaskId(null);
                                     }}

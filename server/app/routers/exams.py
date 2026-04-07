@@ -104,6 +104,8 @@ async def get_exam_by_topic(
         "active_attempt": {
             "id": attempt.id,
             "started_at": attempt.started_at,
+            "draft_answers": (attempt.results_json or {}).get("draft_answers", {}),
+            "draft_codes": (attempt.results_json or {}).get("draft_codes", {}),
         } if attempt else None,
         "finished_attempt": {
             "id": finished.id,
@@ -198,6 +200,47 @@ async def start_exam(
         started_at=attempt.started_at,
         time_limit_minutes=exam.time_limit_minutes,
     )
+
+
+@router.put("/attempt/{attempt_id}/save-answer")
+async def save_draft_answer(
+    attempt_id: int,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save a draft answer (and optionally code) for a task during an active exam."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Active attempt not found")
+
+    task_id = str(body.get("task_id", ""))
+    answer = body.get("answer")  # {val: ...}
+    code = body.get("code")      # string or None
+
+    results = dict(attempt.results_json or {})
+    drafts = results.get("draft_answers", {})
+    codes = results.get("draft_codes", {})
+
+    if answer is not None:
+        drafts[task_id] = answer
+    if code is not None:
+        codes[task_id] = code
+
+    results["draft_answers"] = drafts
+    results["draft_codes"] = codes
+    attempt.results_json = results
+    flag_modified(attempt, "results_json")
+    await db.commit()
+
+    return {"ok": True}
 
 
 @router.post("/{exam_id}/submit", response_model=ExamResult)
@@ -432,41 +475,33 @@ async def analyze_exam_attempt(
         pts = r.get("points", 0)
         max_pts = r.get("max_points", 1)
 
-        detail = f"Задание №{num}: ответ ученика = {user_val}, верный = {correct_val} ({pts}/{max_pts} балл.)"
+        detail = f"Задание №{num}: ответ ученика = {user_val}, верный ответ = {correct_val} ({pts}/{max_pts} балл.)"
         if task and task.content_html:
             detail += f"\nУсловие: {_strip_html(task.content_html, 500)}"
-        if task and task.full_solution_code:
-            detail += f"\nЭталонный код:\n```python\n{task.full_solution_code[:500]}\n```"
-        elif task and task.solution_steps:
-            steps = task.solution_steps
-            if isinstance(steps, list) and steps:
-                expl = " ".join(
-                    s.get("explanation", "") for s in steps[:2] if isinstance(s, dict)
-                )
-                if expl:
-                    detail += f"\nПояснение решения: {expl[:300]}"
         wrong_details.append(detail)
 
     correct_nums = [str(r.get("ege_number") or "?") for r in correct]
 
-    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика.
+    prompt = f"""Проанализируй результаты ЕГЭ по информатике ученика. Задача — помочь учителю понять причины ошибок.
 
 📊 Итог:
 - Первичный балл: {primary}/29
 - Тестовый балл: {score:.0f}/100
-- Верно решено: {len(correct)} из {len(sorted_results)}
+- Верно: {len(correct)} из {len(sorted_results)}
 - Верные задания: {", ".join(correct_nums) if correct_nums else "нет"}
 
 {"❌ Задания с ошибками:" if wrong_details else "✅ Все задания решены верно!"}
 {chr(10).join(wrong_details)}
 
-Напиши развёрнутый персональный анализ на русском языке. Структура:
-1. 📈 **Краткое резюме** — оцени результат, уровень подготовки
-2. ❌ **Разбор ошибок** — по каждому неверному заданию: почему мог возникнуть такой ответ, что нужно понять чтобы решить правильно. Если есть код/решение — объясни ключевую идею.
-3. ✅ **Правильно решённые** — одно тёплое предложение о том, что получилось хорошо
-4. 🎯 **Что повторить** — конкретные темы по ошибкам
+ВАЖНО: НЕ давай решение и НЕ объясняй как решать. Только анализируй причину ошибки.
 
-Будь конкретным и персональным. Используй markdown (жирный, списки)."""
+Для каждого неверного задания напиши:
+1. **Вероятная причина ошибки** — проанализируй ответ ученика и условие, предположи конкретно что он перепутал или не учёл
+2. **Рекомендация** — какую тему повторить (кратко, одно предложение)
+
+В конце дай общий вывод: какие темы нужно повторить в первую очередь.
+
+Формат: коротко и по делу, без воды. Используй markdown."""
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:
@@ -481,7 +516,7 @@ async def analyze_exam_attempt(
                 "messages": [
                     {
                         "role": "system",
-                        "content": "Ты опытный преподаватель информатики, помогаешь школьникам готовиться к ЕГЭ. Давай конкретные, персональные советы. Отвечай на русском языке.",
+                        "content": "Ты помощник учителя информатики. Анализируешь ошибки учеников на ЕГЭ. Не давай решений — только анализ причин ошибок и рекомендации что повторить. Отвечай кратко, на русском языке.",
                     },
                     {"role": "user", "content": prompt},
                 ],

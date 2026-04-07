@@ -27,5 +27,6 @@ class TopicNav(BaseModel):
     is_mock: bool = False
     ege_number: int | None = None
     analysis_published: bool = False
+    draft_count: int = 0
 
     model_config = {"from_attributes": True}
