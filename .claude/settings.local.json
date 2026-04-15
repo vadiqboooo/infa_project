@@ -15,7 +15,8 @@
       "Bash(npm install:*)",
       "Bash(grep:*)",
       "Bash(npx vite)",
-      "Bash(\"c:/Users/user/Desktop/infa_project/server/app/routers/exams.py\")"
+      "Bash(\"c:/Users/user/Desktop/infa_project/server/app/routers/exams.py\")",
+      "Bash(pip install:*)"
     ]
   }
 }

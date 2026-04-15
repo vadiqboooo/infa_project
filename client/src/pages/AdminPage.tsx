@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState, useMemo } from "react";
-import { 
-    Users, 
-    BookOpen, 
-    Search, 
+import {
+    Users,
+    BookOpen,
+    Search,
     Download,
+    FileText,
     Plus,
     FolderOpen,
     Trash2,
@@ -30,6 +31,7 @@ import { StudentsTable } from "../components/admin/StudentsTable";
 import { StudentDetail } from "../components/admin/StudentDetail";
 import { TopicStats } from "../components/admin/TopicStats";
 import { ImportTopicModal } from "../components/admin/ImportTopicModal";
+import AdminImportPdfPage from "./AdminImportPdfPage";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
@@ -181,6 +183,7 @@ export default function AdminPage() {
                 <Route path="topics/:id/stats" element={<AdminTopicStatsPage apiKey={apiKey} />} />
                 <Route path="topics/:id" element={<AdminTopicEdit apiKey={apiKey} />} />
                 <Route path="students/:id" element={<AdminStudentDetailPage apiKey={apiKey} />} />
+                <Route path="import-pdf" element={<AdminImportPdfPage apiKey={apiKey} />} />
             </Routes>
         </div>
     );
@@ -195,7 +198,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState<FilterCategory>("все");
     const [showImport, setShowImport] = useState(false);
-    
+
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
@@ -359,7 +362,14 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                 className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-bold transition-all"
                             >
                                 <Download size={16} />
-                                Импорт
+                                Kompege
+                            </button>
+                            <button
+                                onClick={() => navigate('import-pdf')}
+                                className="flex items-center gap-2 px-4 py-2.5 border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-sm font-bold transition-all"
+                            >
+                                <FileText size={16} />
+                                PDF
                             </button>
                             <button
                                 onClick={handleCreateTopic}
@@ -468,11 +478,13 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             )}
 
             {showImport && (
-                <ImportTopicModal 
+                <ImportTopicModal
                     onClose={() => setShowImport(false)}
                     onImportVariant={handleImportVariant}
                 />
             )}
+
+
         </div>
     );
 }

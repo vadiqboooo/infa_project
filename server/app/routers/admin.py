@@ -11,6 +11,7 @@ from datetime import timedelta
 from pathlib import Path
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -1521,3 +1522,321 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
         created_count=created,
         skipped_count=skipped,
     )
+
+
+# ── PDF Import ────────────────────────────────────────────────
+
+import html as _html
+from fastapi import Form
+
+
+def _text_to_html(text: str) -> str:
+    """Convert plain extracted text to simple HTML."""
+    escaped = _html.escape(text)
+    # Split on two or more newlines = paragraph break
+    paragraphs = re.split(r'\n{2,}', escaped)
+    parts = []
+    for p in paragraphs:
+        p = p.strip()
+        if p:
+            parts.append("<p>" + p.replace("\n", "<br>") + "</p>")
+    return "\n".join(parts) if parts else f"<p>{escaped}</p>"
+
+
+def _split_tasks_regex(text_pages: list[str]) -> list[dict]:
+    """
+    Split ЕГЭ/Статград PDF text into tasks WITHOUT using LLM.
+    Works by detecting lines that contain ONLY a task number (1–30).
+    This matches the typical Статград/ФИПИ PDF layout where each
+    task number appears on its own line before the task body.
+    """
+    full = "\n".join(text_pages)
+    lines = full.splitlines()
+
+    tasks: list[dict] = []
+    current_num: int | None = None
+    current_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        # Line that is ONLY a 1–2 digit number → task boundary
+        m = re.fullmatch(r'(\d{1,2})', stripped)
+        if m:
+            num = int(m.group(1))
+            if 1 <= num <= 30:
+                # Save the previous task
+                if current_num is not None:
+                    content = "\n".join(current_lines).strip()
+                    if content:
+                        tasks.append({
+                            "ege_number": current_num,
+                            "content_html": _text_to_html(content),
+                        })
+                current_num = num
+                current_lines = []
+                continue
+
+        if current_num is not None:
+            current_lines.append(line)
+
+    # Flush the last task
+    if current_num is not None:
+        content = "\n".join(current_lines).strip()
+        if content:
+            tasks.append({
+                "ege_number": current_num,
+                "content_html": _text_to_html(content),
+            })
+
+    return tasks
+
+
+@router.post("/import-pdf/parse")
+async def parse_pdf_tasks(
+    file: UploadFile = File(...),
+    use_llm: bool = Form(False),
+):
+    """
+    Extract text from uploaded PDF and split it into tasks.
+    use_llm=false (default): fast regex-based splitter, handles all tasks.
+    use_llm=true: LLM-based parsing (slower, better for non-standard layouts).
+    """
+    try:
+        import pdfplumber
+        import io
+    except ImportError:
+        raise HTTPException(status_code=500, detail="pdfplumber не установлен. Выполните: pip install pdfplumber")
+
+    # Read the uploaded PDF
+    content = await file.read()
+    text_pages: list[str] = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                text_pages.append(t)
+
+    if not text_pages:
+        raise HTTPException(status_code=422, detail="Не удалось извлечь текст из PDF")
+
+    # ── Regex mode (default, no LLM) ──────────────────────────
+    if not use_llm:
+        raw_tasks = _split_tasks_regex(text_pages)
+        if not raw_tasks:
+            raise HTTPException(
+                status_code=422,
+                detail="Не удалось определить границы заданий. Попробуйте режим LLM.",
+            )
+        result = [
+            {
+                "index": i,
+                "ege_number": t.get("ege_number"),
+                "content_html": t.get("content_html", ""),
+                "answer_type": "single_number",
+                "correct_answer": None,
+                "images": [],
+            }
+            for i, t in enumerate(raw_tasks)
+        ]
+        return {"tasks": result, "page_count": len(text_pages)}
+
+    # ── LLM mode ──────────────────────────────────────────────
+    full_text = "\n\n---СТРАНИЦА---\n\n".join(text_pages)
+    # Truncate to ~20000 chars to stay within LLM context
+    if len(full_text) > 20000:
+        full_text = full_text[:20000]
+
+    prompt = f"""Ты помощник, который разбирает текст варианта ЕГЭ/контрольной работы по информатике.
+
+Тебе дан текст, извлечённый из PDF. Твоя задача — выделить отдельные задания.
+
+Верни JSON-массив объектов. Каждый объект:
+{{
+  "ege_number": <номер задания ЕГЭ (1-27) или null если неизвестно>,
+  "content_html": "<текст задания в виде HTML, обернуть абзацы в <p>, код в <pre><code>, формулы оставить как есть>"
+}}
+
+НЕ придумывай ответы — поле correct_answer оставь пустым.
+Не добавляй ничего кроме JSON-массива.
+
+Текст варианта:
+{full_text}
+"""
+
+    from app.config import settings as _settings
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            headers = {
+                "Authorization": f"Bearer {_settings.LLM_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            if "openrouter" in _settings.LLM_BASE_URL:
+                headers["HTTP-Referer"] = "https://edu-platform.ru"
+                headers["X-Title"] = "EduPlatform"
+
+            payload = {
+                "model": _settings.LLM_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+            }
+            resp = await client.post(
+                f"{_settings.LLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"LLM API error {resp.status_code}: {resp.text[:300]}")
+
+            try:
+                resp_data = resp.json()
+                ai_text: str = resp_data["choices"][0]["message"]["content"]
+            except (json.JSONDecodeError, KeyError, IndexError) as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Неожиданный ответ от LLM API: {exc}. Тело ответа: {resp.text[:300]}",
+                )
+    except HTTPException:
+        raise
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"LLM connection error: {str(exc)}")
+
+    # Strip markdown fences
+    ai_text = re.sub(r"^```[a-z]*\n?", "", ai_text.strip())
+    ai_text = re.sub(r"\n?```$", "", ai_text).strip()
+
+    try:
+        tasks = json.loads(ai_text)
+        if not isinstance(tasks, list):
+            raise ValueError("Expected JSON array")
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось разобрать ответ LLM: {exc}. Ответ: {ai_text[:200]}")
+
+    result = [
+        {
+            "index": i,
+            "ege_number": t.get("ege_number"),
+            "content_html": str(t.get("content_html", "")).strip(),
+            "answer_type": "single_number",
+            "correct_answer": None,
+            "images": [],
+        }
+        for i, t in enumerate(tasks)
+    ]
+    return {"tasks": result, "page_count": len(text_pages)}
+
+
+@router.post("/import-pdf/upload-image")
+async def upload_task_image(
+    file: UploadFile = File(...),
+):
+    """Upload an image file for a PDF-imported task. Returns the URL."""
+    allowed = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"Недопустимый тип файла: {ext}")
+
+    upload_dir = Path("uploads/task_images")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}{ext}"
+    dest = upload_dir / filename
+    data = await file.read()
+    dest.write_bytes(data)
+
+    return {"url": f"/uploads/task_images/{filename}"}
+
+
+class PdfTaskIn(BaseModel):
+    ege_number: int | None = None
+    content_html: str
+    answer_type: str = "single_number"
+    correct_answer: dict | list | str | None = None
+    images: list[str] = []
+
+
+class PdfImportConfirm(BaseModel):
+    topic_title: str
+    category: str = "variants"
+    is_mock: bool = False
+    time_limit_minutes: int = 235
+    tasks: list[PdfTaskIn]
+
+
+@router.post("/import-pdf/confirm", status_code=status.HTTP_201_CREATED)
+async def confirm_pdf_import(
+    body: PdfImportConfirm,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save confirmed tasks from PDF import as a new topic."""
+    from app.schemas.admin import ImportVariantResult as _IVR
+
+    title = body.topic_title.strip() or "Импорт из PDF"
+
+    # Determine order_index
+    max_order_result = await db.execute(select(func.max(Topic.order_index)))
+    max_order = max_order_result.scalar() or 0
+
+    topic = Topic(
+        title=title,
+        order_index=max_order + 1,
+        category=body.category,
+        is_mock=body.is_mock,
+    )
+    db.add(topic)
+    await db.flush()
+
+    created = 0
+    for i, t in enumerate(body.tasks):
+        # Build correct_answer based on answer_type
+        correct_answer = None
+        if t.correct_answer not in (None, "", [], {}):
+            correct_answer = t.correct_answer
+
+        # Inline images into content_html if any
+        content = t.content_html
+        if t.images:
+            imgs_html = "".join(
+                f'<img src="{img}" style="max-width:100%;margin:8px 0;" />'
+                for img in t.images
+            )
+            content = content + "\n" + imgs_html
+
+        answer_type_enum: AnswerType
+        try:
+            answer_type_enum = AnswerType(t.answer_type)
+        except ValueError:
+            answer_type_enum = AnswerType.single_number
+
+        task = Task(
+            topic_id=topic.id,
+            ege_number=t.ege_number,
+            order_index=i,
+            content_html=content,
+            answer_type=answer_type_enum,
+            correct_answer=correct_answer,
+        )
+        db.add(task)
+        created += 1
+
+    await db.flush()
+
+    # Fetch created tasks for exam
+    tasks_result = await db.execute(select(Task).where(Task.topic_id == topic.id))
+    tasks_list = list(tasks_result.scalars().all())
+
+    exam = Exam(topic_id=topic.id, time_limit_minutes=body.time_limit_minutes)
+    db.add(exam)
+    await db.flush()
+
+    if tasks_list:
+        values = [{"exam_id": exam.id, "task_id": task.id} for task in tasks_list]
+        await db.execute(exam_tasks.insert(), values)
+
+    await db.commit()
+
+    return {
+        "topic_id": topic.id,
+        "topic_title": title,
+        "created_count": created,
+    }
