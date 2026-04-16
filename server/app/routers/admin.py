@@ -1619,14 +1619,13 @@ async def parse_pdf_tasks(
     if not text_pages:
         raise HTTPException(status_code=422, detail="Не удалось извлечь текст из PDF")
 
+    full_text = "\n\n".join(text_pages)
+
     # ── Regex mode (default, no LLM) ──────────────────────────
     if not use_llm:
         raw_tasks = _split_tasks_regex(text_pages)
         if not raw_tasks:
-            raise HTTPException(
-                status_code=422,
-                detail="Не удалось определить границы заданий. Попробуйте режим LLM.",
-            )
+            return {"tasks": [], "page_count": len(text_pages), "full_text": full_text}
         result = [
             {
                 "index": i,
@@ -1638,7 +1637,7 @@ async def parse_pdf_tasks(
             }
             for i, t in enumerate(raw_tasks)
         ]
-        return {"tasks": result, "page_count": len(text_pages)}
+        return {"tasks": result, "page_count": len(text_pages), "full_text": full_text}
 
     # ── LLM mode ──────────────────────────────────────────────
     full_text = "\n\n---СТРАНИЦА---\n\n".join(text_pages)
@@ -1723,7 +1722,7 @@ async def parse_pdf_tasks(
         }
         for i, t in enumerate(tasks)
     ]
-    return {"tasks": result, "page_count": len(text_pages)}
+    return {"tasks": result, "page_count": len(text_pages), "full_text": full_text}
 
 
 @router.post("/import-pdf/upload-image")
@@ -1747,12 +1746,38 @@ async def upload_task_image(
     return {"url": f"/uploads/task_images/{filename}"}
 
 
+@router.post("/import-pdf/upload-file")
+async def upload_task_file(
+    file: UploadFile = File(...),
+):
+    """Upload any file to attach to a task. Returns the URL and original name."""
+    ext = Path(file.filename or "").suffix.lower()
+
+    upload_dir = Path("uploads/task_files")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}{ext}"
+    dest = upload_dir / filename
+    data = await file.read()
+    dest.write_bytes(data)
+
+    return {
+        "url": f"/uploads/task_files/{filename}",
+        "name": file.filename or filename,
+    }
+
+
+class PdfFileIn(BaseModel):
+    url: str
+    name: str = ""
+
 class PdfTaskIn(BaseModel):
     ege_number: int | None = None
     content_html: str
     answer_type: str = "single_number"
     correct_answer: dict | list | str | None = None
     images: list[str] = []
+    files: list[PdfFileIn] = []
 
 
 class PdfImportConfirm(BaseModel):
@@ -1808,6 +1833,10 @@ async def confirm_pdf_import(
         except ValueError:
             answer_type_enum = AnswerType.single_number
 
+        media_resources = None
+        if t.files:
+            media_resources = {"files": [{"url": f.url, "name": f.name} for f in t.files]}
+
         task = Task(
             topic_id=topic.id,
             ege_number=t.ege_number,
@@ -1815,6 +1844,7 @@ async def confirm_pdf_import(
             content_html=content,
             answer_type=answer_type_enum,
             correct_answer=correct_answer,
+            media_resources=media_resources,
         )
         db.add(task)
         created += 1

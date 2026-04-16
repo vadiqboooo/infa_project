@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   X, Upload, FileText, AlertCircle, Loader2, CheckCircle2,
   ChevronLeft, ChevronRight, ImagePlus, Trash2, Plus,
+  Eye, EyeOff, Copy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -80,6 +81,8 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
   const [currentTaskIdx, setCurrentTaskIdx] = useState(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [fullText, setFullText] = useState('');
+  const [showFullText, setShowFullText] = useState(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -118,9 +121,14 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || 'Ошибка разбора');
       }
-      const data: { tasks: ParsedTask[]; page_count: number } = await res.json();
-      if (!data.tasks?.length) throw new Error('Задания не найдены в PDF');
-      setTasks(data.tasks);
+      const data: { tasks: ParsedTask[]; page_count: number; full_text?: string } = await res.json();
+      setFullText(data.full_text || '');
+      if (!data.tasks?.length) {
+        setShowFullText(true);
+        setTasks([]);
+      } else {
+        setTasks(data.tasks);
+      }
       setCurrentTaskIdx(0);
       setStep('review');
     } catch (err: any) {
@@ -153,6 +161,19 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
     };
     setTasks(prev => [...prev, newTask]);
     setCurrentTaskIdx(tasks.length);
+  };
+
+  const createEmptyTasks = (count: number) => {
+    const newTasks: ParsedTask[] = Array.from({ length: count }, (_, i) => ({
+      index: i,
+      ege_number: i + 1,
+      content_html: '',
+      answer_type: 'single_number',
+      correct_answer: null,
+      images: [],
+    }));
+    setTasks(newTasks);
+    setCurrentTaskIdx(0);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,7 +248,10 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col"
+        className={clsx(
+          'bg-white rounded-2xl shadow-2xl w-full overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col',
+          showFullText ? 'max-w-6xl' : 'max-w-3xl',
+        )}
         style={{ maxHeight: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
@@ -335,10 +359,43 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
             </div>
           )}
 
-          {step === 'review' && currentTask && (
-            <div className="flex h-full" style={{ minHeight: 420 }}>
-              {/* Left: task list */}
+          {step === 'review' && (
+            <div className="flex h-full" style={{ minHeight: 480 }}>
+              {/* Full text panel (toggleable) */}
+              {showFullText && fullText && (
+                <div className="w-[340px] shrink-0 border-r border-gray-100 flex flex-col">
+                  <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Текст из PDF</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(fullText);
+                      }}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Скопировать весь текст"
+                    >
+                      <Copy size={11} />
+                      Копировать всё
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3">
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed select-text">{fullText}</pre>
+                  </div>
+                </div>
+              )}
+
+              {/* Task list */}
               <div className="w-48 shrink-0 border-r border-gray-100 overflow-y-auto p-3 space-y-1">
+                {tasks.length === 0 && (
+                  <div className="text-center py-4 space-y-3">
+                    <p className="text-xs text-gray-400">Нет заданий</p>
+                    <button
+                      onClick={() => createEmptyTasks(27)}
+                      className="w-full px-3 py-2.5 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 transition-all"
+                    >
+                      Создать 27 заданий
+                    </button>
+                  </div>
+                )}
                 {tasks.map((t, i) => (
                   <button
                     key={i}
@@ -346,121 +403,140 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
                     className={clsx(
                       'w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition-all',
                       i === currentTaskIdx ? 'bg-orange-100 text-orange-700' : 'text-gray-500 hover:bg-gray-50',
+                      !t.content_html && 'opacity-50',
                     )}
                   >
                     <div className="font-bold">Задание {i + 1}</div>
                     {t.ege_number && <div className="text-[10px] opacity-60">ЕГЭ №{t.ege_number}</div>}
+                    {!t.content_html && <div className="text-[10px] text-orange-400">пусто</div>}
                   </button>
                 ))}
-                <button
-                  onClick={addTask}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-[#3F8C62] hover:bg-green-50 transition-all border border-dashed border-gray-200 mt-2"
-                >
-                  <Plus size={13} />
-                  Добавить
-                </button>
+                {tasks.length > 0 && (
+                  <button
+                    onClick={addTask}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-[#3F8C62] hover:bg-green-50 transition-all border border-dashed border-gray-200 mt-2"
+                  >
+                    <Plus size={13} />
+                    Добавить
+                  </button>
+                )}
               </div>
 
-              {/* Right: task editor */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-gray-900 text-sm">Задание {currentTaskIdx + 1}</h3>
-                  <button
-                    onClick={() => removeTask(currentTaskIdx)}
-                    className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                  >
-                    <Trash2 size={13} />
-                    Удалить
-                  </button>
-                </div>
+              {/* Task editor */}
+              {currentTask ? (
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900 text-sm">Задание {currentTaskIdx + 1}</h3>
+                    <button
+                      onClick={() => removeTask(currentTaskIdx)}
+                      className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                    >
+                      <Trash2 size={13} />
+                      Удалить
+                    </button>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Номер ЕГЭ</label>
+                      <input
+                        type="number"
+                        value={currentTask.ege_number ?? ''}
+                        onChange={e => updateTask(currentTaskIdx, { ege_number: e.target.value ? parseInt(e.target.value) : null })}
+                        placeholder="1–27"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Тип ответа</label>
+                      <select
+                        value={currentTask.answer_type}
+                        onChange={e => updateTask(currentTaskIdx, { answer_type: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                      >
+                        {ANSWER_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Номер ЕГЭ</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Текст задания (HTML)</label>
+                    <textarea
+                      value={currentTask.content_html}
+                      onChange={e => updateTask(currentTaskIdx, { content_html: e.target.value })}
+                      rows={8}
+                      placeholder="Вставьте текст задания из панели слева..."
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all resize-y"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Правильный ответ (оставьте пустым если неизвестен)</label>
                     <input
-                      type="number"
-                      value={currentTask.ege_number ?? ''}
-                      onChange={e => updateTask(currentTaskIdx, { ege_number: e.target.value ? parseInt(e.target.value) : null })}
-                      placeholder="1–27"
+                      type="text"
+                      value={currentTask.correct_answer != null ? String(currentTask.correct_answer) : ''}
+                      onChange={e => {
+                        const v = e.target.value;
+                        updateTask(currentTaskIdx, { correct_answer: v || null });
+                      }}
+                      placeholder="Напр. 42 или оставьте пустым"
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
                     />
                   </div>
+
+                  {/* Images */}
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Тип ответа</label>
-                    <select
-                      value={currentTask.answer_type}
-                      onChange={e => updateTask(currentTaskIdx, { answer_type: e.target.value })}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
-                    >
-                      {ANSWER_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Текст задания (HTML)</label>
-                  <textarea
-                    value={currentTask.content_html}
-                    onChange={e => updateTask(currentTaskIdx, { content_html: e.target.value })}
-                    rows={8}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all resize-y"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Правильный ответ (оставьте пустым если неизвестен)</label>
-                  <input
-                    type="text"
-                    value={currentTask.correct_answer != null ? String(currentTask.correct_answer) : ''}
-                    onChange={e => {
-                      const v = e.target.value;
-                      updateTask(currentTaskIdx, { correct_answer: v || null });
-                    }}
-                    placeholder="Напр. 42 или оставьте пустым"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
-                  />
-                </div>
-
-                {/* Images */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase">Изображения</label>
-                    <button
-                      onClick={() => imageInputRef.current?.click()}
-                      disabled={uploadingImage}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
-                    >
-                      {uploadingImage ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-                      Добавить
-                    </button>
-                    <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  </div>
-                  {currentTask.images.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-2">
-                      {currentTask.images.map((url, imgIdx) => (
-                        <div key={imgIdx} className="relative group rounded-xl overflow-hidden border border-gray-100 bg-gray-50 aspect-video flex items-center justify-center">
-                          <img src={url} alt="" className="object-contain w-full h-full" />
-                          <button
-                            onClick={() => removeImage(currentTaskIdx, imgIdx)}
-                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X size={11} />
-                          </button>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Изображения</label>
+                      <button
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors disabled:opacity-50"
+                      >
+                        {uploadingImage ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+                        Добавить
+                      </button>
+                      <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                     </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">Изображений нет — нажмите «Добавить» чтобы загрузить</p>
+                    {currentTask.images.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        {currentTask.images.map((url, imgIdx) => (
+                          <div key={imgIdx} className="relative group rounded-xl overflow-hidden border border-gray-100 bg-gray-50 aspect-video flex items-center justify-center">
+                            <img src={url} alt="" className="object-contain w-full h-full" />
+                            <button
+                              onClick={() => removeImage(currentTaskIdx, imgIdx)}
+                              className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">Изображений нет — нажмите «Добавить» чтобы загрузить</p>
+                    )}
+                  </div>
+
+                  {error && (
+                    <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-600 text-xs">
+                      <AlertCircle size={14} />
+                      {error}
+                    </div>
                   )}
                 </div>
-
-                {error && (
-                  <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-600 text-xs">
-                    <AlertCircle size={14} />
-                    {error}
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-8">
+                  <div className="text-center space-y-3">
+                    <p className="text-sm text-gray-400">Создайте задания и распределите текст из PDF вручную</p>
+                    <button
+                      onClick={() => createEmptyTasks(27)}
+                      className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20"
+                    >
+                      Создать 27 заданий ЕГЭ
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -484,24 +560,40 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
         {step !== 'done' && (
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center gap-3 shrink-0">
             {step === 'review' && (
-              <div className="flex items-center gap-2 mr-auto">
-                <button
-                  onClick={() => setCurrentTaskIdx(i => Math.max(0, i - 1))}
-                  disabled={currentTaskIdx === 0}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-all"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="text-xs text-gray-500 tabular-nums min-w-[60px] text-center">
-                  {currentTaskIdx + 1} / {tasks.length}
-                </span>
-                <button
-                  onClick={() => setCurrentTaskIdx(i => Math.min(tasks.length - 1, i + 1))}
-                  disabled={currentTaskIdx === tasks.length - 1}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-all"
-                >
-                  <ChevronRight size={16} />
-                </button>
+              <div className="flex items-center gap-3 mr-auto">
+                {fullText && (
+                  <button
+                    onClick={() => setShowFullText(v => !v)}
+                    className={clsx(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                      showFullText ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200',
+                    )}
+                  >
+                    {showFullText ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {showFullText ? 'Скрыть текст' : 'Текст PDF'}
+                  </button>
+                )}
+                {tasks.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentTaskIdx(i => Math.max(0, i - 1))}
+                      disabled={currentTaskIdx === 0}
+                      className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-all"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className="text-xs text-gray-500 tabular-nums min-w-[60px] text-center">
+                      {currentTaskIdx + 1} / {tasks.length}
+                    </span>
+                    <button
+                      onClick={() => setCurrentTaskIdx(i => Math.min(tasks.length - 1, i + 1))}
+                      disabled={currentTaskIdx === tasks.length - 1}
+                      className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 transition-all"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
