@@ -580,6 +580,9 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             setTopic(currentTopic);
             const t = await adminFetch<TaskAdmin[]>(`/admin/tasks?topic_id=${id}`, apiKey);
             setTasks(t);
+        } catch (err: any) {
+            console.error("Failed to load topic data:", err);
+            alert(`Ошибка загрузки задач: ${err?.message ?? err}`);
         } finally {
             setLoading(false);
         }
@@ -652,13 +655,14 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
     return (
         <div className="p-8 h-full">
             <div className="h-full flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                <TopicDetail 
-                    topic={topic} 
+                <TopicDetail
+                    topic={topic}
                     tasks={tasks}
                     onBack={() => navigate("/admin")}
                     onSaveTopic={handleSaveTopic}
                     onSaveTask={handleSaveTask}
                     onDeleteTask={handleDeleteTask}
+                    apiKey={apiKey}
                 />
             </div>
         </div>

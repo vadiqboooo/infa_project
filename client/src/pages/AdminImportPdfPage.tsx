@@ -4,7 +4,7 @@ import {
     ArrowLeft, Upload, FileText, AlertCircle, Loader2,
     CheckCircle2, ImagePlus, Trash2, Plus, Eye, EyeOff,
     Cpu, Zap, Copy, PanelLeftOpen, PanelLeftClose,
-    Paperclip, X,
+    Paperclip, X, Scissors, MousePointerClick,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -76,12 +76,17 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const [category, setCategory] = useState<TopicCategory>('variants');
     const [isMock, setIsMock] = useState(false);
     const [timeLimitMinutes, setTimeLimitMinutes] = useState(235);
-    const [useLlm, setUseLlm] = useState(false);
+    const [parseMode, setParseMode] = useState<'auto' | 'llm' | 'manual'>('auto');
 
     // ── App state ─────────────────────────────────────────────
-    const [step, setStep] = useState<'upload' | 'review' | 'done'>('upload');
+    const [step, setStep] = useState<'upload' | 'annotate' | 'review' | 'done'>('upload');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // ── Annotate step state ───────────────────────────────────
+    const [annotatedText, setAnnotatedText] = useState('');
+    const [nextTaskNum, setNextTaskNum] = useState(1);
+    const annotateRef = useRef<HTMLTextAreaElement>(null);
 
     // ── Review step state ─────────────────────────────────────
     const [tasks, setTasks] = useState<ParsedTask[]>([]);
@@ -114,27 +119,107 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
             if (token) headers['Authorization'] = `Bearer ${token}`;
             const fd = new FormData();
             fd.append('file', pdfFile);
-            fd.append('use_llm', useLlm ? 'true' : 'false');
+            fd.append('use_llm', parseMode === 'llm' ? 'true' : 'false');
             const res = await fetch(`${API_BASE}/admin/import-pdf/parse`, { method: 'POST', headers, body: fd });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
                 throw new Error(err.detail || 'Ошибка разбора');
             }
             const data: { tasks: ParsedTask[]; page_count: number; full_text?: string } = await res.json();
-            setFullText(data.full_text || '');
+            const text = data.full_text || '';
+            setFullText(text);
+
+            if (parseMode === 'manual') {
+                // Go to annotation step: show raw text, let user place markers
+                setAnnotatedText(text);
+                setNextTaskNum(1);
+                setStep('annotate');
+                return;
+            }
+
             if (!data.tasks?.length) {
-                setTasks([]);
-                setShowFullText(true);
+                // Auto-parse found nothing → fall back to annotation mode
+                setAnnotatedText(text);
+                setNextTaskNum(1);
+                setStep('annotate');
             } else {
                 setTasks(data.tasks.map(t => ({ ...t, files: t.files ?? [] })));
+                setSelectedIdx(0);
+                setStep('review');
             }
-            setSelectedIdx(0);
-            setStep('review');
         } catch (err: any) {
             setError(err.message);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Marker format: === Задание N ===
+    const MARKER_RE = /^===\s*Задание\s*(\d+)\s*===/m;
+
+    const insertMarker = () => {
+        const ta = annotateRef.current;
+        if (!ta) return;
+        const marker = `\n=== Задание ${nextTaskNum} ===\n`;
+        const start = ta.selectionStart;
+        const before = annotatedText.slice(0, start);
+        const after = annotatedText.slice(start);
+        const newText = before + marker + after;
+        setAnnotatedText(newText);
+        setNextTaskNum(n => n + 1);
+        // Restore cursor after the inserted marker
+        requestAnimationFrame(() => {
+            ta.focus();
+            const pos = start + marker.length;
+            ta.setSelectionRange(pos, pos);
+        });
+    };
+
+    const countMarkers = () => {
+        return (annotatedText.match(/^===\s*Задание\s*\d+\s*===/gm) || []).length;
+    };
+
+    const handleSplitByMarkers = () => {
+        const textToHtml = (text: string) => {
+            const escaped = text
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const paragraphs = escaped.split(/\n{2,}/);
+            return paragraphs
+                .map(p => p.trim())
+                .filter(Boolean)
+                .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+                .join('\n') || `<p>${escaped}</p>`;
+        };
+
+        // Split on marker lines: === Задание N ===
+        const parts = annotatedText.split(/^===\s*Задание\s*(\d+)\s*===\s*$/m);
+        // parts = [before-first, num, content, num, content, ...]
+        const result: ParsedTask[] = [];
+        for (let i = 1; i < parts.length; i += 2) {
+            const num = parseInt(parts[i]);
+            const content = (parts[i + 1] ?? '').trim();
+            // Strip trailing "Ответ:" from content
+            const cutIdx = content.search(/^\s*Ответ\s*[:.]/im);
+            const body = cutIdx >= 0 ? content.slice(0, cutIdx).trim() : content;
+            if (body) {
+                result.push({
+                    index: result.length,
+                    ege_number: isNaN(num) ? null : num,
+                    content_html: textToHtml(body),
+                    answer_type: 'single_number',
+                    correct_answer: null,
+                    images: [],
+                    files: [],
+                });
+            }
+        }
+        if (!result.length) {
+            setError('Маркеры не найдены. Вставьте хотя бы один маркер задания.');
+            return;
+        }
+        setTasks(result);
+        setSelectedIdx(0);
+        setStep('review');
     };
 
     const updateTask = (idx: number, patch: Partial<ParsedTask>) => {
@@ -358,33 +443,46 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                         {/* Parser mode */}
                         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
                             <h2 className="font-bold text-gray-900 mb-4">Режим разбора</h2>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-3 gap-3">
                                 <button
-                                    onClick={() => setUseLlm(false)}
+                                    onClick={() => setParseMode('auto')}
                                     className={clsx(
                                         'flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all',
-                                        !useLlm ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-gray-300',
+                                        parseMode === 'auto' ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-gray-300',
                                     )}
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <Zap size={16} className={!useLlm ? 'text-orange-500' : 'text-gray-400'} />
-                                        <span className={clsx('font-bold text-sm', !useLlm ? 'text-orange-700' : 'text-gray-600')}>Быстрый (без LLM)</span>
-                                        {!useLlm && <span className="ml-auto text-[10px] bg-orange-500 text-white px-1.5 py-0.5 rounded-full font-bold">По умолчанию</span>}
+                                    <div className="flex items-center gap-2 w-full">
+                                        <Zap size={15} className={parseMode === 'auto' ? 'text-orange-500' : 'text-gray-400'} />
+                                        <span className={clsx('font-bold text-xs', parseMode === 'auto' ? 'text-orange-700' : 'text-gray-600')}>Авто</span>
+                                        {parseMode === 'auto' && <span className="ml-auto text-[9px] bg-orange-500 text-white px-1 py-0.5 rounded-full font-bold">★</span>}
                                     </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">Находит задания по их номерам в тексте. Работает мгновенно, подходит для Статград и ФИПИ.</p>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed">Находит задания по номерам. Мгновенно.</p>
                                 </button>
                                 <button
-                                    onClick={() => setUseLlm(true)}
+                                    onClick={() => setParseMode('llm')}
                                     className={clsx(
                                         'flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all',
-                                        useLlm ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
+                                        parseMode === 'llm' ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300',
                                     )}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <Cpu size={16} className={useLlm ? 'text-blue-500' : 'text-gray-400'} />
-                                        <span className={clsx('font-bold text-sm', useLlm ? 'text-blue-700' : 'text-gray-600')}>ИИ (LLM)</span>
+                                        <Cpu size={15} className={parseMode === 'llm' ? 'text-blue-500' : 'text-gray-400'} />
+                                        <span className={clsx('font-bold text-xs', parseMode === 'llm' ? 'text-blue-700' : 'text-gray-600')}>ИИ</span>
                                     </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed">Использует языковую модель для смысловой разбивки. Медленнее, но лучше для нестандартных форматов.</p>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed">Языковая модель. Для сложных форматов.</p>
+                                </button>
+                                <button
+                                    onClick={() => setParseMode('manual')}
+                                    className={clsx(
+                                        'flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all',
+                                        parseMode === 'manual' ? 'border-violet-400 bg-violet-50' : 'border-gray-200 hover:border-gray-300',
+                                    )}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <MousePointerClick size={15} className={parseMode === 'manual' ? 'text-violet-500' : 'text-gray-400'} />
+                                        <span className={clsx('font-bold text-xs', parseMode === 'manual' ? 'text-violet-700' : 'text-gray-600')}>Вручную</span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed">Просмотр текста и расстановка границ.</p>
                                 </button>
                             </div>
                         </div>
@@ -405,12 +503,104 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                             )}
                         >
                             {loading
-                                ? <><Loader2 size={20} className="animate-spin" />{useLlm ? 'Анализирую с помощью ИИ...' : 'Разбираю PDF...'}</>
-                                : <><FileText size={20} />Разобрать задания</>
+                                ? <><Loader2 size={20} className="animate-spin" />{parseMode === 'llm' ? 'Анализирую с помощью ИИ...' : 'Извлекаю текст...'}</>
+                                : parseMode === 'manual'
+                                    ? <><MousePointerClick size={20} />Открыть для разметки</>
+                                    : <><FileText size={20} />Разобрать задания</>
                             }
                         </button>
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    // ── Annotate step ─────────────────────────────────────────
+    if (step === 'annotate') {
+        const markerCount = countMarkers();
+        return (
+            <div className="h-full flex flex-col bg-[#F8F7F4]">
+                {/* Top bar */}
+                <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3">
+                    <button onClick={() => setStep('upload')} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700">
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                            <Scissors size={14} className="text-violet-600" />
+                        </div>
+                        <div>
+                            <span className="font-bold text-gray-900 text-sm">Разметка заданий</span>
+                            <span className="text-xs text-gray-400 ml-2">— {topicTitle}</span>
+                        </div>
+                    </div>
+
+                    <div className="ml-auto flex items-center gap-3">
+                        {/* Insert marker button */}
+                        <button
+                            onClick={insertMarker}
+                            className="flex items-center gap-2 px-4 py-2 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-xl text-sm font-bold transition-all"
+                        >
+                            <Plus size={15} />
+                            Вставить «Задание {nextTaskNum}»
+                        </button>
+
+                        {/* Marker counter */}
+                        {markerCount > 0 && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg font-semibold">
+                                {markerCount} {markerCount === 1 ? 'задание' : markerCount < 5 ? 'задания' : 'заданий'} размечено
+                            </span>
+                        )}
+
+                        {/* Copy text button */}
+                        <button
+                            onClick={() => navigator.clipboard.writeText(annotatedText)}
+                            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-50 transition-all"
+                        >
+                            <Copy size={13} />
+                            Копировать
+                        </button>
+
+                        {/* Split button */}
+                        <button
+                            onClick={handleSplitByMarkers}
+                            disabled={markerCount === 0}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#3F8C62] text-white rounded-xl text-sm font-bold shadow-lg shadow-[#3F8C62]/20 hover:bg-[#357A54] transition-all disabled:opacity-40 disabled:shadow-none"
+                        >
+                            <Scissors size={15} />
+                            Разбить на задания →
+                        </button>
+                    </div>
+                </div>
+
+                {/* Instruction banner */}
+                <div className="shrink-0 bg-violet-50 border-b border-violet-100 px-6 py-2.5 flex items-center gap-3">
+                    <MousePointerClick size={15} className="text-violet-500 shrink-0" />
+                    <p className="text-xs text-violet-700">
+                        Поставьте курсор в тексте <strong>перед началом каждого задания</strong> и нажмите
+                        <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-violet-200 rounded text-[10px] font-mono">+ Вставить «Задание N»</kbd>.
+                        Маркер будет вставлен и счётчик увеличится. Затем нажмите «Разбить на задания».
+                    </p>
+                </div>
+
+                {/* Annotate textarea */}
+                <div className="flex-1 min-h-0 p-4">
+                    <textarea
+                        ref={annotateRef}
+                        value={annotatedText}
+                        onChange={e => setAnnotatedText(e.target.value)}
+                        className="w-full h-full resize-none bg-white border border-gray-200 rounded-2xl p-5 text-sm font-mono leading-relaxed focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 shadow-sm"
+                        spellCheck={false}
+                        placeholder="Текст из PDF появится здесь. Поставьте курсор перед каждым заданием и нажмите кнопку вставки маркера."
+                    />
+                </div>
+
+                {error && (
+                    <div className="shrink-0 mx-4 mb-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm">
+                        <AlertCircle size={15} />
+                        {error}
+                    </div>
+                )}
             </div>
         );
     }
@@ -434,7 +624,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                             Вернуться в панель
                         </button>
                         <button
-                            onClick={() => { setStep('upload'); setTasks([]); setPdfFile(null); setTopicTitle(''); setFullText(''); setShowFullText(false); }}
+                            onClick={() => { setStep('upload'); setTasks([]); setPdfFile(null); setTopicTitle(''); setFullText(''); setShowFullText(false); setAnnotatedText(''); setNextTaskNum(1); }}
                             className="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-bold hover:bg-gray-50 transition-all"
                         >
                             Импортировать ещё

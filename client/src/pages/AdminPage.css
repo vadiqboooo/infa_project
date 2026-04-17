@@ -57,6 +57,65 @@
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ── TipTap rich text editor ───────────────────────────────────────────── */
+.ProseMirror {
+    outline: none;
+}
+
+.ProseMirror p {
+    margin: 0 0 0.5em;
+}
+
+.ProseMirror h1 { font-size: 1.4em; font-weight: 700; margin: 0.6em 0 0.3em; }
+.ProseMirror h2 { font-size: 1.2em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.ProseMirror h3 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.25em; }
+
+.ProseMirror ul, .ProseMirror ol {
+    padding-left: 1.4em;
+    margin: 0.4em 0;
+}
+.ProseMirror ul { list-style: disc; }
+.ProseMirror ol { list-style: decimal; }
+
+.ProseMirror a { color: #2563eb; text-decoration: underline; }
+
+.ProseMirror img {
+    max-width: 100%;
+    border-radius: 4px;
+    margin: 6px 0;
+}
+
+/* Table styles */
+.ProseMirror table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5em 0;
+    font-size: 0.85em;
+}
+.ProseMirror table td,
+.ProseMirror table th {
+    border: 1px solid #d1d5db;
+    padding: 5px 8px;
+    min-width: 40px;
+    vertical-align: top;
+}
+.ProseMirror table th {
+    background: #f3f4f6;
+    font-weight: 600;
+}
+.ProseMirror table .selectedCell {
+    background: #dbeafe;
+}
+
+/* Placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: #9ca3af;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
+
 /* Task row specific styles */
 .task-row-expanded {
     border-color: #3F8C62;

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import RichTextEditor from './RichTextEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { githubLight } from '@uiw/codemirror-theme-github';
@@ -19,8 +20,6 @@ import {
   ImageIcon,
   Upload,
   Loader2,
-  Eye,
-  EyeOff,
   FileCode2,
   Hash,
   AlignLeft,
@@ -39,6 +38,7 @@ interface TopicDetailProps {
   onSaveTopic: (data: Partial<TopicAdmin>) => void;
   onSaveTask: (data: Partial<TaskAdmin>) => void;
   onDeleteTask: (id: number) => void;
+  apiKey?: string;
 }
 
 export function TopicDetail({
@@ -48,6 +48,7 @@ export function TopicDetail({
   onSaveTopic,
   onSaveTask,
   onDeleteTask,
+  apiKey,
 }: TopicDetailProps) {
   const [editingTopic, setEditingTopic] = useState(topic);
   const [editingTask, setEditingTask] = useState<Partial<TaskAdmin> | null>(null);
@@ -116,6 +117,7 @@ export function TopicDetail({
       <TaskEditPanel
         task={editingTask}
         onBack={() => setEditingTask(null)}
+        apiKey={apiKey}
         onSave={(data) => {
           onSaveTask(data);
           setEditingTask(null);
@@ -402,10 +404,12 @@ function TaskEditPanel({
   task,
   onBack,
   onSave,
+  apiKey,
 }: {
   task: Partial<TaskAdmin>;
   onBack: () => void;
   onSave: (data: Partial<TaskAdmin>) => void;
+  apiKey?: string;
 }) {
   const [form, setForm] = useState({
     ege_number: task.ege_number || 1,
@@ -417,7 +421,6 @@ function TaskEditPanel({
     solution_steps: task.solution_steps || [],
     full_solution_code: task.full_solution_code || '',
   });
-  const [showPreview, setShowPreview] = useState(false);
   const [uploadingStep, setUploadingStep] = useState<number | null>(null);
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
   const [stepCodeOpen, setStepCodeOpen] = useState<Set<number>>(new Set());
@@ -598,37 +601,15 @@ function TaskEditPanel({
         </div>
       </div>
 
-      {/* Content HTML */}
+      {/* Content HTML — rich text editor */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className={labelCls}>Текст задачи (HTML)</span>
-          <button
-            onClick={() => setShowPreview((v) => !v)}
-            className={clsx(
-              'flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors',
-              showPreview ? 'bg-[#3F8C62]/10 text-[#3F8C62]' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            )}
-          >
-            {showPreview ? <EyeOff size={11} /> : <Eye size={11} />}
-            {showPreview ? 'Редактировать' : 'Предпросмотр'}
-          </button>
-        </div>
-        {showPreview ? (
-          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[200px]">
-            <div className="prose prose-sm max-w-none text-gray-800" dangerouslySetInnerHTML={{ __html: form.content_html
-              .replace(/&amp;((?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);)/g, '&$1')
-              .replace(/&gt;/g, '>')
-              .replace(/&nbsp;/g, '\u00A0') }} />
-          </div>
-        ) : (
-          <textarea
-            value={form.content_html}
-            onChange={(e) => setForm({ ...form, content_html: e.target.value })}
-            rows={12}
-            placeholder="<p>Текст задачи...</p>"
-            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/25 transition-all resize-y leading-relaxed"
-          />
-        )}
+        <span className={`${labelCls} block mb-2`}>Текст задачи</span>
+        <RichTextEditor
+          value={form.content_html}
+          onChange={(html) => setForm((f) => ({ ...f, content_html: html }))}
+          apiKey={apiKey}
+          taskId={task.id}
+        />
       </div>
 
       {/* Solution code — CodeMirror */}

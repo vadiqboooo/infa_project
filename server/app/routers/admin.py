@@ -1543,12 +1543,37 @@ def _text_to_html(text: str) -> str:
     return "\n".join(parts) if parts else f"<p>{escaped}</p>"
 
 
+def _flush_task(
+    tasks: list[dict],
+    num: int,
+    lines: list[str],
+) -> None:
+    """Strip the trailing 'Ответ:' line and save the task."""
+    # Cut off everything starting from the first 'Ответ:' line
+    content_lines: list[str] = []
+    for l in lines:
+        if re.match(r'^\s*Ответ\s*[:\.]', l, re.IGNORECASE):
+            break
+        content_lines.append(l)
+    content = "\n".join(content_lines).strip()
+    if content:
+        tasks.append({
+            "ege_number": num,
+            "content_html": _text_to_html(content),
+        })
+
+
 def _split_tasks_regex(text_pages: list[str]) -> list[dict]:
     """
     Split ЕГЭ/Статград PDF text into tasks WITHOUT using LLM.
-    Works by detecting lines that contain ONLY a task number (1–30).
-    This matches the typical Статград/ФИПИ PDF layout where each
-    task number appears on its own line before the task body.
+
+    Handles two common formats:
+      A) Task number on its own line:   "2\\n Миша заполнял..."
+      B) Task number starts the line:   "2 Миша заполнял..."
+         (detected only when preceded by a blank line to avoid false positives)
+
+    Everything from the task number up to (but not including) the
+    "Ответ:" line is treated as the task body.
     """
     full = "\n".join(text_pages)
     lines = full.splitlines()
@@ -1556,38 +1581,47 @@ def _split_tasks_regex(text_pages: list[str]) -> list[dict]:
     tasks: list[dict] = []
     current_num: int | None = None
     current_lines: list[str] = []
+    prev_blank = True  # track whether the previous line was blank
+
+    def flush() -> None:
+        if current_num is not None:
+            _flush_task(tasks, current_num, current_lines)
 
     for line in lines:
         stripped = line.strip()
-        # Line that is ONLY a 1–2 digit number → task boundary
-        m = re.fullmatch(r'(\d{1,2})', stripped)
-        if m:
-            num = int(m.group(1))
+        is_blank = not stripped
+
+        # ── Pattern A: line contains ONLY a task number ──────
+        if re.fullmatch(r'\d{1,2}', stripped):
+            num = int(stripped)
             if 1 <= num <= 30:
-                # Save the previous task
-                if current_num is not None:
-                    content = "\n".join(current_lines).strip()
-                    if content:
-                        tasks.append({
-                            "ege_number": current_num,
-                            "content_html": _text_to_html(content),
-                        })
+                flush()
                 current_num = num
                 current_lines = []
+                prev_blank = False
                 continue
+
+        # ── Pattern B: number at the START of the line ───────
+        # "2 Миша заполнял..." – but only when preceded by a blank line
+        # and the rest starts with a capital Cyrillic/Latin letter or digit
+        # to reduce false positives inside task text.
+        if prev_blank or current_num is None:
+            m = re.match(r'^(\d{1,2})\s{1,4}([А-ЯЁA-Z0-9\(].*)$', stripped)
+            if m:
+                num = int(m.group(1))
+                if 1 <= num <= 30:
+                    flush()
+                    current_num = num
+                    current_lines = [m.group(2)]   # rest of the line = task start
+                    prev_blank = False
+                    continue
+
+        prev_blank = is_blank
 
         if current_num is not None:
             current_lines.append(line)
 
-    # Flush the last task
-    if current_num is not None:
-        content = "\n".join(current_lines).strip()
-        if content:
-            tasks.append({
-                "ege_number": current_num,
-                "content_html": _text_to_html(content),
-            })
-
+    flush()
     return tasks
 
 
@@ -1619,13 +1653,14 @@ async def parse_pdf_tasks(
     if not text_pages:
         raise HTTPException(status_code=422, detail="Не удалось извлечь текст из PDF")
 
-    full_text = "\n\n".join(text_pages)
+    # Clean joined text (always returned so the client can show it for debugging)
+    raw_full_text = "\n\n".join(text_pages)
 
     # ── Regex mode (default, no LLM) ──────────────────────────
     if not use_llm:
         raw_tasks = _split_tasks_regex(text_pages)
         if not raw_tasks:
-            return {"tasks": [], "page_count": len(text_pages), "full_text": full_text}
+            return {"tasks": [], "page_count": len(text_pages), "full_text": raw_full_text}
         result = [
             {
                 "index": i,
@@ -1637,7 +1672,7 @@ async def parse_pdf_tasks(
             }
             for i, t in enumerate(raw_tasks)
         ]
-        return {"tasks": result, "page_count": len(text_pages), "full_text": full_text}
+        return {"tasks": result, "page_count": len(text_pages), "full_text": raw_full_text}
 
     # ── LLM mode ──────────────────────────────────────────────
     full_text = "\n\n---СТРАНИЦА---\n\n".join(text_pages)

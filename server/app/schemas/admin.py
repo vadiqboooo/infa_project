@@ -68,10 +68,10 @@ class TaskAdminOut(BaseModel):
     ege_number: int | None = None
     title: str | None = None
     description: str | None = None
-    content_html: str
-    answer_type: AnswerType
+    content_html: str | None = None
+    answer_type: AnswerType = AnswerType.single_number
     difficulty: TaskDifficulty = TaskDifficulty.easy
-    correct_answer: dict | None = None
+    correct_answer: Any = None
     solution_steps: list | None = None
     full_solution_code: str | None = None
     order_index: int = 0
