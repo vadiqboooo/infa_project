@@ -9,6 +9,13 @@ from app.models.task import AnswerType
 
 # ── Read ──────────────────────────────────────────────────────
 
+class SubTaskOut(BaseModel):
+    number: int | None = None
+    content_html: str
+    answer_type: AnswerType = AnswerType.single_number
+    table: dict | None = None  # {cols, rows} for matrix-style answers
+
+
 class TaskOut(BaseModel):
     id: int
     topic_id: int
@@ -22,6 +29,7 @@ class TaskOut(BaseModel):
     difficulty: str = "easy"
     solution_steps: list | None = None
     full_solution_code: str | None = None
+    sub_tasks: list[SubTaskOut] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -58,8 +66,13 @@ class AnswerIn(BaseModel):
       pair          → {"val": [1.0, 2.0]}
       table         → {"val": [[1, 2], [3, 4]]}
       text          → {"val": "xwyz"}
+
+    For tasks with sub_tasks, optionally send `answers` instead of `val`:
+      answers[0] = main task answer (.val)
+      answers[1..] = sub-task answers (.val each)
     """
-    val: float | list[float] | list[list[float | str]] | str
+    val: float | list[float] | list[list[float | str]] | str | None = None
+    answers: list[float | list[float] | list[list[float | str]] | str | None] | None = None
 
     @field_validator("val", mode="after")
     @classmethod
@@ -74,3 +87,4 @@ class CheckResult(BaseModel):
     correct: bool
     attempts_count: int
     status: str  # solved / failed
+    sub_results: list[bool] | None = None  # per sub-task correctness when sub_tasks present

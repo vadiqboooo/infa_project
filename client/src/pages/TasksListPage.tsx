@@ -24,9 +24,21 @@ export function TasksListPage() {
       .map(egeNum => {
         const tut = tutorials.find(t => t.ege_number === egeNum) ?? null;
         const hw  = homeworks.find(t => t.ege_number === egeNum) ?? null;
+        // Topic-level explicit range (ege_number_end) takes priority
+        const explicitEnd = tut?.ege_number_end ?? hw?.ege_number_end ?? null;
+        // Otherwise compute composite range from tasks' sub_tasks
+        const allTasks = [...(tut?.tasks ?? []), ...(hw?.tasks ?? [])];
+        const taskMax = allTasks.reduce<number | null>((acc, t) => {
+          const m = (t as any).ege_number_max as number | null | undefined;
+          if (typeof m === 'number' && (acc == null || m > acc)) return m;
+          return acc;
+        }, null);
+        const maxNum = explicitEnd ?? taskMax;
+        const egeLabel = maxNum != null && maxNum > egeNum ? `${egeNum}-${maxNum}` : String(egeNum);
         return {
           egeNum,
-          title: tut?.title ?? hw?.title ?? `Задание ${egeNum}`,
+          egeLabel,
+          title: tut?.title ?? hw?.title ?? `Задание ${egeLabel}`,
           tutorial: tut ? { id: tut.id, solved: tut.tasks.filter(t => t.status === 'solved').length, total: tut.tasks.length } : null,
           homework: hw  ? { id: hw.id,  solved: hw.tasks.filter(t => t.status === 'solved').length,  total: hw.tasks.length  } : null,
         };
@@ -74,7 +86,7 @@ export function TasksListPage() {
           {filtered.map(g => (
             <TopicCard
               key={g.egeNum}
-              egeId={String(g.egeNum)}
+              egeId={g.egeLabel}
               title={g.title}
               tutorial={g.tutorial}
               homework={g.homework}

@@ -31,6 +31,49 @@ import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
 
+// Format the stored correct_answer ({val: x} or x) into a human-editable string
+function formatAnswerForInput(correct: any): string {
+    if (correct == null) return '';
+    const val = (typeof correct === 'object' && correct !== null && 'val' in correct) ? correct.val : correct;
+    if (val == null) return '';
+    if (typeof val === 'number' || typeof val === 'string') return String(val);
+    if (Array.isArray(val)) {
+        if (val.length > 0 && Array.isArray(val[0])) {
+            return val.map((row: any[]) => row.join(' ')).join('\n');
+        }
+        return val.join(' ');
+    }
+    return '';
+}
+
+// Parse user input back into stored shape {val: ...} based on answer_type
+function parseAnswerInput(text: string, answerType: string): any | null {
+    if (!text || !text.trim()) return null;
+    const trimmed = text.trim();
+    if (answerType === 'text') return { val: trimmed };
+    if (answerType === 'single_number') {
+        const n = parseFloat(trimmed.replace(',', '.'));
+        return isNaN(n) ? { val: trimmed } : { val: n };
+    }
+    if (answerType === 'pair') {
+        const parts = trimmed.split(/\s+/).map(p => {
+            const n = parseFloat(p.replace(',', '.'));
+            return isNaN(n) ? p : n;
+        });
+        return { val: parts };
+    }
+    if (answerType === 'table') {
+        const rows = trimmed.split('\n').map(row =>
+            row.trim().split(/\s+/).map(p => {
+                const n = parseFloat(p.replace(',', '.'));
+                return isNaN(n) ? p : n;
+            })
+        );
+        return { val: rows };
+    }
+    return { val: trimmed };
+}
+
 interface TopicDetailProps {
   topic: TopicAdmin;
   tasks: TaskAdmin[];
@@ -149,17 +192,37 @@ export function TopicDetail({
               />
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
                 <Hash size={14} className="text-gray-400" />
-                <input
-                  type="number"
-                  value={editingTopic.ege_number ?? ''}
-                  onChange={(e) =>
-                    handleTopicFieldChange('ege_number', e.target.value ? parseInt(e.target.value) : null)
+                <select
+                  value={
+                    editingTopic.ege_number_end != null && editingTopic.ege_number != null
+                      ? `${editingTopic.ege_number}-${editingTopic.ege_number_end}`
+                      : (editingTopic.ege_number != null ? String(editingTopic.ege_number) : '')
                   }
-                  className="w-12 bg-transparent text-sm font-bold focus:outline-none"
-                  placeholder="№"
-                  min={1}
-                  max={27}
-                />
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '') {
+                      handleTopicFieldChange('ege_number', null);
+                      handleTopicFieldChange('ege_number_end', null);
+                    } else if (v.includes('-')) {
+                      const [a, b] = v.split('-').map(n => parseInt(n));
+                      handleTopicFieldChange('ege_number', a);
+                      handleTopicFieldChange('ege_number_end', b);
+                    } else {
+                      handleTopicFieldChange('ege_number', parseInt(v));
+                      handleTopicFieldChange('ege_number_end', null);
+                    }
+                  }}
+                  className="bg-transparent text-sm font-bold focus:outline-none"
+                >
+                  <option value="">— №</option>
+                  {Array.from({ length: 18 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
+                  ))}
+                  <option value="19-21">№19-21 (теория игр)</option>
+                  {[22, 23, 24, 25, 26, 27].map(n => (
+                    <option key={n} value={String(n)}>№{n}</option>
+                  ))}
+                </select>
                 <span className="text-[10px] font-bold text-gray-400 uppercase">ЕГЭ</span>
               </div>
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
@@ -312,7 +375,15 @@ export function TopicDetail({
                     />
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className="text-xs font-bold text-gray-400">{task.ege_number || '—'}</span>
+                    <span className="text-xs font-bold text-gray-400">
+                      {(() => {
+                        if (Array.isArray(task.sub_tasks) && task.sub_tasks.length > 0) {
+                          const nums = [task.ege_number, ...task.sub_tasks.map((s: any) => s?.number)].filter((n): n is number => typeof n === 'number');
+                          if (nums.length >= 2) return `${Math.min(...nums)}–${Math.max(...nums)}`;
+                        }
+                        return task.ege_number || '—';
+                      })()}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1">
@@ -417,9 +488,15 @@ function TaskEditPanel({
     content_html: task.content_html || '',
     difficulty: (task.difficulty || 'easy') as TaskDifficulty,
     answer_type: (task.answer_type || 'single_number') as AnswerType,
-    correct_answer: (task.correct_answer as any)?.val ?? '',
+    correct_answer: formatAnswerForInput(task.correct_answer),
     solution_steps: task.solution_steps || [],
     full_solution_code: task.full_solution_code || '',
+    sub_tasks: (task.sub_tasks || []) as Array<{
+      number: number | null;
+      content_html: string;
+      answer_type: AnswerType;
+      correct_answer: any;
+    }>,
   });
   const [uploadingStep, setUploadingStep] = useState<number | null>(null);
   const [collapsedSteps, setCollapsedSteps] = useState<Set<number>>(new Set());
@@ -462,7 +539,20 @@ function TaskEditPanel({
   };
 
   const handleSave = () => {
-    onSave({ ...task, ...form, correct_answer: { val: form.correct_answer } });
+    const subTasksPayload = form.sub_tasks.length > 0
+      ? form.sub_tasks.map(s => ({
+          number: s.number,
+          content_html: s.content_html,
+          answer_type: s.answer_type,
+          correct_answer: s.correct_answer ?? null,
+        }))
+      : null;
+    onSave({
+      ...task,
+      ...form,
+      correct_answer: parseAnswerInput(form.correct_answer ?? '', form.answer_type),
+      sub_tasks: subTasksPayload,
+    });
   };
 
   const uploadStepImage = async (stepIdx: number, file: File) => {
@@ -559,9 +649,30 @@ function TaskEditPanel({
         <div className="grid grid-cols-4 gap-3">
           <div>
             <label className={labelCls}>№ ЕГЭ</label>
-            <input type="number" value={form.ege_number}
-              onChange={(e) => setForm({ ...form, ege_number: parseInt(e.target.value) || 0 })}
-              className={inputCls} />
+            <select
+              value={form.sub_tasks.length >= 2 && form.ege_number === 19 ? '19-21' : String(form.ege_number)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '19-21') {
+                  setForm({
+                    ...form,
+                    ege_number: 19,
+                    sub_tasks: form.sub_tasks.length >= 2 ? form.sub_tasks : [
+                      { number: 20, content_html: '', answer_type: 'single_number' as AnswerType, correct_answer: '' },
+                      { number: 21, content_html: '', answer_type: 'single_number' as AnswerType, correct_answer: '' },
+                    ],
+                  });
+                } else {
+                  setForm({ ...form, ege_number: parseInt(v) || 0, sub_tasks: [] });
+                }
+              }}
+              className={inputCls}
+            >
+              {Array.from({ length: 27 }, (_, i) => (
+                <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
+              ))}
+              <option value="19-21">№19-21 (теория игр)</option>
+            </select>
           </div>
           <div>
             <label className={labelCls}>Сложность</label>
@@ -593,13 +704,75 @@ function TaskEditPanel({
           </div>
         </div>
         <div>
-          <label className={labelCls}>Название (опционально)</label>
+          <label className={labelCls}>Тема / Раздел (опционально)</label>
           <input type="text" value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="Напр: Задача на графы"
+            placeholder="Напр: Теория игр, Базы данных"
             className={inputCls} />
         </div>
       </div>
+
+      {/* Sub-tasks editor (composite e.g. 19-21) */}
+      {form.sub_tasks.length > 0 && (
+        <div className="bg-amber-50/40 border-2 border-amber-200 rounded-xl p-4 space-y-3">
+          <div className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+            Подзадания (составное задание №{form.ege_number}-{form.sub_tasks[form.sub_tasks.length - 1]?.number ?? form.ege_number})
+          </div>
+          {form.sub_tasks.map((sub, sIdx) => (
+            <div key={sIdx} className="bg-white border border-amber-200 rounded-lg p-3 space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className={labelCls}>Номер</label>
+                  <input type="number" value={sub.number ?? ''}
+                    onChange={(e) => {
+                      const n = e.target.value ? parseInt(e.target.value) : null;
+                      setForm({
+                        ...form,
+                        sub_tasks: form.sub_tasks.map((s, i) => i === sIdx ? { ...s, number: n } : s),
+                      });
+                    }}
+                    className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Тип ответа</label>
+                  <select value={sub.answer_type}
+                    onChange={(e) => setForm({
+                      ...form,
+                      sub_tasks: form.sub_tasks.map((s, i) => i === sIdx ? { ...s, answer_type: e.target.value as AnswerType } : s),
+                    })}
+                    className={inputCls}>
+                    <option value="single_number">Число</option>
+                    <option value="text">Текст</option>
+                    <option value="pair">Пара чисел</option>
+                    <option value="table">Таблица</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Ответ</label>
+                  <input type="text"
+                    value={formatAnswerForInput(sub.correct_answer)}
+                    onChange={(e) => setForm({
+                      ...form,
+                      sub_tasks: form.sub_tasks.map((s, i) => i === sIdx ? { ...s, correct_answer: parseAnswerInput(e.target.value, s.answer_type) } : s),
+                    })}
+                    placeholder="напр. 8 22 23"
+                    className={inputCls} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Текст подзадания</label>
+                <textarea value={sub.content_html}
+                  onChange={(e) => setForm({
+                    ...form,
+                    sub_tasks: form.sub_tasks.map((s, i) => i === sIdx ? { ...s, content_html: e.target.value } : s),
+                  })}
+                  rows={4}
+                  className={`${inputCls} font-mono text-xs resize-y`} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Content HTML — rich text editor */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">

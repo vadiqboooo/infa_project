@@ -91,6 +91,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             time_limit_minutes=exams.get(t.id, 60),
             is_mock=t.is_mock,
             ege_number=t.ege_number,
+            ege_number_end=t.ege_number_end,
         )
         for t in topics
     ]
@@ -104,6 +105,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         category=body.category,
         is_mock=body.is_mock,
         ege_number=body.ege_number,
+        ege_number_end=body.ege_number_end,
     )
     db.add(topic)
     await db.flush()
@@ -123,6 +125,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         ege_number=topic.ege_number,
+        ege_number_end=topic.ege_number_end,
     )
 
 
@@ -138,7 +141,8 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.category = body.category
     topic.is_mock = body.is_mock
     topic.ege_number = body.ege_number
-    
+    topic.ege_number_end = body.ege_number_end
+
     # Update exam
     exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
     exam = exam_res.scalar_one_or_none()
@@ -147,7 +151,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     else:
         exam = Exam(topic_id=topic_id, time_limit_minutes=body.time_limit_minutes or 60)
         db.add(exam)
-        
+
     await db.commit()
     await db.refresh(topic)
 
@@ -164,6 +168,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         ege_number=topic.ege_number,
+        ege_number_end=topic.ege_number_end,
     )
 
 
@@ -1091,6 +1096,7 @@ async def create_task(body: TaskAdminIn, db: AsyncSession = Depends(get_db)):
         correct_answer=body.correct_answer,
         solution_steps=body.solution_steps,
         full_solution_code=body.full_solution_code,
+        sub_tasks=body.sub_tasks,
         order_index=max_order + 1,
     )
     db.add(task)
@@ -1428,6 +1434,109 @@ def _parse_key(key: str, table: dict | None) -> tuple[AnswerType, dict | None]:
     return AnswerType.single_number, ({"val": nums[0]} if nums else None)
 
 
+async def _fetch_kompege_variant(variant_id: int) -> list[dict]:
+    """Fetch raw tasks from kompege.ru. Raises HTTPException on failure."""
+    url = KOMPEGE_API.format(variant_id=variant_id)
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(url)
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Не удалось подключиться к kompege.ru: {e}")
+    if resp.status_code == 404:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Вариант {variant_id} не найден на kompege.ru")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"kompege.ru вернул {resp.status_code}")
+    raw_tasks = resp.json().get("tasks", [])
+    if not raw_tasks:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Вариант не содержит задач")
+    return raw_tasks
+
+
+def _kompege_to_parsed_tasks(raw_tasks: list[dict]) -> list[dict]:
+    """Convert kompege raw tasks into the same shape AdminImportPdfPage expects."""
+    sub_ege_numbers: set[int] = set()
+    for raw in raw_tasks:
+        for sub in (raw.get("subTask") or []):
+            n = sub.get("number")
+            if isinstance(n, int):
+                sub_ege_numbers.add(n)
+
+    parsed: list[dict] = []
+    for raw in sorted(raw_tasks, key=lambda t: int(t.get("number", 0) or 0)):
+        content_html: str = raw.get("text", "").strip()
+        if not content_html:
+            continue
+        ege_number = raw.get("number")
+        if isinstance(ege_number, int) and ege_number in sub_ege_numbers and not (raw.get("subTask") or []):
+            continue
+
+        key: str = str(raw.get("key", "")).strip()
+        table = raw.get("table") or {}
+        answer_type, correct_answer = _parse_key(key, table if isinstance(table, dict) else {})
+
+        raw_files = raw.get("files") or []
+        files = []
+        for f in raw_files:
+            u = str(f.get("url") or "").strip()
+            if u:
+                if u.startswith("/"):
+                    u = "https://kompege.ru" + u
+                files.append({"url": u, "name": str(f.get("name") or "")})
+
+        sub_tasks_list: list[dict] = []
+        for sub in (raw.get("subTask") or []):
+            sub_text = str(sub.get("text") or "").strip()
+            if not sub_text:
+                continue
+            sub_key = str(sub.get("key") or "").strip()
+            sub_table = sub.get("table") or {}
+            sub_at, sub_ca = _parse_key(sub_key, sub_table if isinstance(sub_table, dict) else {})
+            sub_tasks_list.append({
+                "number": sub.get("number"),
+                "content_html": sub_text,
+                "answer_type": sub_at.value,
+                "correct_answer": sub_ca,
+                "table": {
+                    "cols": int(sub_table.get("cols") or 0),
+                    "rows": int(sub_table.get("rows") or 0),
+                } if isinstance(sub_table, dict) and sub_table else None,
+            })
+
+        # Extract a possible `correct_answer` simple form (string) for editor convenience
+        ca_simple: object = None
+        if isinstance(correct_answer, dict):
+            ca_simple = correct_answer.get("val")
+
+        parsed.append({
+            "index": len(parsed),
+            "ege_number": ege_number,
+            "title": str(raw.get("comment") or "").strip() or None,
+            "content_html": content_html,
+            "answer_type": answer_type.value,
+            "correct_answer": ca_simple,
+            "images": [],
+            "files": files,
+            "sub_tasks": sub_tasks_list,
+        })
+    return parsed
+
+
+@router.post("/import-variant/preview")
+async def preview_variant(body: ImportVariantIn):
+    """Fetch a variant from kompege.ru and return parsed tasks WITHOUT saving.
+
+    Returned shape matches /import-pdf/parse so the same editor can be reused.
+    """
+    raw_tasks = await _fetch_kompege_variant(body.variant_id)
+    parsed = _kompege_to_parsed_tasks(raw_tasks)
+    return {
+        "tasks": parsed,
+        "page_count": 0,
+        "full_text": "",
+        "topic_title": body.topic_title or f"Вариант {body.variant_id}",
+    }
+
+
 @router.post("/import-variant", response_model=ImportVariantResult, status_code=status.HTTP_201_CREATED)
 async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_db)):
     """Fetch a variant from kompege.ru and create a topic with all its tasks."""
@@ -1459,18 +1568,33 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
     skipped = 0
     order_counter = 0
 
+    # First pass: collect ege_numbers that are subTasks of another (so we can skip top-level duplicates)
+    sub_ege_numbers: set[int] = set()
+    for raw in raw_tasks:
+        for sub in (raw.get("subTask") or []):
+            n = sub.get("number")
+            if isinstance(n, int):
+                sub_ege_numbers.add(n)
+
     for raw in sorted(raw_tasks, key=lambda t: int(t.get("number", 0) or 0)):
         content_html: str = raw.get("text", "").strip()
         if not content_html:
             skipped += 1
             continue
 
+        ege_number = raw.get("number")
+        # Skip tasks that appear as subTask of another (kompege duplicates them at top-level)
+        if isinstance(ege_number, int) and ege_number in sub_ege_numbers:
+            # Only skip if this raw task is NOT itself a parent (no subTask of its own)
+            if not (raw.get("subTask") or []):
+                skipped += 1
+                continue
+
         key: str = str(raw.get("key", "")).strip()
         table = raw.get("table") or {}
         answer_type, correct_answer = _parse_key(key, table if isinstance(table, dict) else {})
 
         external_id = str(raw.get("taskId") or raw.get("id") or "")
-        ege_number = raw.get("number")
 
         raw_files = raw.get("files") or []
         files = []
@@ -1482,6 +1606,26 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
                 files.append({"url": url, "name": str(f.get("name") or "")})
         media_resources = {"files": files} if files else None
 
+        # Build sub_tasks list from raw.subTask
+        sub_tasks_list: list[dict] = []
+        for sub in (raw.get("subTask") or []):
+            sub_text = str(sub.get("text") or "").strip()
+            if not sub_text:
+                continue
+            sub_key = str(sub.get("key") or "").strip()
+            sub_table = sub.get("table") or {}
+            sub_at, sub_ca = _parse_key(sub_key, sub_table if isinstance(sub_table, dict) else {})
+            sub_tasks_list.append({
+                "number": sub.get("number"),
+                "content_html": sub_text,
+                "answer_type": sub_at.value,
+                "correct_answer": sub_ca,
+                "table": {
+                    "cols": int(sub_table.get("cols") or 0),
+                    "rows": int(sub_table.get("rows") or 0),
+                } if isinstance(sub_table, dict) and sub_table else None,
+            })
+
         task = Task(
             topic_id=topic.id,
             external_id=external_id or None,
@@ -1491,6 +1635,7 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
             media_resources=media_resources,
             answer_type=answer_type,
             correct_answer=correct_answer,
+            sub_tasks=sub_tasks_list or None,
         )
         db.add(task)
         created += 1
@@ -1806,13 +1951,22 @@ class PdfFileIn(BaseModel):
     url: str
     name: str = ""
 
+class PdfSubTaskIn(BaseModel):
+    number: int | None = None
+    content_html: str = ""
+    answer_type: str = "single_number"
+    correct_answer: dict | list | str | float | int | None = None
+    table: dict | None = None  # {cols, rows}
+
 class PdfTaskIn(BaseModel):
     ege_number: int | None = None
+    title: str | None = None
     content_html: str
     answer_type: str = "single_number"
-    correct_answer: dict | list | str | None = None
+    correct_answer: dict | list | str | float | int | None = None
     images: list[str] = []
     files: list[PdfFileIn] = []
+    sub_tasks: list[PdfSubTaskIn] = []
 
 
 class PdfImportConfirm(BaseModel):
@@ -1820,6 +1974,8 @@ class PdfImportConfirm(BaseModel):
     category: str = "variants"
     is_mock: bool = False
     time_limit_minutes: int = 235
+    ege_number: int | None = None
+    ege_number_end: int | None = None
     tasks: list[PdfTaskIn]
 
 
@@ -1842,6 +1998,8 @@ async def confirm_pdf_import(
         order_index=max_order + 1,
         category=body.category,
         is_mock=body.is_mock,
+        ege_number=body.ege_number,
+        ege_number_end=body.ege_number_end,
     )
     db.add(topic)
     await db.flush()
@@ -1851,7 +2009,7 @@ async def confirm_pdf_import(
         # Build correct_answer based on answer_type
         correct_answer = None
         if t.correct_answer not in (None, "", [], {}):
-            correct_answer = t.correct_answer
+            correct_answer = t.correct_answer if isinstance(t.correct_answer, dict) else {"val": t.correct_answer}
 
         # Inline images into content_html if any
         content = t.content_html
@@ -1872,14 +2030,31 @@ async def confirm_pdf_import(
         if t.files:
             media_resources = {"files": [{"url": f.url, "name": f.name} for f in t.files]}
 
+        sub_tasks_payload: list[dict] | None = None
+        if t.sub_tasks:
+            sub_tasks_payload = []
+            for sub in t.sub_tasks:
+                sub_ca = None
+                if sub.correct_answer not in (None, "", [], {}):
+                    sub_ca = sub.correct_answer if isinstance(sub.correct_answer, dict) else {"val": sub.correct_answer}
+                sub_tasks_payload.append({
+                    "number": sub.number,
+                    "content_html": sub.content_html,
+                    "answer_type": sub.answer_type,
+                    "correct_answer": sub_ca,
+                    "table": sub.table,
+                })
+
         task = Task(
             topic_id=topic.id,
             ege_number=t.ege_number,
+            title=t.title,
             order_index=i,
             content_html=content,
             answer_type=answer_type_enum,
             correct_answer=correct_answer,
             media_resources=media_resources,
+            sub_tasks=sub_tasks_payload,
         )
         db.add(task)
         created += 1

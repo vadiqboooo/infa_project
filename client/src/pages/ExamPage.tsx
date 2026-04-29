@@ -12,6 +12,7 @@ import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
 import Skeleton from "../components/Skeleton";
 import type { AnswerVal, TaskNav, TaskResult } from "../api/types";
+import { authFetch } from "../api/client";
 import confetti from "canvas-confetti";
 
 export default function ExamPage() {
@@ -72,10 +73,10 @@ export default function ExamPage() {
 
     useEffect(() => {
         if (!finishedAttemptId) return;
-        const token = localStorage.getItem("jwt_token");
-        fetch(`/api/exams/attempt/${finishedAttemptId}/analysis`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }).then(r => r.ok ? r.json() : null).then(d => { if (d) setPublishedAnalysis(d); }).catch(() => {});
+        authFetch(`/api/exams/attempt/${finishedAttemptId}/analysis`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d) setPublishedAnalysis(d); })
+            .catch(() => {});
     }, [finishedAttemptId]);
 
     const questionsScrollRef = useRef<HTMLDivElement>(null);
@@ -155,12 +156,11 @@ export default function ExamPage() {
             // Persist draft to backend
             const attemptId = examInfo?.active_attempt?.id;
             if (attemptId) {
-                const token = localStorage.getItem("jwt_token");
-                fetch(`/api/exams/attempt/${attemptId}/save-answer`, {
+                authFetch(`/api/exams/attempt/${attemptId}/save-answer`, {
                     method: "PUT",
-                    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ task_id: task.id, answer: { val: currentAnswer } }),
-                }).catch(() => {}); // non-blocking
+                }).catch(() => {}); // non-blocking; 401 triggers global redirect
             }
         }
     };
@@ -286,14 +286,12 @@ export default function ExamPage() {
             const res = await submitExamMutation.mutateAsync(payload);
 
             // Upload file solutions after submit (non-blocking failures)
-            const token = localStorage.getItem("jwt_token");
             for (const [taskIdStr, file] of Object.entries(fileSolutions)) {
                 try {
                     const formData = new FormData();
                     formData.append("file", file);
-                    await fetch(`/api/exams/attempt/${res.attempt_id}/upload/${taskIdStr}`, {
+                    await authFetch(`/api/exams/attempt/${res.attempt_id}/upload/${taskIdStr}`, {
                         method: "POST",
-                        headers: token ? { Authorization: `Bearer ${token}` } : {},
                         body: formData,
                     });
                 } catch { /* file upload failure is non-critical */ }
@@ -364,11 +362,7 @@ export default function ExamPage() {
             if (!attemptId || submitLoading || submitted) return;
             setSubmitLoading(true);
             try {
-                const token = localStorage.getItem("jwt_token");
-                await fetch(`/api/exams/attempt/${attemptId}/submit-for-review`, {
-                    method: "POST",
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
+                await authFetch(`/api/exams/attempt/${attemptId}/submit-for-review`, { method: "POST" });
                 setSubmitted(true);
             } catch { /* ignore */ }
             setSubmitLoading(false);
@@ -569,12 +563,10 @@ export default function ExamPage() {
                     const handleFileUpload = async (file: File) => {
                         setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: true }));
                         try {
-                            const token = localStorage.getItem("jwt_token");
                             const formData = new FormData();
                             formData.append("file", file);
-                            const res = await fetch(`/api/exams/attempt/${attemptId}/upload/${reviewTaskId}`, {
+                            const res = await authFetch(`/api/exams/attempt/${attemptId}/upload/${reviewTaskId}`, {
                                 method: "POST",
-                                headers: token ? { Authorization: `Bearer ${token}` } : {},
                                 body: formData,
                             });
                             if (res.ok) {
@@ -923,12 +915,10 @@ export default function ExamPage() {
                 const handleFileUpload = async (file: File) => {
                     setReviewFileUploading(prev => ({ ...prev, [reviewTaskId]: true }));
                     try {
-                        const token = localStorage.getItem("jwt_token");
                         const formData = new FormData();
                         formData.append("file", file);
-                        const res = await fetch(`/api/exams/attempt/${finishedAttemptId}/upload/${reviewTaskId}`, {
+                        const res = await authFetch(`/api/exams/attempt/${finishedAttemptId}/upload/${reviewTaskId}`, {
                             method: "POST",
-                            headers: token ? { Authorization: `Bearer ${token}` } : {},
                             body: formData,
                         });
                         if (res.ok) {
@@ -1261,10 +1251,9 @@ export default function ExamPage() {
                                             // Persist code draft to backend
                                             const attemptId = examInfo?.active_attempt?.id;
                                             if (attemptId) {
-                                                const token = localStorage.getItem("jwt_token");
-                                                fetch(`/api/exams/attempt/${attemptId}/save-answer`, {
+                                                authFetch(`/api/exams/attempt/${attemptId}/save-answer`, {
                                                     method: "PUT",
-                                                    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                                    headers: { "Content-Type": "application/json" },
                                                     body: JSON.stringify({ task_id: solutionPanelTaskId, code: localCode }),
                                                 }).catch(() => {});
                                             }

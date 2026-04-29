@@ -35,13 +35,15 @@ export function useTask(taskId: number | null) {
 }
 
 /* ── Check answer ────────────────────────────────────── */
+export type CheckAnswerInput = { val: AnswerVal } | { answers: AnswerVal[] };
+
 export function useCheckAnswer(taskId: number) {
     const qc = useQueryClient();
-    return useMutation<CheckResult, Error, AnswerVal>({
-        mutationFn: (val) =>
+    return useMutation<CheckResult, Error, CheckAnswerInput>({
+        mutationFn: (input) =>
             api<CheckResult>(`/tasks/${taskId}/check`, {
                 method: "POST",
-                body: JSON.stringify({ val }),
+                body: JSON.stringify(input),
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["navigation"] });

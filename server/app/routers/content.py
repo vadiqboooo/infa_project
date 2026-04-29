@@ -83,6 +83,20 @@ async def get_navigation(
         )
         published_ids = {row[0] for row in pub_res.all()}
 
+    def _compute_ege_max(t) -> int | None:
+        """For composite tasks (with sub_tasks), return max number across main + subs."""
+        if not t.sub_tasks:
+            return None
+        nums = []
+        if isinstance(t.ege_number, int):
+            nums.append(t.ege_number)
+        for sub in t.sub_tasks:
+            if isinstance(sub, dict):
+                n = sub.get("number")
+                if isinstance(n, int):
+                    nums.append(n)
+        return max(nums) if len(nums) >= 2 else None
+
     nav: list[TopicNav] = []
     for topic in topics:
         tasks_nav = [
@@ -90,6 +104,7 @@ async def get_navigation(
                 id=t.id,
                 external_id=t.external_id,
                 ege_number=t.ege_number,
+                ege_number_max=_compute_ege_max(t),
                 status=progress_map.get(t.id, "not_started"),
                 has_solution=bool(t.solution_steps and len(t.solution_steps) > 0),
             )
@@ -113,6 +128,7 @@ async def get_navigation(
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
             ege_number=topic.ege_number,
+            ege_number_end=topic.ege_number_end,
             analysis_published=attempt_id in published_ids if attempt_id else False,
             draft_count=active_draft_counts.get(topic.id, 0),
         ))

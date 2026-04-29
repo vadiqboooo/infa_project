@@ -35,6 +35,8 @@ import AdminImportPdfPage from "./AdminImportPdfPage";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
+import { handleSessionExpired } from "../api/client";
+
 const API_BASE = "/api";
 
 function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {}): Promise<T> {
@@ -43,11 +45,11 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
         "Content-Type": "application/json",
         ...(options.headers as Record<string, string> || {}),
     };
-    
+
     if (apiKey) {
         headers["X-API-Key"] = apiKey;
     }
-    
+
     if (token) {
         headers["Authorization"] = `Bearer ${token}`;
     }
@@ -56,6 +58,10 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
         ...options,
         headers,
     }).then(async (res) => {
+        if (res.status === 401 && token) {
+            handleSessionExpired();
+            throw new Error("Сессия истекла. Войдите снова.");
+        }
         if (!res.ok) {
             const err = await res.json().catch(() => ({ detail: res.statusText }));
             throw new Error(err.detail || "Ошибка запроса");
@@ -255,15 +261,33 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         await loadData();
     };
 
-    const handleImportVariant = async (topic_title: string, variant_id: number) => {
+    const handleImportVariant = async (
+        topic_title: string,
+        variant_id: number,
+        options: { category: 'tutorial' | 'homework' | 'control' | 'variants' | 'mock'; ege_number: number | null; ege_number_end: number | null }
+    ) => {
         try {
-            await adminFetch<ImportVariantResult>("/admin/import-variant", apiKey, {
+            const data = await adminFetch<{
+                tasks: any[];
+                topic_title: string;
+            }>("/admin/import-variant/preview", apiKey, {
                 method: "POST",
                 body: JSON.stringify({ variant_id, topic_title }),
             });
-            queryClient.invalidateQueries({ queryKey: ["navigation"] });
-            await loadData();
             setShowImport(false);
+            // Navigate to the import editor pre-populated with kompege data
+            navigate('import-pdf', {
+                state: {
+                    source: 'kompege',
+                    tasks: data.tasks,
+                    topic_title: data.topic_title,
+                    category: options.category,
+                    is_mock: options.category === 'mock',
+                    time_limit_minutes: 235,
+                    ege_number: options.ege_number,
+                    ege_number_end: options.ege_number_end,
+                },
+            });
         } catch (err: any) {
             alert(err.message);
         }

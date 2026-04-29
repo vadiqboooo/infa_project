@@ -30,7 +30,12 @@ export default function TasksPage() {
     const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>(() => {
         try { return JSON.parse(localStorage.getItem('edu_task_answers') || '{}'); } catch { return {}; }
     });
+    // Sub-task answers: keyed by `${taskId}:${subIndex}`
+    const [savedSubAnswers, setSavedSubAnswers] = useState<Record<string, AnswerVal>>(() => {
+        try { return JSON.parse(localStorage.getItem('edu_task_sub_answers') || '{}'); } catch { return {}; }
+    });
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
+    const [subResults, setSubResults] = useState<boolean[] | null>(null);
     const [showChat, setShowChat] = useState(true);
     const [mentorOpen, setMentorOpen] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
@@ -74,18 +79,34 @@ export default function TasksPage() {
     useEffect(() => {
         try { localStorage.setItem('edu_task_answers', JSON.stringify(savedAnswers)); } catch {}
     }, [savedAnswers]);
+    useEffect(() => {
+        try { localStorage.setItem('edu_task_sub_answers', JSON.stringify(savedSubAnswers)); } catch {}
+    }, [savedSubAnswers]);
 
     // Reset check result when task changes
     useEffect(() => {
         setCheckResult(null);
+        setSubResults(null);
     }, [taskIndex, id]);
 
     const answer = savedAnswers[currentTaskNav?.id ?? 0] ?? 0;
 
     const handleCheck = async () => {
-        if (!currentTaskNav) return;
+        if (!currentTaskNav || !task) return;
         try {
-            const res = await check.mutateAsync(answer);
+            const hasSubs = task.sub_tasks && task.sub_tasks.length > 0;
+            let res;
+            if (hasSubs) {
+                const mainAns = savedAnswers[task.id] ?? 0;
+                const subAns = (task.sub_tasks ?? []).map((_, i) =>
+                    savedSubAnswers[`${task.id}:${i}`] ?? 0
+                );
+                res = await check.mutateAsync({ answers: [mainAns, ...subAns] });
+                setSubResults(res.sub_results ?? null);
+            } else {
+                res = await check.mutateAsync({ val: answer });
+                setSubResults(null);
+            }
             setCheckResult(res.correct ? 'correct' : 'wrong');
             if (res.correct) {
                 confetti({
@@ -267,7 +288,13 @@ export default function TasksPage() {
                                                     {task.difficulty === 'easy' ? 'Лёгкая' : task.difficulty === 'medium' ? 'Средняя' : 'Сложная'}
                                                 </span>
                                                 <span className="text-xs text-gray-400 hidden sm:inline">
-                                                    Задание {taskIndex + 1} — {task.title || 'Информатика'}
+                                                    {(() => {
+                                                        if (Array.isArray(task.sub_tasks) && task.sub_tasks.length > 0) {
+                                                            const nums = [task.ege_number, ...task.sub_tasks.map((s: any) => s?.number)].filter((n): n is number => typeof n === 'number');
+                                                            if (nums.length >= 2) return `Задания №${Math.min(...nums)}–${Math.max(...nums)} — ${task.title || 'Информатика'}`;
+                                                        }
+                                                        return `Задание ${task.ege_number ? `№${task.ege_number}` : taskIndex + 1} — ${task.title || 'Информатика'}`;
+                                                    })()}
                                                 </span>
                                                 <div className="ml-auto flex items-center gap-2">
                                                     {(!isVariant || !examInfo?.active_attempt) && (
@@ -307,7 +334,11 @@ export default function TasksPage() {
                                             <div className="mt-6 pt-4 border-t border-gray-100 max-w-full md:max-w-[50%]">
                                                 <div className="flex items-start gap-3">
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Ваш ответ</div>
+                                                        <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+                                                            {task.sub_tasks && task.sub_tasks.length > 0
+                                                                ? `Ответ${task.ege_number ? ` к заданию ${task.ege_number}` : ''}`
+                                                                : 'Ваш ответ'}
+                                                        </div>
                                                         <AnswerInput
                                                             type={task.answer_type || 'single_number'}
                                                             egeNumber={task.ege_number}
@@ -322,8 +353,16 @@ export default function TasksPage() {
                                                             }}
                                                             disabled={check.isPending || viewingFinishedExam}
                                                         />
+                                                        {subResults && subResults[0] !== undefined && (
+                                                            <div className={clsx(
+                                                                "mt-1.5 text-xs font-medium",
+                                                                subResults[0] ? "text-emerald-600" : "text-red-500"
+                                                            )}>
+                                                                {subResults[0] ? "✓ Верно" : "✕ Неверно"}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (
+                                                    {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (!task.sub_tasks || task.sub_tasks.length === 0) && (
                                                         <button
                                                             onClick={handleCheck}
                                                             disabled={check.isPending}
@@ -333,6 +372,59 @@ export default function TasksPage() {
                                                         </button>
                                                     )}
                                                 </div>
+
+                                                {/* Sub-tasks */}
+                                                {task.sub_tasks && task.sub_tasks.length > 0 && (
+                                                    <div className="mt-6 space-y-6">
+                                                        {task.sub_tasks.map((sub, sIdx) => {
+                                                            const key = `${task.id}:${sIdx}`;
+                                                            const subOk = subResults?.[sIdx + 1];
+                                                            return (
+                                                                <div key={sIdx} className="border-t border-gray-100 pt-5">
+                                                                    <div className="prose prose-slate prose-sm max-w-none text-gray-800 leading-relaxed mb-3">
+                                                                        {sub.number != null && (
+                                                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                                                                Задание {sub.number}
+                                                                            </div>
+                                                                        )}
+                                                                        <TaskView content={sub.content_html} />
+                                                                    </div>
+                                                                    <div className="text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+                                                                        Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
+                                                                    </div>
+                                                                    <AnswerInput
+                                                                        type={sub.answer_type || 'single_number'}
+                                                                        egeNumber={sub.number ?? undefined}
+                                                                        value={savedSubAnswers[key] ?? 0}
+                                                                        onChange={(val) => {
+                                                                            setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
+                                                                            setCheckResult(null);
+                                                                            setSubResults(null);
+                                                                        }}
+                                                                        disabled={check.isPending || viewingFinishedExam}
+                                                                    />
+                                                                    {subOk !== undefined && (
+                                                                        <div className={clsx(
+                                                                            "mt-1.5 text-xs font-medium",
+                                                                            subOk ? "text-emerald-600" : "text-red-500"
+                                                                        )}>
+                                                                            {subOk ? "✓ Верно" : "✕ Неверно"}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {!viewingFinishedExam && (
+                                                            <button
+                                                                onClick={handleCheck}
+                                                                disabled={check.isPending}
+                                                                className="px-5 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                                                            >
+                                                                {check.isPending ? "Проверяю..." : "Проверить все ответы"}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 {checkResult === 'correct' && (
                                                     <div className="mt-3 p-2.5 bg-emerald-50 rounded-lg text-emerald-700 text-sm font-medium flex items-center gap-2">

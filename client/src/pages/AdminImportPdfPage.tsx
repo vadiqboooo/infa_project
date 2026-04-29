@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Upload, FileText, AlertCircle, Loader2,
     CheckCircle2, ImagePlus, Trash2, Plus, Eye, EyeOff,
@@ -36,15 +36,31 @@ interface TaskFile {
     name: string;
 }
 
+interface ParsedSubTask {
+    number: number | null;
+    content_html: string;
+    answer_type: string;
+    correct_answer: unknown;
+    table?: { cols: number; rows: number } | null;
+}
+
 interface ParsedTask {
     index: number;
     ege_number: number | null;
+    title: string;
     content_html: string;
     answer_type: string;
     correct_answer: unknown;
     images: string[];
     files: TaskFile[];
+    sub_tasks: ParsedSubTask[];
 }
+
+// Predefined options for the EGE number selector
+const EGE_NUMBER_OPTIONS: { value: string; label: string; isComposite?: boolean }[] = [
+    ...Array.from({ length: 27 }, (_, i) => ({ value: String(i + 1), label: `№${i + 1}` })),
+    { value: '19-21', label: '№19-21 (теория игр)', isComposite: true },
+];
 
 const ANSWER_TYPES = [
     { value: 'single_number', label: 'Одно число' },
@@ -52,6 +68,49 @@ const ANSWER_TYPES = [
     { value: 'table', label: 'Таблица' },
     { value: 'text', label: 'Текст' },
 ];
+
+// Format the stored correct_answer ({val: x} or x) into a human-editable string
+function formatAnswerForInput(correct: any): string {
+    if (correct == null) return '';
+    const val = (typeof correct === 'object' && correct !== null && 'val' in correct) ? correct.val : correct;
+    if (val == null) return '';
+    if (typeof val === 'number' || typeof val === 'string') return String(val);
+    if (Array.isArray(val)) {
+        if (val.length > 0 && Array.isArray(val[0])) {
+            return val.map((row: any[]) => row.join(' ')).join('\n');
+        }
+        return val.join(' ');
+    }
+    return '';
+}
+
+// Parse user input back into stored shape {val: ...} based on answer_type
+function parseAnswerInput(text: string, answerType: string): any | null {
+    if (!text || !text.trim()) return null;
+    const trimmed = text.trim();
+    if (answerType === 'text') return { val: trimmed };
+    if (answerType === 'single_number') {
+        const n = parseFloat(trimmed.replace(',', '.'));
+        return isNaN(n) ? { val: trimmed } : { val: n };
+    }
+    if (answerType === 'pair') {
+        const parts = trimmed.split(/\s+/).map(p => {
+            const n = parseFloat(p.replace(',', '.'));
+            return isNaN(n) ? p : n;
+        });
+        return { val: parts };
+    }
+    if (answerType === 'table') {
+        const rows = trimmed.split('\n').map(row =>
+            row.trim().split(/\s+/).map(p => {
+                const n = parseFloat(p.replace(',', '.'));
+                return isNaN(n) ? p : n;
+            })
+        );
+        return { val: rows };
+    }
+    return { val: trimmed };
+}
 
 const CATEGORIES: { value: TopicCategory; label: string }[] = [
     { value: 'variants', label: 'Вариант ЕГЭ' },
@@ -67,19 +126,33 @@ interface AdminImportPdfPageProps {
 
 export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) {
     const navigate = useNavigate();
+    const location = useLocation();
+    // Optional initial state from another import flow (e.g. kompege preview)
+    const initial = (location.state ?? null) as null | {
+        source?: 'kompege';
+        tasks?: ParsedTask[];
+        topic_title?: string;
+        category?: TopicCategory;
+        time_limit_minutes?: number;
+        is_mock?: boolean;
+        ege_number?: number | null;
+        ege_number_end?: number | null;
+    };
 
     // ── Upload step state ─────────────────────────────────────
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [dragOver, setDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [topicTitle, setTopicTitle] = useState('');
-    const [category, setCategory] = useState<TopicCategory>('variants');
-    const [isMock, setIsMock] = useState(false);
-    const [timeLimitMinutes, setTimeLimitMinutes] = useState(235);
+    const [topicTitle, setTopicTitle] = useState(initial?.topic_title ?? '');
+    const [category, setCategory] = useState<TopicCategory>(initial?.category ?? 'variants');
+    const [isMock, setIsMock] = useState(initial?.is_mock ?? false);
+    const [timeLimitMinutes, setTimeLimitMinutes] = useState(initial?.time_limit_minutes ?? 235);
+    const [topicEgeNumber, setTopicEgeNumber] = useState<number | null>(initial?.ege_number ?? null);
+    const [topicEgeNumberEnd, setTopicEgeNumberEnd] = useState<number | null>(initial?.ege_number_end ?? null);
     const [parseMode, setParseMode] = useState<'auto' | 'llm' | 'manual'>('auto');
 
     // ── App state ─────────────────────────────────────────────
-    const [step, setStep] = useState<'upload' | 'annotate' | 'review' | 'done'>('upload');
+    const [step, setStep] = useState<'upload' | 'annotate' | 'review' | 'done'>(initial?.tasks?.length ? 'review' : 'upload');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -89,7 +162,19 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const annotateRef = useRef<HTMLTextAreaElement>(null);
 
     // ── Review step state ─────────────────────────────────────
-    const [tasks, setTasks] = useState<ParsedTask[]>([]);
+    const [tasks, setTasks] = useState<ParsedTask[]>(() =>
+        (initial?.tasks ?? []).map((t, i) => ({
+            index: i,
+            ege_number: t.ege_number ?? null,
+            title: t.title ?? '',
+            content_html: t.content_html ?? '',
+            answer_type: t.answer_type ?? 'single_number',
+            correct_answer: t.correct_answer ?? null,
+            images: t.images ?? [],
+            files: t.files ?? [],
+            sub_tasks: t.sub_tasks ?? [],
+        })),
+    );
     const [selectedIdx, setSelectedIdx] = useState(0);
     const [previewMode, setPreviewMode] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
@@ -143,7 +228,12 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                 setNextTaskNum(1);
                 setStep('annotate');
             } else {
-                setTasks(data.tasks.map(t => ({ ...t, files: t.files ?? [] })));
+                setTasks(data.tasks.map(t => ({
+                    ...t,
+                    title: (t as any).title ?? '',
+                    files: t.files ?? [],
+                    sub_tasks: (t as any).sub_tasks ?? [],
+                })));
                 setSelectedIdx(0);
                 setStep('review');
             }
@@ -205,11 +295,13 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                 result.push({
                     index: result.length,
                     ege_number: isNaN(num) ? null : num,
+                    title: '',
                     content_html: textToHtml(body),
                     answer_type: 'single_number',
                     correct_answer: null,
                     images: [],
                     files: [],
+                    sub_tasks: [],
                 });
             }
         }
@@ -236,18 +328,63 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
 
     const addTask = () => {
         setTasks(prev => [...prev, {
-            index: prev.length, ege_number: null, content_html: '',
-            answer_type: 'single_number', correct_answer: null, images: [], files: [],
+            index: prev.length, ege_number: null, title: '', content_html: '',
+            answer_type: 'single_number', correct_answer: null, images: [], files: [], sub_tasks: [],
         }]);
         setSelectedIdx(tasks.length);
     };
 
     const createEmptyTasks = (count: number) => {
         setTasks(Array.from({ length: count }, (_, i) => ({
-            index: i, ege_number: i + 1, content_html: '',
-            answer_type: 'single_number' as const, correct_answer: null, images: [], files: [],
+            index: i, ege_number: i + 1, title: '', content_html: '',
+            answer_type: 'single_number' as const, correct_answer: null, images: [], files: [], sub_tasks: [],
         })));
         setSelectedIdx(0);
+    };
+
+    const updateSubTask = (taskIdx: number, subIdx: number, patch: Partial<ParsedSubTask>) => {
+        setTasks(prev => prev.map((t, i) => {
+            if (i !== taskIdx) return t;
+            return {
+                ...t,
+                sub_tasks: t.sub_tasks.map((s, si) => si === subIdx ? { ...s, ...patch } : s),
+            };
+        }));
+    };
+
+    // When EGE number changes, auto-create/clear sub_tasks for composite (e.g. 19-21)
+    const setEgeNumber = (taskIdx: number, value: string) => {
+        const opt = EGE_NUMBER_OPTIONS.find(o => o.value === value);
+        if (opt?.isComposite && value === '19-21') {
+            setTasks(prev => prev.map((t, i) => {
+                if (i !== taskIdx) return t;
+                // Only create sub_tasks if not already composite
+                const existingSubs = t.sub_tasks || [];
+                const sub_tasks: ParsedSubTask[] = existingSubs.length >= 2
+                    ? existingSubs
+                    : [
+                        { number: 20, content_html: '', answer_type: 'single_number', correct_answer: null },
+                        { number: 21, content_html: '', answer_type: 'single_number', correct_answer: null },
+                    ];
+                return { ...t, ege_number: 19, sub_tasks };
+            }));
+        } else {
+            const num = value ? parseInt(value) : null;
+            updateTask(taskIdx, { ege_number: num, sub_tasks: [] });
+        }
+    };
+
+    const getEgeValue = (t: ParsedTask): string => {
+        if (t.sub_tasks && t.sub_tasks.length >= 2 && t.ege_number === 19) return '19-21';
+        return t.ege_number != null ? String(t.ege_number) : '';
+    };
+
+    const getEgeDisplay = (t: ParsedTask): string | null => {
+        if (t.sub_tasks && t.sub_tasks.length > 0) {
+            const nums = [t.ege_number, ...t.sub_tasks.map(s => s.number)].filter((n): n is number => typeof n === 'number');
+            if (nums.length >= 2) return `${Math.min(...nums)}–${Math.max(...nums)}`;
+        }
+        return t.ege_number != null ? String(t.ege_number) : null;
     };
 
     const uploadImageFile = async (file: File) => {
@@ -331,13 +468,17 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                     topic_title: topicTitle.trim(),
                     category, is_mock: isMock,
                     time_limit_minutes: timeLimitMinutes,
+                    ege_number: topicEgeNumber,
+                    ege_number_end: topicEgeNumberEnd,
                     tasks: tasks.map(t => ({
                         ege_number: t.ege_number,
+                        title: t.title || null,
                         content_html: t.content_html,
                         answer_type: t.answer_type,
                         correct_answer: t.correct_answer ?? null,
                         images: t.images,
                         files: t.files,
+                        sub_tasks: t.sub_tasks ?? [],
                     })),
                 }),
             });
@@ -636,20 +777,44 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     }
 
     // ── Review step ───────────────────────────────────────────
+    const topicEgeValue = topicEgeNumberEnd != null && topicEgeNumber != null
+        ? `${topicEgeNumber}-${topicEgeNumberEnd}`
+        : (topicEgeNumber != null ? String(topicEgeNumber) : '');
+    const setTopicEgeValue = (v: string) => {
+        if (v === '') {
+            setTopicEgeNumber(null);
+            setTopicEgeNumberEnd(null);
+        } else if (v.includes('-')) {
+            const [a, b] = v.split('-').map(n => parseInt(n));
+            setTopicEgeNumber(a);
+            setTopicEgeNumberEnd(b);
+        } else {
+            setTopicEgeNumber(parseInt(v));
+            setTopicEgeNumberEnd(null);
+        }
+    };
+    const needsTopicEgeNumber = category === 'tutorial' || category === 'homework';
+
     return (
         <div className="h-full flex flex-col bg-[#F8F7F4]">
-            {/* Top bar */}
-            <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-4">
+            {/* Top bar — row 1 */}
+            <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3">
                 <button onClick={() => setStep('upload')} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700">
                     <ArrowLeft size={18} />
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center">
                         <FileText size={14} className="text-orange-600" />
                     </div>
-                    <span className="font-bold text-gray-900 text-sm">{topicTitle}</span>
-                    <span className="text-xs text-gray-400 ml-1">{tasks.length} заданий</span>
                 </div>
+                <input
+                    type="text"
+                    value={topicTitle}
+                    onChange={e => setTopicTitle(e.target.value)}
+                    placeholder="Название топика..."
+                    className="font-bold text-gray-900 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20 transition-all w-72"
+                />
+                <span className="text-xs text-gray-400">{tasks.length} заданий</span>
 
                 <div className="ml-auto flex items-center gap-3">
                     {fullText && (
@@ -694,6 +859,55 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                         }
                     </button>
                 </div>
+            </div>
+
+            {/* Top bar — row 2: topic settings */}
+            <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-2.5 flex items-center gap-3 text-xs">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Тип топика</span>
+                <select
+                    value={category}
+                    onChange={e => {
+                        const v = e.target.value as TopicCategory;
+                        setCategory(v);
+                        setIsMock(v === 'mock');
+                        if (v !== 'tutorial' && v !== 'homework') {
+                            setTopicEgeNumber(null);
+                            setTopicEgeNumberEnd(null);
+                        }
+                    }}
+                    className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20"
+                >
+                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+
+                {needsTopicEgeNumber && (
+                    <>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">Номер задания</span>
+                        <select
+                            value={topicEgeValue}
+                            onChange={e => setTopicEgeValue(e.target.value)}
+                            className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20"
+                        >
+                            <option value="">— выберите —</option>
+                            {Array.from({ length: 18 }, (_, i) => (
+                                <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
+                            ))}
+                            <option value="19-21">№19-21 (теория игр)</option>
+                            {[22, 23, 24, 25, 26, 27].map(n => (
+                                <option key={n} value={String(n)}>№{n}</option>
+                            ))}
+                        </select>
+                    </>
+                )}
+
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">Лимит времени</span>
+                <input
+                    type="number"
+                    value={timeLimitMinutes}
+                    onChange={e => setTimeLimitMinutes(parseInt(e.target.value) || 235)}
+                    className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 w-20 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20"
+                />
+                <span className="text-[10px] font-bold text-gray-400">мин</span>
             </div>
 
             {/* Body: full text panel + sidebar + editor */}
@@ -759,8 +973,11 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                         <Trash2 size={12} />
                                     </button>
                                 </div>
-                                {t.ege_number && (
-                                    <div className="text-[11px] opacity-60 mt-0.5">ЕГЭ №{t.ege_number}</div>
+                                {getEgeDisplay(t) && (
+                                    <div className="text-[11px] opacity-60 mt-0.5">ЕГЭ №{getEgeDisplay(t)}</div>
+                                )}
+                                {t.title && (
+                                    <div className="text-[10px] opacity-50 mt-0.5 truncate">{t.title}</div>
                                 )}
                                 {!t.content_html && (
                                     <div className="text-[10px] text-orange-400 mt-0.5">пусто</div>
@@ -789,18 +1006,21 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                     <div className="flex-1 overflow-y-auto p-6">
                         <div className="max-w-3xl mx-auto space-y-5">
                             {/* Meta row */}
-                            <div className="flex items-center gap-4">
-                                <div className="flex-1">
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Номер ЕГЭ</label>
-                                    <input
-                                        type="number"
-                                        value={currentTask.ege_number ?? ''}
-                                        onChange={e => updateTask(selectedIdx, { ege_number: e.target.value ? parseInt(e.target.value) : null })}
-                                        placeholder="1–27"
+                                    <select
+                                        value={getEgeValue(currentTask)}
+                                        onChange={e => setEgeNumber(selectedIdx, e.target.value)}
                                         className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all shadow-sm"
-                                    />
+                                    >
+                                        <option value="">— не указан —</option>
+                                        {EGE_NUMBER_OPTIONS.map(o => (
+                                            <option key={o.value} value={o.value}>{o.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <div className="flex-1">
+                                <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Тип ответа</label>
                                     <select
                                         value={currentTask.answer_type}
@@ -810,16 +1030,28 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                         {ANSWER_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
                                     </select>
                                 </div>
-                                <div className="flex-1">
+                                <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Правильный ответ</label>
                                     <input
                                         type="text"
-                                        value={currentTask.correct_answer != null ? String(currentTask.correct_answer) : ''}
-                                        onChange={e => updateTask(selectedIdx, { correct_answer: e.target.value || null })}
+                                        value={formatAnswerForInput(currentTask.correct_answer)}
+                                        onChange={e => updateTask(selectedIdx, { correct_answer: parseAnswerInput(e.target.value, currentTask.answer_type) })}
                                         placeholder="Оставьте пустым если неизвестен"
                                         className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all shadow-sm"
                                     />
                                 </div>
+                            </div>
+
+                            {/* Тема (раздел) */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Тема / Раздел</label>
+                                <input
+                                    type="text"
+                                    value={currentTask.title || ''}
+                                    onChange={e => updateTask(selectedIdx, { title: e.target.value })}
+                                    placeholder="Напр. «Теория игр», «Анализ программ», «Базы данных»"
+                                    className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all shadow-sm"
+                                />
                             </div>
 
                             {/* Text editor / preview */}
@@ -913,6 +1145,60 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                     <p className="text-xs text-gray-400 italic">Нет файлов — нажмите «Прикрепить файл» для загрузки (БД, таблицы и т.д.)</p>
                                 )}
                             </div>
+
+                            {/* Sub-tasks editor (composite) */}
+                            {currentTask.sub_tasks && currentTask.sub_tasks.length > 0 && (
+                                <div className="border-2 border-amber-200 bg-amber-50/30 rounded-xl p-4 space-y-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Подзадания (составное задание)</span>
+                                    </div>
+                                    {currentTask.sub_tasks.map((sub, sIdx) => (
+                                        <div key={sIdx} className="bg-white border border-amber-200 rounded-xl p-4 space-y-3">
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Номер</label>
+                                                    <input
+                                                        type="number"
+                                                        value={sub.number ?? ''}
+                                                        onChange={e => updateSubTask(selectedIdx, sIdx, { number: e.target.value ? parseInt(e.target.value) : null })}
+                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Тип ответа</label>
+                                                    <select
+                                                        value={sub.answer_type}
+                                                        onChange={e => updateSubTask(selectedIdx, sIdx, { answer_type: e.target.value })}
+                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                                                    >
+                                                        {ANSWER_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Ответ</label>
+                                                    <input
+                                                        type="text"
+                                                        value={formatAnswerForInput(sub.correct_answer)}
+                                                        onChange={e => updateSubTask(selectedIdx, sIdx, { correct_answer: parseAnswerInput(e.target.value, sub.answer_type) })}
+                                                        placeholder="напр. 8 22 23"
+                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Текст подзадания</label>
+                                                <textarea
+                                                    value={sub.content_html}
+                                                    onChange={e => updateSubTask(selectedIdx, sIdx, { content_html: e.target.value })}
+                                                    rows={4}
+                                                    placeholder="Текст подзадания..."
+                                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all resize-y"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (

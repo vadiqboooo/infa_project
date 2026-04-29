@@ -16,6 +16,7 @@ class TopicIn(BaseModel):
     time_limit_minutes: int | None = 60
     is_mock: bool = False
     ege_number: int | None = None
+    ege_number_end: int | None = None
 
 
 class TopicOut(BaseModel):
@@ -27,6 +28,7 @@ class TopicOut(BaseModel):
     time_limit_minutes: int | None = 60
     is_mock: bool = False
     ege_number: int | None = None
+    ege_number_end: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +49,7 @@ class TaskAdminIn(BaseModel):
     solution_steps: list | None = None
     full_solution_code: str | None = None
     order_index: int | None = None
+    sub_tasks: list | None = None
 
 
 class ImportVariantIn(BaseModel):
@@ -75,6 +78,7 @@ class TaskAdminOut(BaseModel):
     solution_steps: list | None = None
     full_solution_code: str | None = None
     order_index: int = 0
+    sub_tasks: list | None = None
 
     model_config = {"from_attributes": True}
 

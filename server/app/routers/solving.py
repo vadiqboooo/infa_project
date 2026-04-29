@@ -163,13 +163,46 @@ async def check_answer(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Compare user answer with correct_answer and update progress."""
+    """Compare user answer with correct_answer and update progress.
+
+    For tasks with sub_tasks, body.answers must be a list:
+      answers[0] = main task answer
+      answers[1..] = sub-task answers (in order)
+    Task is considered solved only when ALL answers are correct.
+    """
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    correct = _answers_equal(task.correct_answer, body)
+    sub_results: list[bool] | None = None
+    has_subs = bool(task.sub_tasks)
+
+    if has_subs:
+        # Multi-answer mode. Expect body.answers list.
+        answers_list = body.answers if body.answers is not None else ([body.val] if body.val is not None else [])
+        # Build expected list: main + each sub
+        expected_list = [task.correct_answer]
+        for sub in (task.sub_tasks or []):
+            expected_list.append(sub.get("correct_answer"))
+
+        sub_results = []
+        for i, exp in enumerate(expected_list):
+            user_v = answers_list[i] if i < len(answers_list) else None
+            if user_v is None:
+                sub_results.append(False)
+                continue
+            given = AnswerIn(val=user_v)
+            sub_results.append(_answers_equal(exp, given))
+
+        correct = all(sub_results) if sub_results else False
+    else:
+        # Legacy single-answer mode
+        if body.val is None and body.answers:
+            given = AnswerIn(val=body.answers[0]) if body.answers[0] is not None else AnswerIn(val=0)
+        else:
+            given = body
+        correct = _answers_equal(task.correct_answer, given)
 
     # Upsert progress
     prog_result = await db.execute(
@@ -202,6 +235,7 @@ async def check_answer(
         correct=correct,
         attempts_count=progress.attempts_count,
         status=progress.status.value,
+        sub_results=sub_results,
     )
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { ShieldCheck, GraduationCap, LogIn, Eye, EyeOff } from "lucide-react";
 import type { TokenResponse } from "../api/types";
@@ -17,6 +17,8 @@ declare global {
 export default function LoginPage() {
     const { login, loggedIn } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const sessionExpired = searchParams.get("expired") === "1";
     const [loading, setLoading] = useState(false);
     const [authMode, setAuthMode] = useState<"telegram" | "password">("telegram");
 
@@ -110,6 +112,13 @@ export default function LoginPage() {
                         <h1>Информатика ЕГЭ</h1>
                         <p>Твой путь к 100 баллам начинается здесь</p>
                     </div>
+
+                    {sessionExpired && (
+                        <div className="mx-4 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-amber-800 text-xs">
+                            <ShieldCheck size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                            <span>Сессия истекла. Пожалуйста, войдите снова.</span>
+                        </div>
+                    )}
 
                     {/* Auth mode tabs */}
                     <div className="flex bg-gray-100 rounded-xl p-1 mx-4 mb-2">

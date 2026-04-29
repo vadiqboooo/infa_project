@@ -37,6 +37,7 @@ export interface TaskNav {
     id: number;
     external_id: string | null;
     ege_number: number | null;
+    ege_number_max: number | null;
     status: ProgressStatus;
     has_solution: boolean;
 }
@@ -54,6 +55,7 @@ export interface TopicNav {
     time_limit_minutes?: number;
     is_mock: boolean;
     ege_number?: number | null;
+    ege_number_end?: number | null;
     analysis_published?: boolean;
     draft_count?: number;
 }
@@ -71,6 +73,13 @@ export interface SolutionStep {
     images?: string[];
 }
 
+export interface SubTask {
+    number: number | null;
+    content_html: string;
+    answer_type: AnswerType;
+    table?: { cols: number; rows: number } | null;
+}
+
 export interface TaskOut {
     id: number;
     topic_id: number;
@@ -85,6 +94,7 @@ export interface TaskOut {
     solution_steps?: SolutionStep[] | null;
     full_solution_code?: string | null;
     status?: ProgressStatus;
+    sub_tasks?: SubTask[] | null;
 }
 
 /* ── Answers ───────────────────────────────────────── */
@@ -94,6 +104,7 @@ export interface CheckResult {
     correct: boolean;
     attempts_count: number;
     status: string;
+    sub_results?: boolean[] | null;
 }
 
 /* ── AI ────────────────────────────────────────────── */
@@ -203,6 +214,15 @@ export interface TopicAdmin {
     time_limit_minutes?: number;
     is_mock: boolean;
     ege_number?: number | null;
+    ege_number_end?: number | null;
+}
+
+export interface AdminSubTask {
+    number: number | null;
+    content_html: string;
+    answer_type: AnswerType;
+    correct_answer: Record<string, unknown> | null;
+    table?: { cols: number; rows: number } | null;
 }
 
 export interface TaskAdmin {
@@ -219,6 +239,7 @@ export interface TaskAdmin {
     solution_steps: SolutionStep[] | null;
     full_solution_code: string | null;
     order_index: number;
+    sub_tasks?: AdminSubTask[] | null;
 }
 
 export interface TopicIn {
@@ -228,6 +249,7 @@ export interface TopicIn {
     time_limit_minutes?: number;
     is_mock: boolean;
     ege_number?: number | null;
+    ege_number_end?: number | null;
 }
 
 export interface ImportVariantIn {
@@ -254,6 +276,7 @@ export interface TaskAdminIn {
     correct_answer: Record<string, unknown> | null;
     solution_steps: SolutionStep[] | null;
     full_solution_code: string | null;
+    sub_tasks?: AdminSubTask[] | null;
 }
 
 /* ── Students ───────────────────────────────────────── */

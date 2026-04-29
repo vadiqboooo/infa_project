@@ -9,29 +9,67 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
+type CategoryValue = 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+
+interface ImportOptions {
+  category: CategoryValue;
+  ege_number: number | null;
+  ege_number_end: number | null;
+}
+
 interface ImportTopicModalProps {
   onClose: () => void;
-  onImportVariant: (title: string, variantId: number) => Promise<void>;
+  onImportVariant: (title: string, variantId: number, options: ImportOptions) => Promise<void>;
 }
+
+const CATEGORIES: { value: CategoryValue; label: string }[] = [
+  { value: 'variants', label: 'Вариант ЕГЭ' },
+  { value: 'tutorial', label: 'Разбор заданий' },
+  { value: 'homework', label: 'Домашняя работа' },
+  { value: 'control', label: 'Контрольная работа' },
+  { value: 'mock', label: 'Пробник' },
+];
 
 export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalProps) {
   const [variantId, setVariantId] = useState('');
   const [topicTitle, setTopicTitle] = useState('');
+  const [category, setCategory] = useState<CategoryValue>('variants');
+  const [egeValue, setEgeValue] = useState<string>(''); // '', '1'..'27', or '19-21'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const needsEgeNumber = category === 'tutorial' || category === 'homework';
 
   const handleImport = async () => {
     if (!variantId) {
       setError('Введите номер варианта');
       return;
     }
+    if (needsEgeNumber && !egeValue) {
+      setError('Выберите номер задания');
+      return;
+    }
+    let ege_number: number | null = null;
+    let ege_number_end: number | null = null;
+    if (needsEgeNumber && egeValue) {
+      if (egeValue.includes('-')) {
+        const [a, b] = egeValue.split('-').map(n => parseInt(n));
+        ege_number = a;
+        ege_number_end = b;
+      } else {
+        ege_number = parseInt(egeValue);
+      }
+    }
     setLoading(true);
     setError(null);
     try {
-      await onImportVariant(topicTitle, parseInt(variantId));
-      setSuccess(true);
-      setTimeout(() => onClose(), 1500);
+      await onImportVariant(topicTitle, parseInt(variantId), {
+        category,
+        ege_number,
+        ege_number_end,
+      });
+      // Modal will be closed by parent after navigation
     } catch (err: any) {
       setError(err.message || 'Ошибка импорта');
     } finally {
@@ -76,8 +114,8 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
                 <AlertCircle size={18} className="text-blue-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  Просто введите ID варианта с kompege.ru. Система автоматически скачает все задачи, 
-                  ответы и файлы, а также создаст экзамен.
+                  Введите ID варианта с kompege.ru. Откроется редактор где можно отредактировать задания
+                  (тему, номер, подзадания) перед сохранением.
                 </p>
               </div>
 
@@ -104,6 +142,43 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62] transition-all"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5 ml-1">Тип топика</label>
+                  <select
+                    value={category}
+                    onChange={(e) => {
+                      const v = e.target.value as CategoryValue;
+                      setCategory(v);
+                      if (v !== 'tutorial' && v !== 'homework') setEgeValue('');
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62] transition-all"
+                  >
+                    {CATEGORIES.map(c => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {needsEgeNumber && (
+                  <div className="animate-in slide-in-from-top-2 duration-200">
+                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5 ml-1">Номер задания</label>
+                    <select
+                      value={egeValue}
+                      onChange={(e) => setEgeValue(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62] transition-all"
+                    >
+                      <option value="">— выберите —</option>
+                      {Array.from({ length: 18 }, (_, i) => (
+                        <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
+                      ))}
+                      <option value="19-21">№19-21 (теория игр)</option>
+                      {[22, 23, 24, 25, 26, 27].map(n => (
+                        <option key={n} value={String(n)}>№{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -141,7 +216,7 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
               ) : (
                 <>
                   <Upload size={16} />
-                  Импортировать
+                  Открыть в редакторе
                 </>
               )}
             </button>
