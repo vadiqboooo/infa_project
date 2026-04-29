@@ -30,6 +30,7 @@ export default function ExamPage() {
     const [taskIndex, setTaskIndex] = useState(0);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [currentAnswer, setCurrentAnswer] = useState<AnswerVal>("");
+    const [taskScores, setTaskScores] = useState<Record<number, { is_correct: boolean; points: number }>>({});
     const [taskAccumulatedMs, setTaskAccumulatedMs] = useState<Record<number, number>>({});
     const taskSessionStartRef = useRef<number | null>(null);  // when current task view started
     const [examEndTime, setExamEndTime] = useState<number | null>(null); // absolute ms when exam ends
@@ -59,6 +60,7 @@ export default function ExamPage() {
     const [submitLoading, setSubmitLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
 
+    const isMock = String(currentTopic?.category) === "mock";
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
@@ -144,6 +146,21 @@ export default function ExamPage() {
         return saved !== undefined && saved !== "" && JSON.stringify(saved) !== JSON.stringify([]);
     }, [task, examAnswers]);
 
+    const currentPrimaryScore = useMemo(
+        () => Object.values(taskScores).reduce((sum, s) => sum + s.points, 0),
+        [taskScores]
+    );
+
+    // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
+    useEffect(() => {
+        if (!examInfo || isMock) return;
+        if (!examInfo.active_attempt && !startExamMutation.isPending) {
+            startExamMutation.mutate(undefined, {
+                onSuccess: () => queryClient.invalidateQueries({ queryKey: ["navigation"] }),
+            });
+        }
+    }, [examInfo?.id, isMock]);
+
     const handleSaveAnswer = () => {
         if (task) {
             // Freeze task time — add current session, stop counting
@@ -153,14 +170,26 @@ export default function ExamPage() {
             taskSessionStartRef.current = null; // frozen
             setExamAnswers(prev => ({ ...prev, [task.id]: currentAnswer }));
 
-            // Persist draft to backend
+            // Persist draft to backend and get live check result
             const attemptId = examInfo?.active_attempt?.id;
+            const savedTaskId = task.id;
+            const savedAnswer = currentAnswer;
             if (attemptId) {
                 authFetch(`/api/exams/attempt/${attemptId}/save-answer`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ task_id: task.id, answer: { val: currentAnswer } }),
-                }).catch(() => {}); // non-blocking; 401 triggers global redirect
+                    body: JSON.stringify({ task_id: savedTaskId, answer: { val: savedAnswer } }),
+                })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data && data.is_correct !== undefined) {
+                        setTaskScores(prev => ({
+                            ...prev,
+                            [savedTaskId]: { is_correct: data.is_correct, points: data.points },
+                        }));
+                    }
+                })
+                .catch(() => {});
             }
         }
     };
@@ -197,21 +226,30 @@ export default function ExamPage() {
                 setCodeSolutions(restoredCodes);
             }
         }
+        const scoredAnswers = examInfo.active_attempt.scored_answers;
+        if (scoredAnswers && Object.keys(scoredAnswers).length > 0) {
+            const restoredScores: Record<number, { is_correct: boolean; points: number }> = {};
+            for (const [taskId, score] of Object.entries(scoredAnswers)) {
+                restoredScores[Number(taskId)] = score;
+            }
+            setTaskScores(restoredScores);
+        }
     }, [examInfo?.active_attempt]);
 
-    // Set exam end time once when active attempt loads
+    // Set exam end time once when active attempt loads (mock only)
     useEffect(() => {
+        if (!isMock) return;
         if (examInfo?.active_attempt && examEndTime === null) {
             const startedAt = new Date(examInfo.active_attempt.started_at).getTime();
             const endTime = startedAt + examInfo.time_limit_minutes * 60 * 1000;
             setExamEndTime(endTime);
             setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
         }
-    }, [examInfo, examEndTime]);
+    }, [examInfo, examEndTime, isMock]);
 
-    // Interval ticker — re-runs when examEndTime becomes available
+    // Interval ticker — re-runs when examEndTime becomes available (mock only)
     useEffect(() => {
-        if (examEndTime === null || examResult) return;
+        if (!isMock || examEndTime === null || examResult) return;
         const tick = () => {
             const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
@@ -239,10 +277,12 @@ export default function ExamPage() {
         if (!examInfo) return;
         try {
             const resp = await startExamMutation.mutateAsync();
-            const startedAt = new Date(resp.started_at).getTime();
-            const endTime = startedAt + resp.time_limit_minutes * 60 * 1000;
-            setExamEndTime(endTime);
-            setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
+            if (isMock) {
+                const startedAt = new Date(resp.started_at).getTime();
+                const endTime = startedAt + resp.time_limit_minutes * 60 * 1000;
+                setExamEndTime(endTime);
+                setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
+            }
             setExamAnswers({});
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (err) {
@@ -351,7 +391,6 @@ export default function ExamPage() {
     }
 
     // Result Screen — mock category
-    const isMock = String(currentTopic?.category) === "mock";
     if (isMock && (examResult || (examInfo.finished_attempt && !examInfo.active_attempt))) {
         const result = examResult || examInfo.finished_attempt;
         const taskResults: TaskResult[] = result.task_results || result.results?.task_results || [];
@@ -669,8 +708,8 @@ export default function ExamPage() {
         );
     }
 
-    // Result Screen
-    if (examResult || (examInfo.finished_attempt && !examInfo.active_attempt)) {
+    // Result Screen — for mock: show after submit/on reload; for non-mock: only when just submitted
+    if (examResult || (isMock && examInfo.finished_attempt && !examInfo.active_attempt)) {
         const result = examResult || examInfo.finished_attempt;
         const taskResults: TaskResult[] = result.task_results || result.results?.task_results || [];
 
@@ -781,6 +820,15 @@ export default function ExamPage() {
                         <div className="min-w-0 flex-1 flex items-center gap-3">
                             <span className="text-base font-bold text-gray-900 truncate">{currentTopic.title}</span>
                         </div>
+
+                        {isVariant && (
+                            <button
+                                onClick={() => { setExamResult(null); startExamMutation.mutate(undefined); }}
+                                className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            >
+                                Продолжить решение
+                            </button>
+                        )}
 
                         <div className="hidden sm:flex items-center gap-5 shrink-0">
                             <div className="text-center">
@@ -1080,8 +1128,17 @@ export default function ExamPage() {
         );
     }
 
-    // Pre-start Screen
+    // Pre-start Screen — only for mock exams; regular variants auto-start
     if (!examInfo.active_attempt) {
+        if (!isMock) {
+            // Auto-starting via useEffect — show spinner
+            return (
+                <div className="flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
+                    <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-gray-500 font-medium">Загрузка варианта...</p>
+                </div>
+            );
+        }
         return (
             <div className="min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
                 <div className="bg-white border border-gray-200 rounded-[32px] p-10 max-w-lg w-full text-center shadow-xl shadow-gray-200/50">
@@ -1089,12 +1146,8 @@ export default function ExamPage() {
                         <Clock size={32} />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">{currentTopic.title}</h1>
-                    <p className="text-gray-500 text-sm mb-8">
-                        {isMock
-                            ? "Пробный экзамен — результаты будут проверены преподавателем"
-                            : "Контрольный вариант для проверки знаний"}
-                    </p>
-                    
+                    <p className="text-gray-500 text-sm mb-8">Пробный экзамен — результаты будут проверены преподавателем</p>
+
                     <div className="grid grid-cols-2 gap-4 mb-10">
                         <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
                             <div className="text-lg font-bold text-gray-900">{examInfo.task_count}</div>
@@ -1121,14 +1174,14 @@ export default function ExamPage() {
                     </div>
 
                     <div className="flex flex-col gap-3">
-                        <button 
+                        <button
                             onClick={handleStart}
                             disabled={startExamMutation.isPending}
                             className="w-full py-3.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50"
                         >
                             {startExamMutation.isPending ? "Подготовка..." : "Начать вариант"}
                         </button>
-                        <button 
+                        <button
                             onClick={() => navigate('/exams')}
                             className="w-full py-3.5 text-gray-500 hover:text-gray-700 font-bold transition-all"
                         >
@@ -1146,26 +1199,36 @@ export default function ExamPage() {
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
                 <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                    <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
-                        <Clock size={16} />
-                        <span className="font-mono text-base md:text-lg font-bold">
-                            {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
-                        </span>
-                    </div>
+                    {isMock ? (
+                        <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
+                            <Clock size={16} />
+                            <span className="font-mono text-base md:text-lg font-bold">
+                                {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+                            <span className="text-xl font-black text-[#3F8C62] leading-none">{currentPrimaryScore}</span>
+                            <span className="text-sm text-gray-400 font-bold">/29</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">баллов</span>
+                        </div>
+                    )}
                     <div className="w-px h-5 bg-gray-200 mx-1 md:mx-2 shrink-0" />
                     <h1 className="font-bold text-gray-900 truncate text-sm md:text-base">
                         {currentTopic.title}
                     </h1>
                 </div>
 
-                <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 md:px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50 flex items-center gap-2 shrink-0"
-                >
-                    <Send size={14} />
-                    {isSubmitting ? "..." : "Завершить"}
-                </button>
+                {isMock && (
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 md:px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50 flex items-center gap-2 shrink-0"
+                    >
+                        <Send size={14} />
+                        {isSubmitting ? "..." : "Завершить"}
+                    </button>
+                )}
             </div>
 
             {/* Solution drawer panel */}
@@ -1282,19 +1345,26 @@ export default function ExamPage() {
                         style={{ scrollbarWidth: 'none' }}
                     >
                         {tasks.map((t, idx) => {
+                            const score = taskScores[t.id];
                             const hasAnswer = examAnswers[t.id] !== undefined && examAnswers[t.id] !== "";
+                            const isActive = idx === taskIndex;
+                            let btnClass = 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:text-gray-600';
+                            if (isActive) {
+                                btnClass = 'bg-[#3F8C62] border-[#3F8C62] text-white shadow-md';
+                            } else if (score) {
+                                btnClass = score.is_correct
+                                    ? 'bg-emerald-50 border-emerald-300 text-[#3F8C62]'
+                                    : score.points > 0
+                                        ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                        : 'bg-red-50 border-red-200 text-red-500';
+                            } else if (hasAnswer) {
+                                btnClass = 'bg-gray-100 border-gray-200 text-gray-600';
+                            }
                             return (
                                 <button
                                     key={t.id}
                                     onClick={() => setTaskIndex(idx)}
-                                    className={clsx(
-                                        'w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border-2',
-                                        idx === taskIndex
-                                            ? 'bg-[#3F8C62] border-[#3F8C62] text-white shadow-md'
-                                            : hasAnswer
-                                                ? 'bg-emerald-50 border-emerald-200 text-[#3F8C62]'
-                                                : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:text-gray-600'
-                                    )}
+                                    className={clsx('w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border-2', btnClass)}
                                 >
                                     {idx + 1}
                                 </button>
@@ -1407,6 +1477,26 @@ export default function ExamPage() {
                                                 </>
                                             )}
                                         </button>
+                                    )}
+
+                                    {/* Live answer feedback for non-mock */}
+                                    {!isMock && task && taskScores[task.id] !== undefined && !isAnswerChanged && (
+                                        <div className={clsx(
+                                            "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold",
+                                            taskScores[task.id].is_correct
+                                                ? "bg-emerald-50 text-[#3F8C62]"
+                                                : taskScores[task.id].points > 0
+                                                    ? "bg-amber-50 text-amber-700"
+                                                    : "bg-red-50 text-red-600"
+                                        )}>
+                                            {taskScores[task.id].is_correct ? (
+                                                <><CheckCircle2 size={14} /> Верно</>
+                                            ) : taskScores[task.id].points > 0 ? (
+                                                <><AlertCircle size={14} /> Частично ({taskScores[task.id].points}/2)</>
+                                            ) : (
+                                                <><XCircle size={14} /> Неверно</>
+                                            )}
+                                        </div>
                                     )}
 
                                     <div className="flex gap-2 pt-2">

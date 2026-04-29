@@ -106,6 +106,7 @@ async def get_exam_by_topic(
             "started_at": attempt.started_at,
             "draft_answers": (attempt.results_json or {}).get("draft_answers", {}),
             "draft_codes": (attempt.results_json or {}).get("draft_codes", {}),
+            "scored_answers": (attempt.results_json or {}).get("scored_answers", {}),
         } if attempt else None,
         "finished_attempt": {
             "id": finished.id,
@@ -168,7 +169,7 @@ async def start_exam(
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
 
-    # Check for already-active attempt
+    # Return existing active attempt (idempotent)
     active = await db.execute(
         select(ExamAttempt).where(
             ExamAttempt.user_id == user.id,
@@ -176,19 +177,13 @@ async def start_exam(
             ExamAttempt.finished_at.is_(None),
         )
     )
-    if active.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Exam already in progress")
-
-    # Check for finished attempt - prevent retaking
-    finished = await db.execute(
-        select(ExamAttempt).where(
-            ExamAttempt.user_id == user.id,
-            ExamAttempt.exam_id == exam_id,
-            ExamAttempt.finished_at.is_not(None),
+    existing = active.scalar_one_or_none()
+    if existing is not None:
+        return ExamStartResponse(
+            attempt_id=existing.id,
+            started_at=existing.started_at,
+            time_limit_minutes=exam.time_limit_minutes,
         )
-    )
-    if finished.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Exam already completed")
 
     attempt = ExamAttempt(user_id=user.id, exam_id=exam_id)
     db.add(attempt)
@@ -209,7 +204,7 @@ async def save_draft_answer(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Save a draft answer (and optionally code) for a task during an active exam."""
+    """Save a draft answer (and optionally code) for a task, check it, and return live score."""
     attempt_result = await db.execute(
         select(ExamAttempt).where(
             ExamAttempt.id == attempt_id,
@@ -228,19 +223,47 @@ async def save_draft_answer(
     results = dict(attempt.results_json or {})
     drafts = results.get("draft_answers", {})
     codes = results.get("draft_codes", {})
+    scored = results.get("scored_answers", {})
 
     if answer is not None:
         drafts[task_id] = answer
     if code is not None:
         codes[task_id] = code
 
+    # Check answer immediately if provided
+    is_correct: bool | None = None
+    points: int | None = None
+    if answer is not None:
+        val = answer.get("val") if isinstance(answer, dict) else None
+        if val not in (None, "", [], [[]]):
+            task_res = await db.execute(select(Task).where(Task.id == int(task_id)))
+            task = task_res.scalar_one_or_none()
+            if task and task.correct_answer and task.correct_answer.get("val") is not None:
+                from app.routers.solving import _answers_equal, _partial_score
+                from app.schemas.task import AnswerIn
+                answer_obj = AnswerIn(val=val)
+                if task.ege_number and task.ege_number >= 26:
+                    pts = _partial_score(task.correct_answer, answer_obj, task.ege_number)
+                    is_correct = pts == 2
+                    points = pts
+                else:
+                    is_correct = _answers_equal(task.correct_answer, answer_obj)
+                    points = 1 if is_correct else 0
+                scored[task_id] = {"is_correct": is_correct, "points": points}
+
     results["draft_answers"] = drafts
     results["draft_codes"] = codes
+    results["scored_answers"] = scored
     attempt.results_json = results
     flag_modified(attempt, "results_json")
     await db.commit()
 
-    return {"ok": True}
+    primary_score = sum(s["points"] for s in scored.values())
+    response: dict = {"ok": True, "primary_score": primary_score}
+    if is_correct is not None:
+        response["is_correct"] = is_correct
+        response["points"] = points
+    return response
 
 
 @router.post("/{exam_id}/submit", response_model=ExamResult)

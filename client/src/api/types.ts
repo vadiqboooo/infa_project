@@ -123,6 +123,7 @@ export interface ExamInfo {
         started_at: string;
         draft_answers?: Record<string, { val: AnswerVal }>;
         draft_codes?: Record<string, string>;
+        scored_answers?: Record<string, { is_correct: boolean; points: number }>;
     } | null;
     finished_attempt: {
         id: number;
