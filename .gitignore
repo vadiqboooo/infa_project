@@ -1,0 +1,44 @@
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Environment / secrets ───────────────────────────
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env.local
+
+# ── Uploads (user-generated content) ────────────────
+server/uploads/
+
+# ── IDE / OS ────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Logs ────────────────────────────────────────────
+*.log
+logs/
+
+# ── Node ────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.cache/

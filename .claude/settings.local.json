@@ -21,7 +21,8 @@
       "Bash(where claude *)",
       "PowerShell(Get-Command *)",
       "PowerShell(cmd /c 'claude mcp add magic --scope user --env API_KEY=\"19932e5b9dd0755bb6603ffb3d389ab72c025228569fa502c7db3b27485a71b6\" -- npx -y @21st-dev/magic@latest')",
-      "PowerShell(cmd /c \"claude mcp list\")"
+      "PowerShell(cmd /c \"claude mcp list\")",
+      "Bash(git pull *)"
     ]
   }
 }
