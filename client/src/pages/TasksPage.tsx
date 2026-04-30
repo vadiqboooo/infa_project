@@ -36,6 +36,8 @@ export default function TasksPage() {
     });
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
     const [subResults, setSubResults] = useState<boolean[] | null>(null);
+    const [partialCorrect, setPartialCorrect] = useState<boolean[] | boolean[][] | null>(null);
+    const [expectedAnswer, setExpectedAnswer] = useState<any>(null);
     const [showChat, setShowChat] = useState(true);
     const [mentorOpen, setMentorOpen] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
@@ -56,6 +58,21 @@ export default function TasksPage() {
     const currentTopic = useMemo(() => {
         return allTopics?.find(t => String(t.id) === id);
     }, [allTopics, id]);
+
+    // Sibling topic for tutorial/homework toggle (same ege_number, opposite category)
+    const tutorialTopic = useMemo(() => {
+        if (!allTopics || !currentTopic || currentTopic.ege_number == null) return null;
+        if (currentTopic.category === 'tutorial') return currentTopic;
+        return allTopics.find(t => t.category === 'tutorial' && t.ege_number === currentTopic.ege_number) ?? null;
+    }, [allTopics, currentTopic]);
+
+    const homeworkTopic = useMemo(() => {
+        if (!allTopics || !currentTopic || currentTopic.ege_number == null) return null;
+        if (currentTopic.category === 'homework') return currentTopic;
+        return allTopics.find(t => t.category === 'homework' && t.ege_number === currentTopic.ege_number) ?? null;
+    }, [allTopics, currentTopic]);
+
+    const showModeTabs = (categoryFilter === 'tutorial' || categoryFilter === 'homework') && (tutorialTopic != null || homeworkTopic != null);
 
     useEffect(() => {
         if (allTopics && !currentTopic && id) {
@@ -87,6 +104,8 @@ export default function TasksPage() {
     useEffect(() => {
         setCheckResult(null);
         setSubResults(null);
+        setPartialCorrect(null);
+        setExpectedAnswer(null);
     }, [taskIndex, id]);
 
     const answer = savedAnswers[currentTaskNav?.id ?? 0] ?? 0;
@@ -107,6 +126,8 @@ export default function TasksPage() {
                 res = await check.mutateAsync({ val: answer });
                 setSubResults(null);
             }
+            setPartialCorrect(res.partial_correct ?? null);
+            setExpectedAnswer(res.expected_answer ?? null);
             setCheckResult(res.correct ? 'correct' : 'wrong');
             if (res.correct) {
                 confetti({
@@ -212,6 +233,39 @@ export default function TasksPage() {
                     </button>
                     <div className="w-px h-5 bg-gray-200 shrink-0" />
                     <h1 className="font-bold text-gray-900 truncate text-sm md:text-base">{currentTopic.title}</h1>
+
+                    {showModeTabs && (
+                        <div className="ml-3 hidden md:flex items-center gap-1 p-1 bg-gray-100 rounded-xl shrink-0">
+                            <button
+                                disabled={!tutorialTopic}
+                                onClick={() => tutorialTopic && navigate(`/tasks/${tutorialTopic.id}`)}
+                                className={clsx(
+                                    'px-3 py-1 rounded-lg text-xs font-bold transition-colors',
+                                    categoryFilter === 'tutorial'
+                                        ? 'bg-white text-[#3F8C62] shadow-sm'
+                                        : tutorialTopic
+                                            ? 'text-gray-500 hover:text-gray-800'
+                                            : 'text-gray-300 cursor-not-allowed',
+                                )}
+                            >
+                                Разбор
+                            </button>
+                            <button
+                                disabled={!homeworkTopic}
+                                onClick={() => homeworkTopic && navigate(`/homework/${homeworkTopic.id}`)}
+                                className={clsx(
+                                    'px-3 py-1 rounded-lg text-xs font-bold transition-colors',
+                                    categoryFilter === 'homework'
+                                        ? 'bg-white text-[#3F8C62] shadow-sm'
+                                        : homeworkTopic
+                                            ? 'text-gray-500 hover:text-gray-800'
+                                            : 'text-gray-300 cursor-not-allowed',
+                                )}
+                            >
+                                Домашка
+                            </button>
+                        </div>
+                    )}
 
                     <div className="ml-auto flex items-center gap-2 md:gap-3 shrink-0">
                         {isVariant && examInfo?.active_attempt ? (
@@ -349,9 +403,12 @@ export default function TasksPage() {
                                                                 } else {
                                                                     setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
                                                                     setCheckResult(null);
+                                                                    setPartialCorrect(null);
+                                                                    setExpectedAnswer(null);
                                                                 }
                                                             }}
                                                             disabled={check.isPending || viewingFinishedExam}
+                                                            feedback={partialCorrect}
                                                         />
                                                         {subResults && subResults[0] !== undefined && (
                                                             <div className={clsx(

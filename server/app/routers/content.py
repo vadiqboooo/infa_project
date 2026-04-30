@@ -1,6 +1,6 @@
 """Content router — navigation tree, task details, admin sync."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,20 @@ from app.schemas.navigation import TaskNav, TopicNav
 from app.schemas.task import TaskOut, TaskSyncIn, TaskSyncResult
 
 router = APIRouter(tags=["content"])
+
+
+@router.get("/topics/{topic_id}/image")
+async def get_topic_image(topic_id: int, db: AsyncSession = Depends(get_db)):
+    """Serve raw bytes of topic card image. Public — needed for <img src>."""
+    result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    topic = result.scalar_one_or_none()
+    if topic is None or topic.image_data is None:
+        raise HTTPException(status_code=404, detail="No image")
+    return Response(
+        content=topic.image_data,
+        media_type=topic.image_mime or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/navigation", response_model=list[TopicNav])
@@ -54,16 +68,33 @@ async def get_navigation(
         .order_by(ExamAttempt.finished_at.desc())
     )
 
+    # EGE primary→test conversion table (0–29 → 0–100)
+    EGE_SCORE_MAP = [0, 7, 14, 20, 27, 34, 40, 43, 46, 48, 51, 54, 56, 59, 62, 64,
+                     67, 70, 72, 75, 78, 80, 83, 85, 88, 90, 93, 95, 98, 100]
+
+    def _primary_to_test(primary: int) -> float:
+        return float(EGE_SCORE_MAP[max(0, min(29, primary))])
+
     # Map topic_id -> latest attempt data
     latest_attempts: dict[int, dict] = {}
     # Map topic_id -> draft answers count from active (unfinished) attempts
     active_draft_counts: dict[int, int] = {}
+    # Map topic_id -> {primary, score} from active attempt's scored answers
+    active_scores: dict[int, dict] = {}
     for attempt, exam in attempts_query.all():
         if attempt.finished_at is None:
-            # Active attempt — count draft answers
-            drafts = (attempt.results_json or {}).get("draft_answers", {})
+            # Active attempt — count draft answers and compute current score
+            results = attempt.results_json or {}
+            drafts = results.get("draft_answers", {})
             non_empty = sum(1 for v in drafts.values() if v and v.get("val") not in (None, "", []))
             active_draft_counts[exam.topic_id] = non_empty
+
+            scored = results.get("scored_answers", {})
+            current_primary = sum(int(s.get("points") or 0) for s in scored.values()) if scored else 0
+            active_scores[exam.topic_id] = {
+                "primary": current_primary,
+                "score": _primary_to_test(current_primary),
+            }
         elif exam.topic_id not in latest_attempts:
             latest_attempts[exam.topic_id] = {
                 "score": attempt.score,
@@ -113,7 +144,8 @@ async def get_navigation(
         
         exam = all_exams.get(topic.id)
         latest_attempt = latest_attempts.get(topic.id, {})
-        
+        active = active_scores.get(topic.id, {})
+
         attempt_id = latest_attempt.get("attempt_id")
         nav.append(TopicNav(
             id=topic.id,
@@ -124,6 +156,8 @@ async def get_navigation(
             exam_id=exam.id if exam else None,
             latest_score=latest_attempt.get("score"),
             latest_primary_score=latest_attempt.get("primary_score"),
+            current_score=active.get("score"),
+            current_primary_score=active.get("primary"),
             max_score=len(exam.tasks) if exam and exam.tasks else len(topic.tasks),
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
@@ -131,6 +165,9 @@ async def get_navigation(
             ege_number_end=topic.ege_number_end,
             analysis_published=attempt_id in published_ids if attempt_id else False,
             draft_count=active_draft_counts.get(topic.id, 0),
+            has_image=topic.image_data is not None,
+            image_position=topic.image_position,
+            image_size=topic.image_size,
         ))
     return nav
 

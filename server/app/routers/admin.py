@@ -92,6 +92,9 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             is_mock=t.is_mock,
             ege_number=t.ege_number,
             ege_number_end=t.ege_number_end,
+            has_image=t.image_data is not None,
+            image_position=t.image_position,
+            image_size=t.image_size,
         )
         for t in topics
     ]
@@ -106,6 +109,8 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         is_mock=body.is_mock,
         ege_number=body.ege_number,
         ege_number_end=body.ege_number_end,
+        image_position=body.image_position,
+        image_size=body.image_size,
     )
     db.add(topic)
     await db.flush()
@@ -126,6 +131,9 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         is_mock=topic.is_mock,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
+        has_image=False,
+        image_position=topic.image_position,
+        image_size=topic.image_size,
     )
 
 
@@ -142,6 +150,8 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.is_mock = body.is_mock
     topic.ege_number = body.ege_number
     topic.ege_number_end = body.ege_number_end
+    topic.image_position = body.image_position
+    topic.image_size = body.image_size
 
     # Update exam
     exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
@@ -169,6 +179,9 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         is_mock=topic.is_mock,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
+        has_image=topic.image_data is not None,
+        image_position=topic.image_position,
+        image_size=topic.image_size,
     )
 
 
@@ -195,6 +208,75 @@ async def delete_topic(topic_id: int, db: AsyncSession = Depends(get_db)):
         )
 
     await db.delete(topic)
+    await db.commit()
+
+
+# ── Topic image (stored in DB) ────────────────────────────────
+
+ALLOWED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
+MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
+
+
+@router.post("/topics/{topic_id}/image", response_model=TopicOut)
+async def upload_topic_image(
+    topic_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    topic = result.scalar_one_or_none()
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    mime = (file.content_type or "").lower()
+    if mime not in ALLOWED_IMAGE_MIMES:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {mime}")
+
+    data = await file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail="Image too large (max 4 MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    topic.image_data = data
+    topic.image_mime = mime
+    if topic.image_position is None:
+        topic.image_position = "cover"
+    if topic.image_size is None:
+        topic.image_size = 120
+    await db.commit()
+    await db.refresh(topic)
+
+    count_result = await db.execute(
+        select(func.count(Task.id)).where(Task.topic_id == topic_id)
+    )
+    task_count = count_result.scalar() or 0
+    exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    exam = exam_res.scalar_one_or_none()
+    return TopicOut(
+        id=topic.id,
+        title=topic.title,
+        order_index=topic.order_index,
+        category=topic.category,
+        task_count=task_count,
+        time_limit_minutes=exam.time_limit_minutes if exam else 60,
+        is_mock=topic.is_mock,
+        ege_number=topic.ege_number,
+        ege_number_end=topic.ege_number_end,
+        has_image=True,
+        image_position=topic.image_position,
+        image_size=topic.image_size,
+    )
+
+
+@router.delete("/topics/{topic_id}/image", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_topic_image(topic_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    topic = result.scalar_one_or_none()
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    topic.image_data = None
+    topic.image_mime = None
     await db.commit()
 
 

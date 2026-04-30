@@ -8,6 +8,10 @@ interface Props {
     onChange: (val: AnswerVal) => void;
     disabled?: boolean;
     egeNumber?: number;
+    // Per-element correctness feedback (for tasks 26/27 after check)
+    // pair (26): boolean[] of length 2
+    // table (27): boolean[][] shape 2x2
+    feedback?: boolean[] | boolean[][] | null;
 }
 
 const parseInputValue = (s: string): number | string => {
@@ -65,8 +69,13 @@ const stringifyTable = (arr: (number | string)[][]): string => {
     return trimmed.map(row => row.join(' ')).join('\n');
 };
 
-export default function AnswerInput({ type, value, onChange, disabled, egeNumber }: Props) {
+export default function AnswerInput({ type, value, onChange, disabled, egeNumber, feedback }: Props) {
     const formatValue = (v: any) => (v === null || v === undefined ? "" : String(v));
+
+    // Tailwind classes for per-cell feedback color
+    const cellCls = (ok: boolean | undefined) =>
+        ok === true ? "!border-emerald-500 !bg-emerald-50 !text-emerald-700" :
+        ok === false ? "!border-red-400 !bg-red-50 !text-red-700" : "";
 
     if (type === "text") {
         return (
@@ -97,12 +106,13 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
 
     if (type === "pair") {
         const val = Array.isArray(value) && !Array.isArray(value[0]) ? (value as (number | string)[]) : ["", ""];
+        const fb = Array.isArray(feedback) && typeof feedback[0] === 'boolean' ? feedback as boolean[] : null;
         return (
             <div className="pair-inputs">
                 <input
                     type="text"
                     inputMode="decimal"
-                    className="input"
+                    className={`input ${cellCls(fb?.[0])}`}
                     value={formatValue(val[0])}
                     onChange={(e) => onChange([parseInputValue(e.target.value), val[1]])}
                     disabled={disabled}
@@ -112,7 +122,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                 <input
                     type="text"
                     inputMode="decimal"
-                    className="input"
+                    className={`input ${cellCls(fb?.[1])}`}
                     value={formatValue(val[1])}
                     onChange={(e) => onChange([val[0], parseInputValue(e.target.value)])}
                     disabled={disabled}
@@ -124,7 +134,8 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
 
     if (type === "table") {
         const tableData = useMemo(() => parseTableString(value, egeNumber), [value, egeNumber]);
-        
+        const fb = Array.isArray(feedback) && Array.isArray(feedback[0]) ? feedback as boolean[][] : null;
+
         if (egeNumber === 27) {
             return (
                 <div className="task-27-wrapper">
@@ -135,7 +146,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    className="input table-input"
+                                    className={`input table-input ${cellCls(fb?.[rIdx]?.[0])}`}
                                     value={formatValue(row[0])}
                                     onChange={(e) => {
                                         const newVal = tableData.map((r, ri) =>
@@ -150,7 +161,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    className="input table-input"
+                                    className={`input table-input ${cellCls(fb?.[rIdx]?.[1])}`}
                                     value={formatValue(row[1])}
                                     onChange={(e) => {
                                         const newVal = tableData.map((r, ri) =>
@@ -175,7 +186,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                         <input
                             type="text"
                             inputMode="decimal"
-                            className="input table-input"
+                            className={`input table-input ${cellCls(fb?.[rIdx]?.[0])}`}
                             value={formatValue(row[0])}
                             onChange={(e) => {
                                 const newVal = tableData.map((r, ri) =>
@@ -190,7 +201,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                         <input
                             type="text"
                             inputMode="decimal"
-                            className="input table-input"
+                            className={`input table-input ${cellCls(fb?.[rIdx]?.[1])}`}
                             value={formatValue(row[1])}
                             onChange={(e) => {
                                 const newVal = tableData.map((r, ri) =>

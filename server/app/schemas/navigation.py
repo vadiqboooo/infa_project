@@ -23,6 +23,8 @@ class TopicNav(BaseModel):
     exam_id: int | None = None
     latest_score: float | None = None
     latest_primary_score: int | None = None
+    current_score: float | None = None  # 100-pt score for in-progress attempt
+    current_primary_score: int | None = None  # primary score for in-progress attempt
     max_score: int | None = None
     time_limit_minutes: int | None = None
     is_mock: bool = False
@@ -30,5 +32,8 @@ class TopicNav(BaseModel):
     ege_number_end: int | None = None
     analysis_published: bool = False
     draft_count: int = 0
+    has_image: bool = False
+    image_position: str | None = None
+    image_size: int | None = None
 
     model_config = {"from_attributes": True}

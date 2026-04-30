@@ -61,6 +61,8 @@ export default function ExamPage() {
     const [submitted, setSubmitted] = useState(false);
 
     const isMock = String(currentTopic?.category) === "mock";
+    const isControl = String(currentTopic?.category) === "control";
+    const showTimer = isMock || isControl;
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
@@ -150,6 +152,13 @@ export default function ExamPage() {
         () => Object.values(taskScores).reduce((sum, s) => sum + s.points, 0),
         [taskScores]
     );
+    // EGE primary→test conversion (0–29 → 0–100)
+    const currentTestScore = useMemo(() => {
+        const map = [0, 7, 14, 20, 27, 34, 40, 43, 46, 48, 51, 54, 56, 59, 62, 64,
+                     67, 70, 72, 75, 78, 80, 83, 85, 88, 90, 93, 95, 98, 100];
+        const p = Math.max(0, Math.min(29, currentPrimaryScore));
+        return map[p];
+    }, [currentPrimaryScore]);
 
     // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
     useEffect(() => {
@@ -236,30 +245,32 @@ export default function ExamPage() {
         }
     }, [examInfo?.active_attempt]);
 
-    // Set exam end time once when active attempt loads (mock only)
+    // Set exam end time once when active attempt loads (mock + control)
     useEffect(() => {
-        if (!isMock) return;
+        if (!showTimer) return;
         if (examInfo?.active_attempt && examEndTime === null) {
             const startedAt = new Date(examInfo.active_attempt.started_at).getTime();
             const endTime = startedAt + examInfo.time_limit_minutes * 60 * 1000;
             setExamEndTime(endTime);
             setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
         }
-    }, [examInfo, examEndTime, isMock]);
+    }, [examInfo, examEndTime, showTimer]);
 
-    // Interval ticker — re-runs when examEndTime becomes available (mock only)
+    // Interval ticker — re-runs when examEndTime becomes available
+    // Note: only mock auto-submits on timeout. Control shows the timer for awareness
+    // but never force-finishes (student submits manually).
     useEffect(() => {
-        if (!isMock || examEndTime === null || examResult) return;
+        if (!showTimer || examEndTime === null || examResult) return;
         const tick = () => {
             const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0) autoSubmitRef.current();
+            if (remaining === 0 && isMock) autoSubmitRef.current();
         };
         const timer = setInterval(tick, 1000);
         const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-    }, [examEndTime, examResult]);
+    }, [examEndTime, examResult, showTimer, isMock]);
 
     // Auto-scroll question bar
     useEffect(() => {
@@ -1199,7 +1210,7 @@ export default function ExamPage() {
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
                 <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                    {isMock ? (
+                    {showTimer ? (
                         <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
                             <Clock size={16} />
                             <span className="font-mono text-base md:text-lg font-bold">
@@ -1208,9 +1219,13 @@ export default function ExamPage() {
                         </div>
                     ) : (
                         <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-                            <span className="text-xl font-black text-[#3F8C62] leading-none">{currentPrimaryScore}</span>
-                            <span className="text-sm text-gray-400 font-bold">/29</span>
+                            <span className="text-xl font-black text-[#3F8C62] leading-none">{currentTestScore}</span>
+                            <span className="text-sm text-gray-400 font-bold">/100</span>
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">баллов</span>
+                            <span className="text-[10px] font-bold text-gray-300 ml-2">·</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                Первичный {currentPrimaryScore}/29
+                            </span>
                         </div>
                     )}
                     <div className="w-px h-5 bg-gray-200 mx-1 md:mx-2 shrink-0" />

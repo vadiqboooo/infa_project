@@ -35,12 +35,22 @@ export function TasksListPage() {
         }, null);
         const maxNum = explicitEnd ?? taskMax;
         const egeLabel = maxNum != null && maxNum > egeNum ? `${egeNum}-${maxNum}` : String(egeNum);
+        // Image: prefer tutorial topic's image, else homework's
+        const imgSrc = tut?.has_image ? tut : hw?.has_image ? hw : null;
+        const image = imgSrc
+          ? {
+              topicId: imgSrc.id,
+              position: (imgSrc.image_position ?? 'cover') as any,
+              size: imgSrc.image_size ?? 120,
+            }
+          : null;
         return {
           egeNum,
           egeLabel,
           title: tut?.title ?? hw?.title ?? `Задание ${egeLabel}`,
           tutorial: tut ? { id: tut.id, solved: tut.tasks.filter(t => t.status === 'solved').length, total: tut.tasks.length } : null,
           homework: hw  ? { id: hw.id,  solved: hw.tasks.filter(t => t.status === 'solved').length,  total: hw.tasks.length  } : null,
+          image,
         };
       });
   }, [allTopics]);
@@ -90,6 +100,7 @@ export function TasksListPage() {
               title={g.title}
               tutorial={g.tutorial}
               homework={g.homework}
+              image={g.image}
             />
           ))}
         </div>

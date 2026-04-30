@@ -99,9 +99,91 @@ export function TopicDetail({
   const [search, setSearch] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
 
+  // ── Card image management ────────────────────────────────────────────────
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageCacheBust, setImageCacheBust] = useState<number>(Date.now());
+
   React.useEffect(() => {
     setEditingTopic(topic);
+    setImageCacheBust(Date.now());
   }, [topic]);
+
+  const buildAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    if (apiKey) headers['X-API-Key'] = apiKey;
+    const token = localStorage.getItem('jwt_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      alert('Файл слишком большой (макс 4 МБ)');
+      return;
+    }
+    setImageBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/admin/topics/${topic.id}/image`, {
+        method: 'POST', headers: buildAuthHeaders(), body: fd,
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || 'Не удалось загрузить картинку');
+      }
+      // Default position/size if missing — reflect locally + persist via parent
+      const updated: Partial<TopicAdmin> = {
+        ...editingTopic,
+        has_image: true,
+        image_position: editingTopic.image_position ?? 'cover',
+        image_size: editingTopic.image_size ?? 120,
+      };
+      setEditingTopic(updated as TopicAdmin);
+      setImageCacheBust(Date.now());
+      onSaveTopic(updated);
+    } catch (e: any) {
+      alert(e.message || 'Ошибка загрузки');
+    } finally {
+      setImageBusy(false);
+    }
+  };
+
+  const handleImageDelete = async () => {
+    if (!confirm('Удалить картинку карточки?')) return;
+    setImageBusy(true);
+    try {
+      const res = await fetch(`/api/admin/topics/${topic.id}/image`, {
+        method: 'DELETE', headers: buildAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Не удалось удалить картинку');
+      const updated: Partial<TopicAdmin> = { ...editingTopic, has_image: false };
+      setEditingTopic(updated as TopicAdmin);
+      setImageCacheBust(Date.now());
+      onSaveTopic(updated);
+    } catch (e: any) {
+      alert(e.message || 'Ошибка');
+    } finally {
+      setImageBusy(false);
+    }
+  };
+
+  const handleImagePositionChange = (pos: 'cover' | 'left' | 'right' | 'background') => {
+    const updated: Partial<TopicAdmin> = { ...editingTopic, image_position: pos };
+    setEditingTopic(updated as TopicAdmin);
+    onSaveTopic(updated);
+  };
+
+  const handleImageSizeChange = (size: number) => {
+    const updated: Partial<TopicAdmin> = { ...editingTopic, image_size: size };
+    setEditingTopic(updated as TopicAdmin);
+  };
+
+  const handleImageSizeCommit = () => {
+    onSaveTopic(editingTopic);
+  };
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(
@@ -335,6 +417,112 @@ export function TopicDetail({
             <Plus size={14} />
             Добавить задачу
           </button>
+        </div>
+      </div>
+
+      {/* Card image management */}
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
+        <div className="flex items-start gap-4">
+          {/* Preview */}
+          <div className="shrink-0">
+            {editingTopic.has_image ? (
+              <img
+                src={`/api/topics/${topic.id}/image?v=${imageCacheBust}`}
+                alt="card"
+                className="w-24 h-24 object-cover rounded-xl border border-gray-200 bg-white"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 bg-white flex flex-col items-center justify-center text-gray-300">
+                <ImageIcon size={20} />
+                <span className="text-[9px] mt-1 font-bold uppercase">Нет</span>
+              </div>
+            )}
+          </div>
+          {/* Controls */}
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleImageUpload(f);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={imageBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
+              >
+                {imageBusy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                {editingTopic.has_image ? 'Заменить' : 'Загрузить картинку'}
+              </button>
+              {editingTopic.has_image && (
+                <button
+                  onClick={handleImageDelete}
+                  disabled={imageBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-500 border border-red-200 rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
+                >
+                  <Trash2 size={12} /> Удалить
+                </button>
+              )}
+              <span className="text-[10px] text-gray-400 font-medium">PNG/JPG/WebP, до 4 МБ</span>
+            </div>
+
+            {editingTopic.has_image && (
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Position */}
+                <div className="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-lg">
+                  {([
+                    { val: 'cover', label: 'Сверху' },
+                    { val: 'left', label: 'Слева' },
+                    { val: 'right', label: 'Справа' },
+                    { val: 'background', label: 'Фоном' },
+                  ] as const).map(opt => {
+                    const active = (editingTopic.image_position ?? 'cover') === opt.val;
+                    return (
+                      <button
+                        key={opt.val}
+                        onClick={() => handleImagePositionChange(opt.val)}
+                        disabled={imageBusy}
+                        className={clsx(
+                          'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors',
+                          active ? 'bg-[#3F8C62] text-white' : 'text-gray-600 hover:bg-gray-100',
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Size slider — disabled for background */}
+                {(editingTopic.image_position ?? 'cover') !== 'background' && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">
+                      {(editingTopic.image_position ?? 'cover') === 'cover' ? 'Высота' : 'Ширина'}
+                    </span>
+                    <input
+                      type="range"
+                      min={(editingTopic.image_position ?? 'cover') === 'cover' ? 60 : 60}
+                      max={(editingTopic.image_position ?? 'cover') === 'cover' ? 260 : 220}
+                      value={editingTopic.image_size ?? 120}
+                      onChange={(e) => handleImageSizeChange(parseInt(e.target.value))}
+                      onMouseUp={handleImageSizeCommit}
+                      onTouchEnd={handleImageSizeCommit}
+                      className="w-32 accent-[#3F8C62]"
+                    />
+                    <span className="text-xs font-bold text-gray-700 tabular-nums w-10 text-right">
+                      {editingTopic.image_size ?? 120}px
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

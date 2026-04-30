@@ -42,6 +42,8 @@ export interface TaskNav {
     has_solution: boolean;
 }
 
+export type TopicImagePosition = 'cover' | 'left' | 'right' | 'background';
+
 export interface TopicNav {
     id: number;
     title: string;
@@ -51,6 +53,8 @@ export interface TopicNav {
     exam_id?: number;
     latest_score?: number;
     latest_primary_score?: number;
+    current_score?: number | null;
+    current_primary_score?: number | null;
     max_score?: number;
     time_limit_minutes?: number;
     is_mock: boolean;
@@ -58,6 +62,9 @@ export interface TopicNav {
     ege_number_end?: number | null;
     analysis_published?: boolean;
     draft_count?: number;
+    has_image?: boolean;
+    image_position?: TopicImagePosition | null;
+    image_size?: number | null;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -105,6 +112,11 @@ export interface CheckResult {
     attempts_count: number;
     status: string;
     sub_results?: boolean[] | null;
+    // Per-element correctness for partial-credit tasks
+    // 26 (pair) → boolean[] length 2
+    // 27 (table 2x2) → boolean[][] shape 2x2
+    partial_correct?: boolean[] | boolean[][] | null;
+    expected_answer?: number | string | (number | string)[] | (number | string)[][] | null;
 }
 
 /* ── AI ────────────────────────────────────────────── */
@@ -216,6 +228,9 @@ export interface TopicAdmin {
     is_mock: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
+    has_image?: boolean;
+    image_position?: TopicImagePosition | null;
+    image_size?: number | null;
 }
 
 export interface AdminSubTask {
@@ -251,6 +266,8 @@ export interface TopicIn {
     is_mock: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
+    image_position?: TopicImagePosition | null;
+    image_size?: number | null;
 }
 
 export interface ImportVariantIn {

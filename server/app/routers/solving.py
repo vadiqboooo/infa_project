@@ -85,6 +85,59 @@ def _answers_equal(correct: dict | None, given: AnswerIn) -> bool:
     return False
 
 
+def _per_element_correctness(correct: dict | None, given: AnswerIn, ege_number: int | None):
+    """Return (partial_list, expected_value) for tasks 26/27.
+
+    26 → list[bool] length 2 (pair)
+    27 → list[list[bool]] shape 2x2 (table)
+    Other → (None, None)
+    """
+    if correct is None or ege_number not in (26, 27):
+        return None, None
+
+    expected = correct.get("val")
+    user_val = given.val
+    if expected is None:
+        return None, None
+
+    def to_float(v):
+        try:
+            if isinstance(v, str):
+                return float(v.replace(",", ".").strip())
+            return float(v)
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    def vals_eq(a, b) -> bool:
+        if a is None or b is None or b == "":
+            return False
+        fa, fb = to_float(a), to_float(b)
+        if fa is not None and fb is not None:
+            return abs(fa - fb) < 1e-9
+        return str(a).strip().lower() == str(b).strip().lower()
+
+    if ege_number == 26:
+        if not isinstance(expected, list):
+            return None, expected
+        u = user_val if isinstance(user_val, list) else []
+        partial = [vals_eq(expected[i], u[i] if i < len(u) else None) for i in range(len(expected))]
+        return partial, expected
+
+    if ege_number == 27:
+        if not isinstance(expected, list):
+            return None, expected
+        u = user_val if isinstance(user_val, list) else []
+        partial: list[list[bool]] = []
+        for ri, row_e in enumerate(expected):
+            if not isinstance(row_e, list):
+                continue
+            row_u = u[ri] if ri < len(u) and isinstance(u[ri], list) else []
+            partial.append([vals_eq(row_e[ci], row_u[ci] if ci < len(row_u) else None) for ci in range(len(row_e))])
+        return partial, expected
+
+    return None, None
+
+
 def _partial_score(correct: dict | None, given: AnswerIn, ege_number: int | None) -> int:
     """Return partial score for tasks 26/27 (0, 1, or 2).
 
@@ -231,11 +284,20 @@ async def check_answer(
     await db.commit()
     await db.refresh(progress)
 
+    # For tasks 26/27 — compute per-element correctness for visual feedback
+    partial_correct = None
+    if not has_subs and task.ege_number in (26, 27):
+        given_for_partial = body if body.val is not None else AnswerIn(val=body.answers[0] if body.answers else 0)
+        partial_correct, _ = _per_element_correctness(
+            task.correct_answer, given_for_partial, task.ege_number,
+        )
+
     return CheckResult(
         correct=correct,
         attempts_count=progress.attempts_count,
         status=progress.status.value,
         sub_results=sub_results,
+        partial_correct=partial_correct,
     )
 
 

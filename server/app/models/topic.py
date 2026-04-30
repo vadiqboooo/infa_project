@@ -1,6 +1,6 @@
 """Topic model — grouping of tasks."""
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,6 +16,14 @@ class Topic(Base):
     is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ege_number_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+
+    # ── Card image (stored in DB) ─────────────────────────────────
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, default=None)
+    image_mime: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    # 'cover' (top, full-width) | 'left' | 'right' | 'background'
+    image_position: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    # height (cover) or side width (left/right) in px; ignored for background
+    image_size: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     # relationships
     tasks = relationship(

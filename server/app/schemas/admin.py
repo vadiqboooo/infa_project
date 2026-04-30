@@ -17,6 +17,8 @@ class TopicIn(BaseModel):
     is_mock: bool = False
     ege_number: int | None = None
     ege_number_end: int | None = None
+    image_position: str | None = None  # 'cover' | 'left' | 'right' | 'background'
+    image_size: int | None = None
 
 
 class TopicOut(BaseModel):
@@ -29,6 +31,9 @@ class TopicOut(BaseModel):
     is_mock: bool = False
     ege_number: int | None = None
     ege_number_end: int | None = None
+    has_image: bool = False
+    image_position: str | None = None
+    image_size: int | None = None
 
     model_config = {"from_attributes": True}
 

@@ -88,3 +88,9 @@ class CheckResult(BaseModel):
     attempts_count: int
     status: str  # solved / failed
     sub_results: list[bool] | None = None  # per sub-task correctness when sub_tasks present
+    # Per-element correctness for partial-credit tasks (e.g. 26/27)
+    # 26 (pair): list[bool] of length 2
+    # 27 (table 2x2): list[list[bool]] of shape 2x2
+    partial_correct: list | None = None
+    # The expected answer revealed to the student after check (for 26/27)
+    expected_answer: float | list | str | None = None

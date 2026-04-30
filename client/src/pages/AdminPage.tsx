@@ -625,10 +625,13 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
             ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,
+            ege_number_end: data.ege_number_end !== undefined ? data.ege_number_end : topic.ege_number_end ?? null,
+            image_position: data.image_position !== undefined ? data.image_position : topic.image_position ?? null,
+            image_size: data.image_size !== undefined ? data.image_size : topic.image_size ?? null,
         };
-        await adminFetch(`/admin/topics/${topic.id}`, apiKey, { 
-            method: "PUT", 
-            body: JSON.stringify(body) 
+        await adminFetch(`/admin/topics/${topic.id}`, apiKey, {
+            method: "PUT",
+            body: JSON.stringify(body)
         });
         queryClient.invalidateQueries({ queryKey: ["navigation"] });
         await loadTopicData();
