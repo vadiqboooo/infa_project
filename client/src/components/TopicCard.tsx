@@ -1,8 +1,42 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router";
 import { clsx } from "clsx";
-import { BookOpen, Home } from "lucide-react";
+import { ArrowRight, ImageIcon, Sparkles } from "lucide-react";
 import type { TopicImagePosition } from "../api/types";
+
+// ── Шатл внутри картинки карточки ──────────────────────────────────────────
+function ShuttleInImage() {
+  const cfg = useMemo(
+    () => ({
+      top: 10 + Math.random() * 70,         // 10-80% от высоты картинки
+      duration: 3.5 + Math.random() * 2.5,  // 3.5-6 секунд
+      rotate: -12 + Math.random() * 24,     // ±12°
+      dir: Math.random() > 0.5 ? "right" : ("left" as "right" | "left"),
+    }),
+    [],
+  );
+  const animName = cfg.dir === "right" ? "shuttle-fly-rtl" : "shuttle-fly-ltr";
+  const flipX = cfg.dir === "left" ? -1 : 1;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute z-[5] select-none"
+      style={{
+        top: `${cfg.top}%`,
+        animation: `${animName} ${cfg.duration}s linear forwards`,
+      }}
+    >
+      <img
+        src="/character/shutle.png"
+        alt=""
+        draggable={false}
+        className="w-12 h-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]"
+        style={{ transform: `rotate(${cfg.rotate}deg) scaleX(${flipX})` }}
+      />
+    </div>
+  );
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface SectionInfo {
@@ -14,191 +48,246 @@ export interface SectionInfo {
 export interface TopicImage {
   topicId: number;
   position: TopicImagePosition;
-  size: number; // px
+  size: number;
 }
 
 interface TopicCardProps {
   egeId: string;
+  egeNum?: number;
   title: string;
   tutorial: SectionInfo | null;
   homework: SectionInfo | null;
   image?: TopicImage | null;
+  /** URL фона из админки. Перекрывает legacy `image`. null = админ выбрал «без фона». */
+  backgroundUrl?: string | null;
+  /** URL персонажа из админки. null = «без персонажа». undefined = детерминированно по egeNum. */
+  characterUrl?: string | null;
+  /** Если задан — на карточке проигрывается анимация пролёта шатла. Меняй ключ, чтобы перезапустить. */
+  shuttleKey?: number | null;
+  newTasksCount?: number;
 }
 
-// ── Stat row: just info, not interactive ────────────────────────────────────
-function StatRow({
-  label,
-  icon: Icon,
-  section,
-  variant = "light",
-}: {
-  label: string;
-  icon: React.ElementType;
-  section: SectionInfo | null;
-  variant?: "light" | "dark";
-}) {
-  const total = section?.total ?? 0;
-  const solved = section?.solved ?? 0;
-  const pct = total > 0 ? solved / total : 0;
-  const enabled = section != null && total > 0;
+// ── Цветовая палитра (по номеру задания) ────────────────────────────────────
+type Accent = {
+  glow: string;
+  soft: string;
+};
 
-  const dark = variant === "dark";
+const PALETTE: Accent[] = [
+  { glow: "shadow-emerald-900/10", soft: "from-emerald-50/80" },
+  { glow: "shadow-green-900/10", soft: "from-green-50/80" },
+  { glow: "shadow-teal-900/10", soft: "from-teal-50/80" },
+  { glow: "shadow-lime-900/10", soft: "from-lime-50/70" },
+];
 
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Icon size={12} className={enabled
-            ? (dark ? "text-white/90" : "text-[#3F8C62]")
-            : (dark ? "text-white/40" : "text-gray-400")} />
-          <span className={clsx(
-            "text-[11px] font-bold uppercase tracking-wide truncate",
-            enabled
-              ? (dark ? "text-white/90" : "text-gray-700")
-              : (dark ? "text-white/50" : "text-gray-400"),
-          )}>{label}</span>
-        </div>
-        <span className={clsx(
-          "text-[11px] font-bold tabular-nums shrink-0",
-          enabled
-            ? (dark ? "text-white" : "text-gray-900")
-            : (dark ? "text-white/50" : "text-gray-400"),
-        )}>{solved}/{total}</span>
-      </div>
-      <div className={clsx(
-        "h-1.5 w-full rounded-full overflow-hidden",
-        dark ? "bg-white/25" : "bg-gray-200/80",
-      )}>
-        <div
-          className={clsx(
-            "h-full rounded-full transition-all duration-500",
-            dark ? "bg-white" : "bg-[#3F8C62]",
-          )}
-          style={{ width: `${Math.round(pct * 100)}%` }}
-        />
-      </div>
-    </div>
-  );
+function pickAccent(key: number): Accent {
+  const n = Number.isFinite(key) ? Math.abs(Math.trunc(key)) : 0;
+  return PALETTE[n % PALETTE.length];
 }
 
-// ── Main card ────────────────────────────────────────────────────────────────
-export function TopicCard({ egeId, title, tutorial, homework, image }: TopicCardProps) {
+// Два астронавта из /public/character — детерминированно выбираем по egeNum
+const ASTRONAUTS = [
+  "/character/cute-astronaut-blowing-gum-with-hoodie-cartoon-vector-icon-illustration-science-fashion-isolated.png",
+  "/character/cute-astronaut-dancing-cartoon-vector-icon-illustration-science-technology-icon-concept-isolated.png",
+];
+
+// ── Карточка ────────────────────────────────────────────────────────────────
+export function TopicCard({ egeId, egeNum, title, tutorial, homework, image, backgroundUrl, characterUrl, shuttleKey, newTasksCount = 0 }: TopicCardProps) {
   const totalSolved = (tutorial?.solved ?? 0) + (homework?.solved ?? 0);
-  const totalTasks = (tutorial?.total ?? 0) + (homework?.total ?? 0);
+  const totalTasks  = (tutorial?.total  ?? 0) + (homework?.total  ?? 0);
+  const pct = totalTasks > 0 ? Math.round((totalSolved / totalTasks) * 100) : 0;
 
-  // Whole card → goes to tutorial by default; falls back to homework
   const cardHref = tutorial
     ? `/tasks/${tutorial.id}`
     : homework
       ? `/homework/${homework.id}`
       : null;
 
-  const imgUrl = image ? `/api/topics/${image.topicId}/image` : null;
-  const pos = image?.position ?? null;
-  const size = image?.size ?? 120;
+  // Фон: явный backgroundUrl (включая null = «без фона») в приоритете; иначе legacy image
+  const bgUrl = backgroundUrl !== undefined
+    ? backgroundUrl
+    : image
+      ? `/api/topics/${image.topicId}/image`
+      : null;
 
-  // ── Background variant: image fills the card, content overlays ──────────
-  if (imgUrl && pos === "background") {
-    const inner = (
-      <div className="group relative w-full h-full rounded-2xl overflow-hidden border border-[#C4D8C9] hover:-translate-y-1 hover:shadow-lg hover:shadow-gray-400/30 transition-all duration-300 min-h-[240px]">
-        <img
-          src={imgUrl}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/15" />
-        <div className="relative z-10 p-5 flex flex-col h-full min-h-[240px]">
-          <div className="flex items-center justify-between mb-3">
-            <span className="px-3 py-1.5 rounded-lg bg-white/95 text-[11px] font-bold text-gray-800 tracking-wider uppercase">
-              Задание {egeId}
-            </span>
-            <span className="px-2 py-1.5 rounded-lg bg-white/95 text-[11px] font-bold text-gray-700 tabular-nums">
-              {totalSolved}/{totalTasks}
-            </span>
+  const accentKey = egeNum ?? parseInt(egeId.split("-")[0], 10) ?? 0;
+  const accent = pickAccent(accentKey);
+
+  // Для одиночных чисел добавляем ведущий ноль (3 → 03), диапазоны (25-26) оставляем как есть
+  const badgeText = !egeId.includes("-") && egeId.length === 1 ? `0${egeId}` : egeId;
+
+  // Персонаж: явный characterUrl (null = «без персонажа») в приоритете; иначе детерминированно по accentKey
+  const fallbackAstronaut = ASTRONAUTS[Math.abs(accentKey) % ASTRONAUTS.length];
+  const astronautSrc: string | null = characterUrl === null
+    ? null
+    : (characterUrl ?? fallbackAstronaut);
+  // «Танцор» (ASTRONAUTS[1]) — летает по карточке и отталкивается; остальные — парят на месте
+  const isBouncing = astronautSrc === ASTRONAUTS[1];
+  // Десинхронизируем плавание у разных карточек
+  const floatDuration = 5 + (Math.abs(accentKey) % 4);   // 5-8s
+  const floatDelay = (Math.abs(accentKey) * 0.37) % 3;   // 0-3s
+  // Параметры дрейфа для летающего: разные длительности X и Y → неповторяющийся путь
+  const driftXDuration = 11 + (Math.abs(accentKey) % 6); // 11-16s
+  const driftYDuration = 7  + (Math.abs(accentKey) % 5); // 7-11s
+  const driftXDelay = (Math.abs(accentKey) * 0.41) % 4;
+  const driftYDelay = (Math.abs(accentKey) * 0.83) % 4;
+  const driftRotDuration = 4 + (Math.abs(accentKey) % 3); // 4-6s
+  // Чередуем угол / сторону, чтобы карточки не выглядели одинаково
+  const flipX = accentKey % 2 === 0 ? -1 : 1;
+
+  const inner = (
+    <div
+      className={clsx(
+        "group relative w-full overflow-hidden rounded-[18px] border border-[#dfe8df] bg-gradient-to-b to-white",
+        "shadow-[0_18px_50px_rgba(15,23,20,0.08)] transition-all duration-300 hover:-translate-y-1 hover:border-[#b9d2bd] hover:shadow-2xl",
+        accent.glow,
+        accent.soft,
+        "flex flex-col",
+      )}
+    >
+      {/* Картинка сверху */}
+      <div className="relative w-full h-[180px] bg-[#07100f] overflow-hidden">
+        {bgUrl ? (
+          <img
+            src={bgUrl}
+            alt=""
+            className="w-full h-full object-cover saturate-[0.92] contrast-[1.05] group-hover:scale-[1.035] transition-transform duration-700"
+            onError={(e) => {
+              const t = e.target as HTMLImageElement;
+              t.style.display = "none";
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-white/25">
+            <ImageIcon size={48} />
           </div>
-          <h3 className="text-white font-bold text-[16px] leading-snug mb-auto drop-shadow-md">{title}</h3>
-          <div className="mt-4 space-y-2.5">
-            <StatRow label="Разбор" icon={BookOpen} section={tutorial} variant="dark" />
-            <StatRow label="Домашка" icon={Home} section={homework} variant="dark" />
+        )}
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_48%_0%,rgba(98,170,120,0.22),transparent_42%),linear-gradient(180deg,rgba(8,12,16,0.04),rgba(8,12,16,0.24))] pointer-events-none z-[6]" />
+
+        {newTasksCount > 0 && (
+          <div className="absolute left-4 top-4 z-30 pointer-events-none">
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 bg-[#06140f]/82 px-3.5 py-2 text-white shadow-[0_12px_28px_rgba(6,20,15,0.34)] backdrop-blur-md">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(126,217,141,0.35),transparent_34%),linear-gradient(135deg,rgba(78,140,90,0.5),rgba(6,20,15,0.1))]" />
+              <div className="relative flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-300/18 text-emerald-100 ring-1 ring-emerald-200/40">
+                  <Sparkles size={14} />
+                </span>
+                <span className="flex flex-col leading-tight">
+                  <span className="text-[10px] font-black uppercase tracking-wide text-emerald-100">
+                    Новые задачи
+                  </span>
+                  <span className="text-[12px] font-black text-white">
+                    +{newTasksCount} в топике
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* Номер задания — большое число без фона */}
+        <div className="absolute top-3 right-4 z-10 text-white leading-none pointer-events-none">
+          <span className="block text-[44px] font-black tabular-nums drop-shadow-[0_4px_14px_rgba(0,0,0,0.55)]">
+            {badgeText}
+          </span>
         </div>
-      </div>
-    );
-    return cardHref ? <Link to={cardHref} className="block">{inner}</Link> : inner;
-  }
 
-  // ── Side variants (left / right) ────────────────────────────────────────
-  if (imgUrl && (pos === "left" || pos === "right")) {
-    const sideWidth = Math.max(60, Math.min(220, size));
-    const imgPanel = (
-      <div className="shrink-0 bg-gray-100" style={{ width: sideWidth }}>
-        <img
-          src={imgUrl}
-          alt=""
-          className="w-full h-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-        />
-      </div>
-    );
-    const inner = (
-      <div className="group relative w-full rounded-2xl overflow-hidden bg-gradient-to-br from-[#D6E4DA] to-[#C4D8C9] border border-[#C4D8C9] hover:-translate-y-1 hover:shadow-lg hover:shadow-gray-400/30 transition-all duration-300 flex min-h-[200px]">
-        {pos === "left" && imgPanel}
-        <div className="relative z-10 p-5 flex flex-col flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-3">
-            <span className="px-3 py-1.5 rounded-lg bg-white/70 text-[11px] font-bold text-gray-700 tracking-wider uppercase">
-              Задание {egeId}
-            </span>
-            <span className="px-2 py-1.5 rounded-lg bg-white/70 text-[11px] font-bold text-gray-500 tabular-nums">
-              {totalSolved}/{totalTasks}
-            </span>
-          </div>
-          <h3 className="text-gray-900 font-bold text-[15px] leading-snug mb-auto group-hover:text-[#3F8C62] transition-colors">
+        {/* Астронавт: либо парит на месте, либо летает по карточке и отталкивается от стенок */}
+        {astronautSrc && (
+          isBouncing ? (
+            <div
+              aria-hidden="true"
+              className="absolute w-[78px] h-[78px] pointer-events-none select-none z-20"
+              style={{
+                animation: `drift-x ${driftXDuration}s ease-in-out infinite alternate, drift-y ${driftYDuration}s ease-in-out infinite alternate`,
+                animationDelay: `${driftXDelay}s, ${driftYDelay}s`,
+              }}
+            >
+              <div className="w-full h-full" style={{ transform: `scaleX(${flipX})` }}>
+                <img
+                  src={astronautSrc}
+                  alt=""
+                  draggable={false}
+                  className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.35)]"
+                  style={{
+                    animation: `drift-rotate ${driftRotDuration}s ease-in-out infinite`,
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              aria-hidden="true"
+              className="absolute bottom-1 left-2 w-[78px] h-[78px] pointer-events-none select-none z-20"
+              style={{ transform: `scaleX(${flipX})` }}
+            >
+              <img
+                src={astronautSrc}
+                alt=""
+                draggable={false}
+                className="w-full h-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.35)]"
+                style={{
+                  animation: `float-astronaut ${floatDuration}s ease-in-out infinite`,
+                  animationDelay: `${floatDelay}s`,
+                }}
+              />
+            </div>
+          )
+        )}
+
+        {/* Случайно пролетающий шатл (только когда родитель передал ключ) */}
+        {shuttleKey != null && <ShuttleInImage key={shuttleKey} />}
+
+        {/* Градиент-затемнение, чтобы белый заголовок читался на любой картинке */}
+        <div className="absolute inset-x-0 bottom-0 h-[72%] bg-gradient-to-t from-[#050807]/90 via-[#050807]/45 to-transparent pointer-events-none z-[8]" />
+
+        {/* Название топика — поверх картинки внизу, слева оставлен отступ под астронавта */}
+        <div className="absolute bottom-4 left-[96px] right-5 z-10 pointer-events-none">
+          <h3 className="text-white font-black text-[15px] leading-tight line-clamp-2 drop-shadow-[0_2px_6px_rgba(0,0,0,0.75)]">
             {title}
           </h3>
-          <div className="mt-4 space-y-2.5">
-            <StatRow label="Разбор" icon={BookOpen} section={tutorial} />
-            <StatRow label="Домашка" icon={Home} section={homework} />
-          </div>
         </div>
-        {pos === "right" && imgPanel}
       </div>
-    );
-    return cardHref ? <Link to={cardHref} className="block">{inner}</Link> : inner;
-  }
 
-  // ── Cover variant (default with image): image on top ────────────────────
-  const coverHeight = Math.max(60, Math.min(260, size));
-  const inner = (
-    <div className="group relative w-full rounded-2xl overflow-hidden bg-gradient-to-br from-[#D6E4DA] to-[#C4D8C9] border border-[#C4D8C9] hover:-translate-y-1 hover:shadow-lg hover:shadow-gray-400/30 transition-all duration-300">
-      {imgUrl && (
-        <div className="w-full bg-gray-100 overflow-hidden" style={{ height: coverHeight }}>
-          <img
-            src={imgUrl}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        </div>
-      )}
-      <div className="relative z-10 p-5 flex flex-col min-h-[200px]">
-        <div className="flex items-center justify-between mb-3">
-          <span className="px-3 py-1.5 rounded-lg bg-white/70 text-[11px] font-bold text-gray-700 tracking-wider uppercase">
-            Задание {egeId}
-          </span>
-          <span className="px-2 py-1.5 rounded-lg bg-white/70 text-[11px] font-bold text-gray-500 tabular-nums">
-            {totalSolved}/{totalTasks}
+      {/* Содержимое */}
+      <div className="relative p-5 flex flex-col gap-4 flex-1">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#62aa78]/35 to-transparent" />
+        {/* Прогресс-бар + процент */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-1.5 bg-[#e2e8e2] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#4e8c5a] to-[#62aa78] transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-[12px] font-extrabold text-[#25352b] tabular-nums shrink-0 w-10 text-right">
+            {pct}%
           </span>
         </div>
-        <h3 className="text-gray-900 font-bold text-[15px] leading-snug mb-auto group-hover:text-[#3F8C62] transition-colors">
-          {title}
-        </h3>
-        <div className="mt-4 space-y-2.5">
-          <StatRow label="Разбор" icon={BookOpen} section={tutorial} />
-          <StatRow label="Домашка" icon={Home} section={homework} />
+
+        {/* Низ: счётчик и кнопка */}
+        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+          <span className="text-[13px] text-[#667568] font-semibold tabular-nums">
+            {totalSolved} / {totalTasks} выполнено
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#4e8c5a] px-4 py-2 text-[12px] font-extrabold text-white shadow-[0_10px_22px_rgba(78,140,90,0.22)] transition-all group-hover:bg-[#62aa78] group-hover:shadow-[0_12px_28px_rgba(78,140,90,0.32)]">
+            Перейти
+            <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+          </span>
         </div>
       </div>
     </div>
   );
-  return cardHref ? <Link to={cardHref} className="block">{inner}</Link> : inner;
+
+  return cardHref ? (
+    <Link
+      to={cardHref}
+      className="block rounded-[18px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3F8C62]/30"
+    >
+      {inner}
+    </Link>
+  ) : (
+    inner
+  );
 }

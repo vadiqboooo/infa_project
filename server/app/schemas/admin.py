@@ -3,7 +3,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.task import AnswerType, TaskDifficulty
 
 
@@ -19,6 +19,8 @@ class TopicIn(BaseModel):
     ege_number_end: int | None = None
     image_position: str | None = None  # 'cover' | 'left' | 'right' | 'background'
     image_size: int | None = None
+    character_url: str | None = None
+    background_url: str | None = None
 
 
 class TopicOut(BaseModel):
@@ -34,6 +36,8 @@ class TopicOut(BaseModel):
     has_image: bool = False
     image_position: str | None = None
     image_size: int | None = None
+    character_url: str | None = None
+    background_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -129,6 +133,45 @@ class StudentTaskResult(BaseModel):
     order_index: int
     status: str  # "solved" | "failed" | "not_started"
     attempts_count: int
+    has_own_solution: bool = False
+    solution_comments_count: int = 0
+
+
+class TaskSolutionCommentIn(BaseModel):
+    from_offset: int | None = Field(default=None, ge=0)
+    to_offset: int | None = Field(default=None, ge=0)
+    from_line: int = Field(ge=1)
+    from_col: int = Field(ge=1)
+    to_line: int = Field(ge=1)
+    to_col: int = Field(ge=1)
+    text: str = Field(min_length=1)
+
+
+class TaskSolutionCommentOut(BaseModel):
+    id: int
+    from_offset: int | None = None
+    to_offset: int | None = None
+    from_line: int
+    from_col: int
+    to_line: int
+    to_col: int
+    text: str
+    author_name: str | None = None
+    reaction: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StudentTaskSolutionReviewOut(BaseModel):
+    student_id: int
+    task_id: int
+    task_title: str | None = None
+    ege_number: int | None = None
+    code: str | None = None
+    file_url: str | None = None
+    image_url: str | None = None
+    updated_at: datetime | None = None
+    comments: list[TaskSolutionCommentOut] = Field(default_factory=list)
 
 
 class StudentTopicDetail(BaseModel):
@@ -140,6 +183,21 @@ class StudentTopicDetail(BaseModel):
     tasks: list[StudentTaskResult]
 
 
+class StudentWeeklyEgeStat(BaseModel):
+    ege_number: int | None
+    total: int
+    correct: int
+    incorrect: int
+    accuracy: int
+
+
+class StudentWeeklyStats(BaseModel):
+    total: int = 0
+    correct: int = 0
+    incorrect: int = 0
+    ege_numbers: list[StudentWeeklyEgeStat] = Field(default_factory=list)
+
+
 class StudentDetailOut(BaseModel):
     id: int
     name: str
@@ -149,6 +207,7 @@ class StudentDetailOut(BaseModel):
     last_active_at: datetime
     total_solved: int
     total_tasks: int
+    weekly_stats: StudentWeeklyStats = Field(default_factory=StudentWeeklyStats)
     topics: list[StudentTopicDetail]
 
 

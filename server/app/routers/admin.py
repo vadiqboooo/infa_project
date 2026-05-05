@@ -7,7 +7,7 @@ import secrets
 import string
 import uuid
 import httpx
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
@@ -25,6 +25,10 @@ from app.models.progress import UserProgress, ProgressStatus
 from app.models.exam_attempt import ExamAttempt
 from app.models.exam_analysis import ExamAnalysis
 from app.models.group import Group, user_groups
+from app.models.task_solution import UserTaskSolution
+from app.models.task_solution_comment import UserTaskSolutionComment
+from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
+from app.realtime import solution_comment_ws_manager
 from app.schemas.admin import (
     ImportVariantIn,
     ImportVariantResult,
@@ -39,6 +43,11 @@ from app.schemas.admin import (
     StudentDetailOut,
     StudentTopicDetail,
     StudentTaskResult,
+    StudentWeeklyEgeStat,
+    StudentWeeklyStats,
+    StudentTaskSolutionReviewOut,
+    TaskSolutionCommentIn,
+    TaskSolutionCommentOut,
     TopicStatsOut,
     TopicStatsStudentRow,
     TopicStatsTaskInfo,
@@ -64,7 +73,67 @@ router = APIRouter(
 )
 
 
+class AdminHelpNotificationOut(BaseModel):
+    id: int
+    comment_id: int
+    student_id: int
+    student_name: str
+    task_id: int
+    task_order_index: int
+    ege_number: int | None = None
+    topic_id: int
+    topic_title: str
+    text: str
+    updated_at: datetime | None = None
+
+
 # ── Topics ────────────────────────────────────────────────────
+
+@router.get("/help-notifications", response_model=list[AdminHelpNotificationOut])
+async def get_help_notifications(db: AsyncSession = Depends(get_db)):
+    """Return active student requests for help on teacher comments."""
+    result = await db.execute(
+        select(
+            UserTaskSolutionCommentReaction,
+            UserTaskSolutionComment,
+            UserTaskSolution,
+            User,
+            Task,
+            Topic,
+        )
+        .join(UserTaskSolutionComment, UserTaskSolutionComment.id == UserTaskSolutionCommentReaction.comment_id)
+        .join(UserTaskSolution, UserTaskSolution.id == UserTaskSolutionComment.solution_id)
+        .join(User, User.id == UserTaskSolution.user_id)
+        .join(Task, Task.id == UserTaskSolution.task_id)
+        .join(Topic, Topic.id == Task.topic_id)
+        .where(UserTaskSolutionCommentReaction.reaction == "need_help")
+        .order_by(UserTaskSolutionCommentReaction.updated_at.desc(), UserTaskSolutionCommentReaction.id.desc())
+    )
+    notifications: list[AdminHelpNotificationOut] = []
+    for reaction, comment, solution, user, task, topic in result.all():
+        student_name = (
+            f"{user.first_name_real or ''} {user.last_name_real or ''}".strip()
+            or user.first_name
+            or user.login
+            or f"User {user.id}"
+        )
+        notifications.append(
+            AdminHelpNotificationOut(
+                id=reaction.id,
+                comment_id=comment.id,
+                student_id=solution.user_id,
+                student_name=student_name,
+                task_id=solution.task_id,
+                task_order_index=task.order_index,
+                ege_number=task.ege_number,
+                topic_id=topic.id,
+                topic_title=topic.title,
+                text=comment.text,
+                updated_at=reaction.updated_at,
+            )
+        )
+    return notifications
+
 
 @router.get("/topics", response_model=list[TopicOut])
 async def list_topics(db: AsyncSession = Depends(get_db)):
@@ -95,6 +164,8 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             has_image=t.image_data is not None,
             image_position=t.image_position,
             image_size=t.image_size,
+            character_url=t.character_url,
+            background_url=t.background_url,
         )
         for t in topics
     ]
@@ -111,6 +182,8 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         ege_number_end=body.ege_number_end,
         image_position=body.image_position,
         image_size=body.image_size,
+        character_url=body.character_url,
+        background_url=body.background_url,
     )
     db.add(topic)
     await db.flush()
@@ -134,6 +207,8 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         has_image=False,
         image_position=topic.image_position,
         image_size=topic.image_size,
+        character_url=topic.character_url,
+        background_url=topic.background_url,
     )
 
 
@@ -152,6 +227,8 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.ege_number_end = body.ege_number_end
     topic.image_position = body.image_position
     topic.image_size = body.image_size
+    topic.character_url = body.character_url
+    topic.background_url = body.background_url
 
     # Update exam
     exam_res = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
@@ -182,6 +259,8 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         has_image=topic.image_data is not None,
         image_position=topic.image_position,
         image_size=topic.image_size,
+        character_url=topic.character_url,
+        background_url=topic.background_url,
     )
 
 
@@ -244,6 +323,8 @@ async def upload_topic_image(
         topic.image_position = "cover"
     if topic.image_size is None:
         topic.image_size = 120
+    # Загруженный файл становится фоном карточки автоматически
+    topic.background_url = f"/api/topics/{topic_id}/image"
     await db.commit()
     await db.refresh(topic)
 
@@ -266,6 +347,8 @@ async def upload_topic_image(
         has_image=True,
         image_position=topic.image_position,
         image_size=topic.image_size,
+        character_url=topic.character_url,
+        background_url=topic.background_url,
     )
 
 
@@ -277,6 +360,10 @@ async def delete_topic_image(topic_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Topic not found")
     topic.image_data = None
     topic.image_mime = None
+    # Если background_url указывал на этот же upload — сбрасываем.
+    # Если стоит preset (/character/...) — не трогаем, пользователь продолжит его использовать.
+    if topic.background_url == f"/api/topics/{topic_id}/image":
+        topic.background_url = None
     await db.commit()
 
 
@@ -565,12 +652,75 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
         p.task_id: p for p in progress_result.scalars().all()
     }
 
+    solutions_result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.user_id == user_id)
+    )
+    solution_map: dict[int, UserTaskSolution] = {
+        s.task_id: s for s in solutions_result.scalars().all()
+    }
+    solution_ids = [s.id for s in solution_map.values()]
+    comment_counts_by_solution: dict[int, int] = {}
+    if solution_ids:
+        comment_counts_result = await db.execute(
+            select(UserTaskSolutionComment.solution_id, func.count(UserTaskSolutionComment.id))
+            .where(UserTaskSolutionComment.solution_id.in_(solution_ids))
+            .group_by(UserTaskSolutionComment.solution_id)
+        )
+        comment_counts_by_solution = {row[0]: row[1] for row in comment_counts_result.all()}
+
     # Group tasks by topic
     tasks_by_topic: dict[int, list[Task]] = {}
     for task in all_tasks:
         tasks_by_topic.setdefault(task.topic_id, []).append(task)
+    tasks_map: dict[int, Task] = {task.id: task for task in all_tasks}
 
     total_solved = sum(1 for p in progress_map.values() if p.status == ProgressStatus.solved)
+
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    weekly_total = 0
+    weekly_correct = 0
+    weekly_incorrect = 0
+    weekly_by_ege: dict[int | None, dict[str, int]] = {}
+    for progress in progress_map.values():
+        if progress.last_attempt_at is None:
+            continue
+        last_attempt = progress.last_attempt_at
+        if last_attempt.tzinfo is None:
+            last_attempt = last_attempt.replace(tzinfo=timezone.utc)
+        if last_attempt < week_ago:
+            continue
+        if progress.status not in (ProgressStatus.solved, ProgressStatus.failed):
+            continue
+
+        task = tasks_map.get(progress.task_id)
+        ege_number = task.ege_number if task else None
+        bucket = weekly_by_ege.setdefault(ege_number, {"total": 0, "correct": 0, "incorrect": 0})
+        bucket["total"] += 1
+        weekly_total += 1
+        if progress.status == ProgressStatus.solved:
+            bucket["correct"] += 1
+            weekly_correct += 1
+        else:
+            bucket["incorrect"] += 1
+            weekly_incorrect += 1
+
+    weekly_ege_stats = [
+        StudentWeeklyEgeStat(
+            ege_number=ege_number,
+            total=values["total"],
+            correct=values["correct"],
+            incorrect=values["incorrect"],
+            accuracy=round(values["correct"] / values["total"] * 100) if values["total"] else 0,
+        )
+        for ege_number, values in weekly_by_ege.items()
+    ]
+    weekly_ege_stats.sort(key=lambda item: (item.ege_number is None, item.ege_number or 999))
+    weekly_stats = StudentWeeklyStats(
+        total=weekly_total,
+        correct=weekly_correct,
+        incorrect=weekly_incorrect,
+        ege_numbers=weekly_ege_stats,
+    )
 
     # Get all exams for topic->exam mapping
     all_exams_res = await db.execute(select(Exam))
@@ -612,12 +762,17 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
         task_results = []
         for task in topic_tasks:
             prog = progress_map.get(task.id)
+            own_solution = solution_map.get(task.id)
             task_results.append(StudentTaskResult(
                 task_id=task.id,
                 ege_number=task.ege_number,
                 order_index=task.order_index,
                 status=prog.status.value if prog else "not_started",
                 attempts_count=prog.attempts_count if prog else 0,
+                has_own_solution=bool(
+                    own_solution and (own_solution.code or own_solution.file_url or own_solution.image_url)
+                ),
+                solution_comments_count=comment_counts_by_solution.get(own_solution.id, 0) if own_solution else 0,
             ))
         exam_id = topic_exam_map.get(topic.id)
         attempt_id = attempt_by_exam.get(exam_id) if exam_id else None
@@ -641,8 +796,186 @@ async def get_student_detail_full(user_id: int, db: AsyncSession = Depends(get_d
         last_active_at=user.last_active_at,
         total_solved=total_solved,
         total_tasks=len(all_tasks),
+        weekly_stats=weekly_stats,
         topics=topic_details,
     )
+
+
+def _comment_out(comment: UserTaskSolutionComment, reaction: str | None = None) -> TaskSolutionCommentOut:
+    return TaskSolutionCommentOut(
+        id=comment.id,
+        from_offset=comment.from_offset,
+        to_offset=comment.to_offset,
+        from_line=comment.from_line,
+        from_col=comment.from_col,
+        to_line=comment.to_line,
+        to_col=comment.to_col,
+        text=comment.text,
+        author_name=None,
+        reaction=reaction,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+    )
+
+
+def _comment_payload(comment: UserTaskSolutionComment) -> dict:
+    return {
+        "id": comment.id,
+        "from_offset": comment.from_offset,
+        "to_offset": comment.to_offset,
+        "from_line": comment.from_line,
+        "from_col": comment.from_col,
+        "to_line": comment.to_line,
+        "to_col": comment.to_col,
+        "text": comment.text,
+        "author_name": None,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        "updated_at": comment.updated_at.isoformat() if comment.updated_at else None,
+    }
+
+
+async def _get_student_task_solution_or_404(
+    user_id: int,
+    task_id: int,
+    db: AsyncSession,
+) -> tuple[User, Task, UserTaskSolution]:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    task = await db.get(Task, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    result = await db.execute(
+        select(UserTaskSolution).where(
+            UserTaskSolution.user_id == user_id,
+            UserTaskSolution.task_id == task_id,
+        )
+    )
+    solution = result.scalar_one_or_none()
+    if solution is None:
+        solution = UserTaskSolution(user_id=user_id, task_id=task_id)
+        db.add(solution)
+        await db.flush()
+    return user, task, solution
+
+
+@router.get("/students/{user_id}/tasks/{task_id}/solution-review", response_model=StudentTaskSolutionReviewOut)
+async def get_student_task_solution_review(
+    user_id: int,
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a student's attached solution and admin comments for one task."""
+    _, task, solution = await _get_student_task_solution_or_404(user_id, task_id, db)
+    comments_result = await db.execute(
+        select(UserTaskSolutionComment)
+        .where(UserTaskSolutionComment.solution_id == solution.id)
+        .order_by(UserTaskSolutionComment.from_line, UserTaskSolutionComment.from_col, UserTaskSolutionComment.id)
+    )
+    raw_comments = list(comments_result.scalars().all())
+    reaction_by_comment_id: dict[int, str] = {}
+    comment_ids = [comment.id for comment in raw_comments]
+    if comment_ids:
+        reactions_result = await db.execute(
+            select(UserTaskSolutionCommentReaction.comment_id, UserTaskSolutionCommentReaction.reaction).where(
+                UserTaskSolutionCommentReaction.user_id == user_id,
+                UserTaskSolutionCommentReaction.comment_id.in_(comment_ids),
+            )
+        )
+        reaction_by_comment_id = {comment_id: reaction for comment_id, reaction in reactions_result.all()}
+    comments = [_comment_out(comment, reaction_by_comment_id.get(comment.id)) for comment in raw_comments]
+    return StudentTaskSolutionReviewOut(
+        student_id=user_id,
+        task_id=task_id,
+        task_title=task.title,
+        ege_number=task.ege_number,
+        code=solution.code,
+        file_url=solution.file_url,
+        image_url=solution.image_url,
+        updated_at=solution.updated_at,
+        comments=comments,
+    )
+
+
+@router.post(
+    "/students/{user_id}/tasks/{task_id}/solution-comments",
+    response_model=TaskSolutionCommentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_student_task_solution_comment(
+    user_id: int,
+    task_id: int,
+    body: TaskSolutionCommentIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Attach an admin comment to a selected code range in a student's task solution."""
+    _, _, solution = await _get_student_task_solution_or_404(user_id, task_id, db)
+    comment = UserTaskSolutionComment(
+        solution_id=solution.id,
+        from_offset=body.from_offset,
+        to_offset=body.to_offset,
+        from_line=body.from_line,
+        from_col=body.from_col,
+        to_line=body.to_line,
+        to_col=body.to_col,
+        text=body.text.strip(),
+    )
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    await solution_comment_ws_manager.broadcast(
+        user_id,
+        task_id,
+        {"type": "comment_created", "comment": _comment_payload(comment)},
+    )
+    return _comment_out(comment)
+
+
+@router.put("/solution-comments/{comment_id}", response_model=TaskSolutionCommentOut)
+async def update_student_task_solution_comment(
+    comment_id: int,
+    body: TaskSolutionCommentIn,
+    db: AsyncSession = Depends(get_db),
+):
+    comment = await db.get(UserTaskSolutionComment, comment_id)
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    comment.from_line = body.from_line
+    comment.from_offset = body.from_offset
+    comment.to_offset = body.to_offset
+    comment.from_col = body.from_col
+    comment.to_line = body.to_line
+    comment.to_col = body.to_col
+    comment.text = body.text.strip()
+    await db.commit()
+    await db.refresh(comment)
+    solution = await db.get(UserTaskSolution, comment.solution_id)
+    if solution is not None:
+        await solution_comment_ws_manager.broadcast(
+            solution.user_id,
+            solution.task_id,
+            {"type": "comment_updated", "comment": _comment_payload(comment)},
+        )
+    return _comment_out(comment)
+
+
+@router.delete("/solution-comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student_task_solution_comment(
+    comment_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    comment = await db.get(UserTaskSolutionComment, comment_id)
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    solution = await db.get(UserTaskSolution, comment.solution_id)
+    await db.delete(comment)
+    await db.commit()
+    if solution is not None:
+        await solution_comment_ws_manager.broadcast(
+            solution.user_id,
+            solution.task_id,
+            {"type": "comment_deleted", "comment_id": comment_id},
+        )
 
 
 @router.delete("/students/{user_id}/topics/{topic_id}/progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -1020,7 +1353,7 @@ async def admin_analyze_attempt(attempt_id: int, db: AsyncSession = Depends(get_
 
 @router.get("/attempts/{attempt_id}/analyze")
 async def get_attempt_analysis(attempt_id: int, db: AsyncSession = Depends(get_db)):
-    """Return saved AI analysis for an attempt, or 404 if not yet generated."""
+    """Return saved publication metadata for an attempt, or 404 if none exists."""
     result = await db.execute(
         select(ExamAnalysis).where(ExamAnalysis.attempt_id == attempt_id)
     )
@@ -1041,13 +1374,18 @@ async def publish_attempt_analysis(
     body: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Save teacher comment and publish/unpublish analysis for a student."""
+    """Save teacher comment and publish/unpublish a student's result."""
+    attempt = await db.get(ExamAttempt, attempt_id)
+    if attempt is None or attempt.finished_at is None:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
     result = await db.execute(
         select(ExamAnalysis).where(ExamAnalysis.attempt_id == attempt_id)
     )
     rec = result.scalar_one_or_none()
     if rec is None:
-        raise HTTPException(status_code=404, detail="No analysis found — generate it first")
+        rec = ExamAnalysis(attempt_id=attempt_id, analysis_text="")
+        db.add(rec)
     rec.comment = body.get("comment", rec.comment)
     rec.is_published = bool(body.get("is_published", rec.is_published))
     await db.commit()

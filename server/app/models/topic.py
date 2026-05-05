@@ -17,13 +17,20 @@ class Topic(Base):
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ege_number_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
-    # ── Card image (stored in DB) ─────────────────────────────────
+    # ── Card image (stored in DB, used for uploaded backgrounds) ───
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, default=None)
     image_mime: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     # 'cover' (top, full-width) | 'left' | 'right' | 'background'
     image_position: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
     # height (cover) or side width (left/right) in px; ignored for background
     image_size: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+
+    # ── Character / background presets ────────────────────────────
+    # URL/path to character PNG (one of the presets in /character/)
+    character_url: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    # URL/path to background. Either a preset (/character/фон 1.png) or
+    # a self-hosted upload (/api/topics/{id}/image) — both work as <img src>.
+    background_url: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
 
     # relationships
     tasks = relationship(

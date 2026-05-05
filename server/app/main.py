@@ -15,6 +15,7 @@ from app.routers import admin, auth, content, exams, solving, stats
 logger = logging.getLogger(__name__)
 
 os.makedirs("uploads/exam_solutions", exist_ok=True)
+os.makedirs("uploads/task_solutions", exist_ok=True)
 os.makedirs("uploads/step_images", exist_ok=True)
 
 
@@ -26,6 +27,13 @@ async def lifespan(app: FastAPI):
         from app.database import engine
         from app.models import exam_analysis  # noqa: ensure model is registered
         from app.models import group as group_module  # noqa: ensure models are registered
+        from app.models import topic_seen  # noqa: ensure model is registered
+        from app.models import (
+            task_solution,
+            task_solution_comment,
+            task_solution_comment_read,
+            task_solution_comment_reaction,
+        )  # noqa: ensure models are registered
         async with engine.begin() as conn:
             await conn.run_sync(
                 lambda sync_conn: exam_analysis.ExamAnalysis.__table__.create(sync_conn, checkfirst=True)
@@ -36,7 +44,28 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(
                 lambda sync_conn: group_module.user_groups.create(sync_conn, checkfirst=True)
             )
-        logger.info("exam_analyses, groups, user_groups tables ensured.")
+            await conn.run_sync(
+                lambda sync_conn: topic_seen.UserTopicSeen.__table__.create(sync_conn, checkfirst=True)
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution.UserTaskSolution.__table__.create(sync_conn, checkfirst=True)
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution_comment.UserTaskSolutionComment.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution_comment_read.UserTaskSolutionCommentRead.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution_comment_reaction.UserTaskSolutionCommentReaction.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+        logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)
     yield

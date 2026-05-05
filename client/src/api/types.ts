@@ -62,9 +62,12 @@ export interface TopicNav {
     ege_number_end?: number | null;
     analysis_published?: boolean;
     draft_count?: number;
+    new_tasks_count?: number;
     has_image?: boolean;
     image_position?: TopicImagePosition | null;
     image_size?: number | null;
+    character_url?: string | null;
+    background_url?: string | null;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -102,6 +105,8 @@ export interface TaskOut {
     full_solution_code?: string | null;
     status?: ProgressStatus;
     sub_tasks?: SubTask[] | null;
+    has_own_solution?: boolean;
+    solution_comments_count?: number;
 }
 
 /* ── Answers ───────────────────────────────────────── */
@@ -231,6 +236,8 @@ export interface TopicAdmin {
     has_image?: boolean;
     image_position?: TopicImagePosition | null;
     image_size?: number | null;
+    character_url?: string | null;
+    background_url?: string | null;
 }
 
 export interface AdminSubTask {
@@ -268,6 +275,8 @@ export interface TopicIn {
     ege_number_end?: number | null;
     image_position?: TopicImagePosition | null;
     image_size?: number | null;
+    character_url?: string | null;
+    background_url?: string | null;
 }
 
 export interface ImportVariantIn {
@@ -332,6 +341,66 @@ export interface StudentTaskResult {
     order_index: number;
     status: "solved" | "failed" | "not_started";
     attempts_count: number;
+    has_own_solution: boolean;
+    solution_comments_count: number;
+}
+
+export interface TaskSolutionComment {
+    id: number;
+    from_offset?: number | null;
+    to_offset?: number | null;
+    from_line: number;
+    from_col: number;
+    to_line: number;
+    to_col: number;
+    text: string;
+    author_name?: string | null;
+    created_at: string;
+    updated_at?: string;
+    reaction?: "fixed" | "need_help" | null;
+}
+
+export interface SolutionCommentNotification {
+    id: number;
+    task_id: number;
+    topic_id: number;
+    topic_category: string;
+    topic_title: string;
+    task_title?: string | null;
+    task_order_index: number;
+    ege_number?: number | null;
+    text: string;
+    from_line: number;
+    to_line: number;
+    created_at?: string | null;
+    updated_at?: string | null;
+    is_read?: boolean;
+}
+
+export interface AdminHelpNotification {
+    id: number;
+    comment_id: number;
+    student_id: number;
+    student_name: string;
+    task_id: number;
+    task_order_index: number;
+    ege_number?: number | null;
+    topic_id: number;
+    topic_title: string;
+    text: string;
+    updated_at?: string | null;
+}
+
+export interface StudentTaskSolutionReview {
+    student_id: number;
+    task_id: number;
+    task_title: string | null;
+    ege_number: number | null;
+    code: string | null;
+    file_url: string | null;
+    image_url: string | null;
+    updated_at: string | null;
+    comments: TaskSolutionComment[];
 }
 
 export interface StudentTopicDetail {
@@ -343,6 +412,21 @@ export interface StudentTopicDetail {
     tasks: StudentTaskResult[];
 }
 
+export interface StudentWeeklyEgeStat {
+    ege_number: number | null;
+    total: number;
+    correct: number;
+    incorrect: number;
+    accuracy: number;
+}
+
+export interface StudentWeeklyStats {
+    total: number;
+    correct: number;
+    incorrect: number;
+    ege_numbers: StudentWeeklyEgeStat[];
+}
+
 export interface StudentDetailOut {
     id: number;
     name: string;
@@ -352,6 +436,7 @@ export interface StudentDetailOut {
     last_active_at: string;
     total_solved: number;
     total_tasks: number;
+    weekly_stats: StudentWeeklyStats;
     topics: StudentTopicDetail[];
 }
 

@@ -15,6 +15,8 @@ import type {
     TopicsPerformance,
     RecentSolutions,
     SolutionStep,
+    SolutionCommentNotification,
+    AdminHelpNotification,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -144,6 +146,38 @@ export function useRecentSolutions(limit: number = 10) {
 }
 
 /* ── AI Step Generation ───────────────────────────────── */
+export function useSolutionCommentNotifications(enabled: boolean = true) {
+    return useQuery<SolutionCommentNotification[]>({
+        queryKey: ["solution-comment-notifications"],
+        queryFn: () => api<SolutionCommentNotification[]>("/tasks/solution-comments/notifications"),
+        enabled,
+        refetchInterval: 30000,
+    });
+}
+
+export function useAdminHelpNotifications(enabled: boolean = true) {
+    return useQuery<AdminHelpNotification[]>({
+        queryKey: ["admin-help-notifications"],
+        queryFn: () => api<AdminHelpNotification[]>("/admin/help-notifications"),
+        enabled,
+        refetchInterval: 30000,
+    });
+}
+
+export function useMarkSolutionCommentNotificationsRead() {
+    const qc = useQueryClient();
+    return useMutation<{ ok: boolean; read_count: number }, Error, { comment_ids?: number[] }>({
+        mutationFn: (body) =>
+            api<{ ok: boolean; read_count: number }>("/tasks/solution-comments/notifications/read", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["solution-comment-notifications"] });
+        },
+    });
+}
+
 export function useGenerateSteps() {
     return useMutation<{ steps: SolutionStep[]; examples_used: number }, Error, number>({
         mutationFn: async (taskId: number) => {

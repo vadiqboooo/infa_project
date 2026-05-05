@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
     Users,
     BookOpen,
@@ -13,7 +13,7 @@ import {
     ShieldAlert
 } from "lucide-react";
 import { clsx } from "clsx";
-import { Routes, Route, useNavigate, useParams } from "react-router-dom";
+import { Routes, Route, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
     ImportVariantResult,
@@ -38,6 +38,28 @@ import "./AdminPage.css";
 import { handleSessionExpired } from "../api/client";
 
 const API_BASE = "/api";
+const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
+
+type AdminDashboardState = {
+    activeTab?: 'topics' | 'students';
+    search?: string;
+    filter?: FilterCategory;
+    topicsScrollTop?: number;
+    studentsScrollTop?: number;
+};
+
+function readAdminDashboardState(): AdminDashboardState {
+    try {
+        return JSON.parse(sessionStorage.getItem(ADMIN_DASHBOARD_STATE_KEY) || "{}");
+    } catch {
+        return {};
+    }
+}
+
+function saveAdminDashboardState(patch: AdminDashboardState) {
+    const next = { ...readAdminDashboardState(), ...patch };
+    sessionStorage.setItem(ADMIN_DASHBOARD_STATE_KEY, JSON.stringify(next));
+}
 
 function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem("jwt_token");
@@ -196,14 +218,18 @@ export default function AdminPage() {
 }
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
-    const [activeTab, setActiveTab] = useState<'topics' | 'students'>('topics');
+    const savedState = readAdminDashboardState();
+    const [activeTab, setActiveTab] = useState<'topics' | 'students'>(savedState.activeTab ?? 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(savedState.search ?? "");
     const [filter, setFilter] = useState<FilterCategory>("все");
     const [showImport, setShowImport] = useState(false);
+    const topicsScrollRef = useRef<HTMLDivElement | null>(null);
+    const studentsScrollRef = useRef<HTMLDivElement | null>(null);
+    const filterRestoredRef = useRef(!savedState.filter);
 
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -228,6 +254,18 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        if (savedState.filter) setFilter(savedState.filter);
+    }, []);
+
+    useEffect(() => {
+        if (!filterRestoredRef.current) {
+            if (filter !== savedState.filter) return;
+            filterRestoredRef.current = true;
+        }
+        saveAdminDashboardState({ activeTab, search, filter });
+    }, [activeTab, search, filter]);
+
     const filteredTopics = useMemo(() => {
         return topics.filter(t => {
             const matchesFilter = filter === 'все' || t.category === filter;
@@ -235,6 +273,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             return matchesFilter && matchesSearch;
         });
     }, [topics, filter, search]);
+
+    useEffect(() => {
+        if (loading) return;
+        const state = readAdminDashboardState();
+        const scrollTop = activeTab === 'students' ? state.studentsScrollTop : state.topicsScrollTop;
+        requestAnimationFrame(() => {
+            const target = activeTab === 'students' ? studentsScrollRef.current : topicsScrollRef.current;
+            if (target && scrollTop != null) target.scrollTop = scrollTop;
+        });
+    }, [activeTab, loading, students.length, filteredTopics.length]);
 
     const handleCreateTopic = async () => {
         const title = prompt("Введите название новой темы");
@@ -406,7 +454,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     </div>
 
                     {/* Topics Table */}
-                    <div className="flex-1 overflow-y-auto">
+                    <div
+                        ref={topicsScrollRef}
+                        onScroll={(e) => saveAdminDashboardState({ topicsScrollTop: e.currentTarget.scrollTop })}
+                        className="flex-1 overflow-y-auto"
+                    >
                         <div className="border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -492,13 +544,19 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     </div>
                 </div>
             ) : (
-                <StudentsTable
-                    students={students}
-                    groups={groups}
-                    apiKey={apiKey}
-                    onRefresh={loadData}
-                    onViewStudent={(id) => navigate(`students/${id}`)}
-                />
+                <div
+                    ref={studentsScrollRef}
+                    onScroll={(e) => saveAdminDashboardState({ studentsScrollTop: e.currentTarget.scrollTop })}
+                    className="flex-1 overflow-y-auto"
+                >
+                    <StudentsTable
+                        students={students}
+                        groups={groups}
+                        apiKey={apiKey}
+                        onRefresh={loadData}
+                        onViewStudent={(id) => navigate(`students/${id}`)}
+                    />
+                </div>
             )}
 
             {showImport && (
@@ -516,6 +574,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
 function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [student, setStudent] = useState<StudentDetailOut | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -538,6 +597,7 @@ function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
                     onBack={() => navigate("/admin")}
                     onViewTopicStats={(topicId) => navigate(`/admin/topics/${topicId}/stats`)}
                     apiKey={apiKey}
+                    initialReviewTaskId={Number(searchParams.get("reviewTask")) || undefined}
                 />
             </div>
         </div>
@@ -628,6 +688,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             ege_number_end: data.ege_number_end !== undefined ? data.ege_number_end : topic.ege_number_end ?? null,
             image_position: data.image_position !== undefined ? data.image_position : topic.image_position ?? null,
             image_size: data.image_size !== undefined ? data.image_size : topic.image_size ?? null,
+            character_url: data.character_url !== undefined ? data.character_url : topic.character_url ?? null,
+            background_url: data.background_url !== undefined ? data.background_url : topic.background_url ?? null,
         };
         await adminFetch(`/admin/topics/${topic.id}`, apiKey, {
             method: "PUT",

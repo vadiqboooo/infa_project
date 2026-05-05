@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, Sparkles, X, Loader2, ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, X, Loader2, ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { clsx } from "clsx";
 import type { TopicStatsOut, GroupOut, TopicStatsStudentRow, TopicStatsTaskInfo } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
@@ -506,10 +506,10 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                                     studentName: student.student_name,
                                                                     attemptId: student.attempt_id!,
                                                                 })}
-                                                                title="Анализ ИИ"
-                                                                className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+                                                                title="Проверка и публикация"
+                                                                className="p-1.5 rounded-lg text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-all"
                                                             >
-                                                                <Sparkles size={14} />
+                                                                <FileText size={14} />
                                                             </button>
                                                         )}
                                                         <button

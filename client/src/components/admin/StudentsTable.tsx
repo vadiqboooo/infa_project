@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Search, ChevronDown, ChevronUp, ExternalLink, Shield, User as UserIcon,
+  Search, ChevronDown, ChevronUp, Shield, User as UserIcon,
   Plus, Pencil, Trash2, X, Check, Users, Printer, KeyRound, RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -15,6 +15,27 @@ interface StudentsTableProps {
 }
 
 const API_BASE = "/api";
+const STUDENTS_TABLE_STATE_KEY = "admin_students_table_state";
+
+type StudentsTableState = {
+  search?: string;
+  sortBy?: 'progress' | 'name';
+  expandedId?: number | null;
+  groupFilter?: number | null;
+};
+
+function readStudentsTableState(): StudentsTableState {
+  try {
+    return JSON.parse(sessionStorage.getItem(STUDENTS_TABLE_STATE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveStudentsTableState(patch: StudentsTableState) {
+  const next = { ...readStudentsTableState(), ...patch };
+  sessionStorage.setItem(STUDENTS_TABLE_STATE_KEY, JSON.stringify(next));
+}
 
 function authHeaders(apiKey?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -25,11 +46,12 @@ function authHeaders(apiKey?: string): Record<string, string> {
 }
 
 export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStudent }: StudentsTableProps) {
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'progress' | 'name'>('progress');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const savedState = readStudentsTableState();
+  const [search, setSearch] = useState(savedState.search ?? '');
+  const [sortBy, setSortBy] = useState<'progress' | 'name'>(savedState.sortBy ?? 'progress');
+  const [expandedId, setExpandedId] = useState<number | null>(savedState.expandedId ?? null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
-  const [groupFilter, setGroupFilter] = useState<number | null>(null);
+  const [groupFilter, setGroupFilter] = useState<number | null>(savedState.groupFilter ?? null);
 
   // Group management state
   const [showGroupPanel, setShowGroupPanel] = useState(false);
@@ -39,6 +61,10 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupColor, setEditGroupColor] = useState('');
   const [openAssignFor, setOpenAssignFor] = useState<number | null>(null);
+
+  useEffect(() => {
+    saveStudentsTableState({ search, sortBy, expandedId, groupFilter });
+  }, [search, sortBy, expandedId, groupFilter]);
 
   // Create student state
   const [showCreateStudent, setShowCreateStudent] = useState(false);
@@ -457,7 +483,14 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
 
               return (
                 <React.Fragment key={student.id}>
-                  <tr className={clsx('group transition-colors hover:bg-gray-50/50', isExpanded && 'bg-emerald-50/30')}>
+                  <tr
+                    onClick={() => onViewStudent?.(student.id)}
+                    className={clsx(
+                      'group transition-colors hover:bg-gray-50/50',
+                      onViewStudent && 'cursor-pointer',
+                      isExpanded && 'bg-emerald-50/30'
+                    )}
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="relative shrink-0">
@@ -495,7 +528,10 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                             {groups.length > 0 && (
                               <div className="relative">
                                 <button
-                                  onClick={() => setOpenAssignFor(isAssignOpen ? null : student.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenAssignFor(isAssignOpen ? null : student.id);
+                                  }}
                                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-dashed border-gray-300 text-gray-400 hover:border-[#3F8C62] hover:text-[#3F8C62] transition-colors leading-none"
                                   title="Управление группами"
                                 >
@@ -503,7 +539,10 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                                 </button>
                                 {isAssignOpen && (
                                   <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setOpenAssignFor(null)} />
+                                    <div className="fixed inset-0 z-10" onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenAssignFor(null);
+                                    }} />
                                     <div className="absolute left-0 top-full mt-1 z-20 bg-white rounded-xl border border-gray-200 shadow-xl p-2 min-w-[160px]">
                                       <p className="text-[10px] font-black text-gray-400 uppercase px-2 pb-1.5">Группы</p>
                                       {groups.map((g) => {
@@ -511,7 +550,10 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                                         return (
                                           <button
                                             key={g.id}
-                                            onClick={() => toggleStudentGroup(student.id, g.id, inGroup)}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleStudentGroup(student.id, g.id, inGroup);
+                                            }}
                                             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-left"
                                           >
                                             <div className={clsx('w-4 h-4 rounded flex items-center justify-center border-2 transition-all')}
@@ -533,7 +575,7 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="relative">
+                      <div className="relative" onClick={(e) => e.stopPropagation()}>
                         <select
                           value={student.role}
                           disabled={updatingId === student.id}
@@ -582,17 +624,9 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
 
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
-                        {onViewStudent && (
-                          <button
-                            onClick={() => onViewStudent(student.id)}
-                            title="Подробнее"
-                            className="p-1.5 rounded-lg text-gray-400 hover:bg-[#3F8C62]/10 hover:text-[#3F8C62] transition-all"
-                          >
-                            <ExternalLink size={15} />
-                          </button>
-                        )}
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSetCredsFor({ id: student.id, name: student.name, login: student.login });
                             setSetCredsLogin(student.login || '');
                             setSetCredsPassword('');
@@ -605,7 +639,10 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
                           <KeyRound size={15} />
                         </button>
                         <button
-                          onClick={() => setExpandedId(isExpanded ? null : student.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedId(isExpanded ? null : student.id);
+                          }}
                           className={clsx('p-1.5 rounded-lg transition-all', isExpanded ? 'bg-emerald-100 text-emerald-700' : 'text-gray-400 hover:bg-gray-100')}
                         >
                           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

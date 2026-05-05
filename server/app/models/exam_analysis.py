@@ -1,4 +1,4 @@
-"""ExamAnalysis — persisted AI analysis for a finished exam attempt."""
+"""ExamAnalysis — persisted teacher publication data for a finished exam attempt."""
 
 from datetime import datetime
 

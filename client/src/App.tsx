@@ -4,12 +4,14 @@ import { useAuth, AuthProvider } from "./context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
 import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import { HomePage } from "./pages/HomePage";
 import TasksPage from "./pages/TasksPage";
 import { TasksListPage } from "./pages/TasksListPage";
 import ExamsListPage from "./pages/ExamsListPage";
 import ExamPage from "./pages/ExamPage";
 import AdminPage from "./pages/AdminPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -30,6 +32,7 @@ const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
   { pattern: /^\/tasks\/\d+/, title: "Разбор" },
   { pattern: /^\/tasks/, title: "Разбор" },
   { pattern: /^\/admin/, title: "Админ" },
+  { pattern: /^\/notifications/, title: "Уведомления" },
   { pattern: /^\/$|^\/dashboard/, title: "Главная" },
 ];
 
@@ -44,7 +47,7 @@ function PageTitle() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loggedIn } = useAuth();
-  return loggedIn ? <>{children}</> : <Navigate to="/login" />;
+  return loggedIn ? <>{children}</> : <LandingPage />;
 }
 
 export default function App() {
@@ -72,6 +75,7 @@ export default function App() {
               <Route path="tasks/:id" element={<TasksPage />} />
               <Route path="homework" element={<TasksListPage />} />
               <Route path="homework/:id" element={<TasksPage />} />
+              <Route path="notifications" element={<NotificationsPage />} />
               <Route path="admin/*" element={<AdminPage />} />
             </Route>
 

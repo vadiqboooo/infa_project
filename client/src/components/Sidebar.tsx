@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, BookOpen, ClipboardList, FileText, GraduationCap, Settings, ShieldCheck, LogOut } from 'lucide-react';
+import { Home, BookOpen, FileText, GraduationCap, Settings, ShieldCheck, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ProfileModal } from './ProfileModal';
+import { NotificationsHoverCard } from './NotificationsHoverCard';
 import { useAuth } from '../context/AuthContext';
 
 export function Sidebar() {
@@ -59,7 +60,7 @@ export function Sidebar() {
                 )}
               >
                 <link.icon size={18} />
-                <span>{link.label}</span>
+                <span className="flex-1">{link.label}</span>
               </Link>
             );
           })}
@@ -86,37 +87,44 @@ export function Sidebar() {
 
         {/* User card */}
         <div className="p-3 space-y-2">
-          <div
-            onClick={() => setShowProfile(true)}
-            className={clsx(
-              'flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors cursor-pointer group',
-              showProfile
-                ? 'bg-[#3F8C62]/10 ring-1 ring-[#3F8C62]/20'
-                : 'bg-gray-50 hover:bg-gray-100'
-            )}
-          >
-            <div className="relative shrink-0">
-              {user?.photo_url ? (
-                <img src={user.photo_url} alt={user.first_name || ''} className="w-10 h-10 rounded-full object-cover" />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3F8C62] to-[#2D6B4A] flex items-center justify-center text-white text-sm font-bold">
-                  {user?.first_name?.charAt(0) || 'U'}
-                </div>
-              )}
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>
-              <p className="text-[11px] text-[#3F8C62] truncate leading-tight">Онлайн</p>
-            </div>
-            <Settings
-              size={16}
+          <div className="flex items-stretch gap-2">
+            <div
+              onClick={() => setShowProfile(true)}
               className={clsx(
-                'transition-colors shrink-0',
+                'flex min-w-0 flex-1 items-center gap-3 px-3 py-3 rounded-2xl transition-colors cursor-pointer group',
                 showProfile
-                  ? 'text-[#3F8C62]'
-                  : 'text-gray-300 group-hover:text-gray-500'
+                  ? 'bg-[#3F8C62]/10 ring-1 ring-[#3F8C62]/20'
+                  : 'bg-gray-50 hover:bg-gray-100'
               )}
+            >
+              <div className="relative shrink-0">
+                {user?.photo_url ? (
+                  <img src={user.photo_url} alt={user.first_name || ''} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3F8C62] to-[#2D6B4A] flex items-center justify-center text-white text-sm font-bold">
+                    {user?.first_name?.charAt(0) || 'U'}
+                  </div>
+                )}
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>
+                <p className="text-[11px] text-[#3F8C62] truncate leading-tight">Онлайн</p>
+              </div>
+              <Settings
+                size={16}
+                className={clsx(
+                  'transition-colors shrink-0',
+                  showProfile
+                    ? 'text-[#3F8C62]'
+                    : 'text-gray-300 group-hover:text-gray-500'
+                )}
+              />
+            </div>
+            <NotificationsHoverCard
+              side="right"
+              align="end"
+              triggerClassName="h-auto w-12 shrink-0 bg-gray-50"
             />
           </div>
 

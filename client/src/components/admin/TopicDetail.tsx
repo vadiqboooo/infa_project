@@ -5,6 +5,7 @@ import { python } from '@codemirror/lang-python';
 import { githubLight } from '@uiw/codemirror-theme-github';
 import {
   ArrowLeft,
+  ArrowRight,
   Save,
   Plus,
   Pencil,
@@ -26,7 +27,27 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
+  User,
+  Image as ImagePic,
+  Check,
 } from 'lucide-react';
+
+// ── Пресеты персонажей и фонов из /public/character/ ───────────────────────
+const CHARACTER_PRESETS: { url: string; label: string }[] = [
+  {
+    url: '/character/cute-astronaut-blowing-gum-with-hoodie-cartoon-vector-icon-illustration-science-fashion-isolated.png',
+    label: 'Жвачник',
+  },
+  {
+    url: '/character/cute-astronaut-dancing-cartoon-vector-icon-illustration-science-technology-icon-concept-isolated.png',
+    label: 'Танцор',
+  },
+];
+
+const BACKGROUND_PRESETS: { url: string; label: string }[] = [
+  { url: '/character/фон 1.png', label: 'Фон 1' },
+  { url: '/character/фон 2.png', label: 'Фон 2' },
+];
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
@@ -117,6 +138,8 @@ export function TopicDetail({
     return headers;
   };
 
+  const uploadedBgUrl = `/api/topics/${topic.id}/image`;
+
   const handleImageUpload = async (file: File) => {
     if (!file) return;
     if (file.size > 4 * 1024 * 1024) {
@@ -134,12 +157,13 @@ export function TopicDetail({
         const t = await res.text();
         throw new Error(t || 'Не удалось загрузить картинку');
       }
-      // Default position/size if missing — reflect locally + persist via parent
+      // Backend выставляет background_url на uploadedBgUrl — отражаем локально
       const updated: Partial<TopicAdmin> = {
         ...editingTopic,
         has_image: true,
         image_position: editingTopic.image_position ?? 'cover',
         image_size: editingTopic.image_size ?? 120,
+        background_url: uploadedBgUrl,
       };
       setEditingTopic(updated as TopicAdmin);
       setImageCacheBust(Date.now());
@@ -152,14 +176,19 @@ export function TopicDetail({
   };
 
   const handleImageDelete = async () => {
-    if (!confirm('Удалить картинку карточки?')) return;
+    if (!confirm('Удалить загруженный фон?')) return;
     setImageBusy(true);
     try {
       const res = await fetch(`/api/admin/topics/${topic.id}/image`, {
         method: 'DELETE', headers: buildAuthHeaders(),
       });
       if (!res.ok) throw new Error('Не удалось удалить картинку');
-      const updated: Partial<TopicAdmin> = { ...editingTopic, has_image: false };
+      const updated: Partial<TopicAdmin> = {
+        ...editingTopic,
+        has_image: false,
+        // Сбрасываем background_url только если он указывал на upload — пресет, если стоял, не трогаем
+        background_url: editingTopic.background_url === uploadedBgUrl ? null : editingTopic.background_url,
+      };
       setEditingTopic(updated as TopicAdmin);
       setImageCacheBust(Date.now());
       onSaveTopic(updated);
@@ -170,19 +199,16 @@ export function TopicDetail({
     }
   };
 
-  const handleImagePositionChange = (pos: 'cover' | 'left' | 'right' | 'background') => {
-    const updated: Partial<TopicAdmin> = { ...editingTopic, image_position: pos };
+  const handleSelectCharacter = (url: string | null) => {
+    const updated: Partial<TopicAdmin> = { ...editingTopic, character_url: url };
     setEditingTopic(updated as TopicAdmin);
     onSaveTopic(updated);
   };
 
-  const handleImageSizeChange = (size: number) => {
-    const updated: Partial<TopicAdmin> = { ...editingTopic, image_size: size };
+  const handleSelectBackground = (url: string | null) => {
+    const updated: Partial<TopicAdmin> = { ...editingTopic, background_url: url };
     setEditingTopic(updated as TopicAdmin);
-  };
-
-  const handleImageSizeCommit = () => {
-    onSaveTopic(editingTopic);
+    onSaveTopic(updated);
   };
 
   const filteredTasks = useMemo(() => {
@@ -420,27 +446,123 @@ export function TopicDetail({
         </div>
       </div>
 
-      {/* Card image management */}
+      {/* Card visuals: preview + character picker + background picker */}
       <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
-        <div className="flex items-start gap-4">
-          {/* Preview */}
+        <div className="flex items-start gap-6 flex-wrap">
+          {/* Live card preview */}
           <div className="shrink-0">
-            {editingTopic.has_image ? (
-              <img
-                src={`/api/topics/${topic.id}/image?v=${imageCacheBust}`}
-                alt="card"
-                className="w-24 h-24 object-cover rounded-xl border border-gray-200 bg-white"
-              />
-            ) : (
-              <div className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 bg-white flex flex-col items-center justify-center text-gray-300">
-                <ImageIcon size={20} />
-                <span className="text-[9px] mt-1 font-bold uppercase">Нет</span>
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+              Превью карточки
+            </div>
+            <div className="w-[260px] rounded-2xl overflow-hidden bg-white border border-gray-200 shadow-sm">
+              <div className="relative w-full h-[140px] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+                {editingTopic.background_url ? (
+                  <img
+                    src={
+                      editingTopic.background_url.startsWith('/api/')
+                        ? `${editingTopic.background_url}?v=${imageCacheBust}`
+                        : editingTopic.background_url
+                    }
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-1">
+                    <ImageIcon size={32} />
+                    <span className="text-[9px] font-bold uppercase tracking-wider">Нет фона</span>
+                  </div>
+                )}
+                {/* Character overlay */}
+                {editingTopic.character_url && (
+                  <img
+                    src={editingTopic.character_url}
+                    alt=""
+                    className="absolute bottom-1 left-2 w-[58px] h-[58px] object-contain pointer-events-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.35)]"
+                  />
+                )}
+                {/* Number badge */}
+                {topic.ege_number != null && (
+                  <div className="absolute top-1 right-2 leading-none pointer-events-none">
+                    <span className="block text-[34px] font-extrabold text-white tabular-nums tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.55)]">
+                      {topic.ege_number_end != null && topic.ege_number_end > topic.ege_number
+                        ? `${topic.ege_number}-${topic.ege_number_end}`
+                        : (topic.ege_number < 10 ? `0${topic.ege_number}` : topic.ege_number)}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+              <div className="p-3 space-y-2.5">
+                <div className="text-[13px] font-bold text-gray-900 line-clamp-2 min-h-[34px]">
+                  {topic.title || 'Название темы'}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '40%' }} />
+                  </div>
+                  <span className="text-[10px] font-bold text-gray-700 tabular-nums">40%</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-gray-400 font-medium">X / Y выполнено</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold">
+                    Перейти
+                    <ArrowRight size={10} />
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          {/* Controls */}
-          <div className="flex-1 min-w-0 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Pickers */}
+          <div className="flex-1 min-w-[260px] space-y-5 pt-1">
+            {/* ── Character picker ── */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <User size={13} className="text-gray-400" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Персонаж</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {CHARACTER_PRESETS.map((p) => {
+                  const active = editingTopic.character_url === p.url;
+                  return (
+                    <button
+                      key={p.url}
+                      onClick={() => handleSelectCharacter(p.url)}
+                      title={p.label}
+                      className={clsx(
+                        'relative w-16 h-16 rounded-xl bg-white border-2 flex items-center justify-center overflow-hidden transition-all',
+                        active
+                          ? 'border-[#3F8C62] shadow-md shadow-[#3F8C62]/20'
+                          : 'border-gray-200 hover:border-gray-300'
+                      )}
+                    >
+                      <img src={p.url} alt={p.label} className="w-full h-full object-contain p-1" />
+                      {active && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-[#3F8C62] text-white flex items-center justify-center">
+                          <Check size={10} />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+                {editingTopic.character_url && (
+                  <button
+                    onClick={() => handleSelectCharacter(null)}
+                    className="w-16 h-16 rounded-xl bg-white border-2 border-dashed border-gray-200 hover:border-red-300 hover:text-red-500 text-gray-400 flex flex-col items-center justify-center gap-0.5 transition-colors"
+                    title="Без персонажа"
+                  >
+                    <X size={14} />
+                    <span className="text-[8px] font-bold uppercase">Снять</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ── Background picker ── */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <ImagePic size={13} className="text-gray-400" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Фон</span>
+              </div>
               <input
                 ref={imageInputRef}
                 type="file"
@@ -452,76 +574,86 @@ export function TopicDetail({
                   e.target.value = '';
                 }}
               />
-              <button
-                onClick={() => imageInputRef.current?.click()}
-                disabled={imageBusy}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
-              >
-                {imageBusy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                {editingTopic.has_image ? 'Заменить' : 'Загрузить картинку'}
-              </button>
-              {editingTopic.has_image && (
-                <button
-                  onClick={handleImageDelete}
-                  disabled={imageBusy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-red-50 text-red-500 border border-red-200 rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
-                >
-                  <Trash2 size={12} /> Удалить
-                </button>
-              )}
-              <span className="text-[10px] text-gray-400 font-medium">PNG/JPG/WebP, до 4 МБ</span>
-            </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {BACKGROUND_PRESETS.map((p) => {
+                  const active = editingTopic.background_url === p.url;
+                  return (
+                    <button
+                      key={p.url}
+                      onClick={() => handleSelectBackground(p.url)}
+                      title={p.label}
+                      className={clsx(
+                        'relative w-20 h-14 rounded-xl bg-white border-2 overflow-hidden transition-all',
+                        active
+                          ? 'border-[#3F8C62] shadow-md shadow-[#3F8C62]/20'
+                          : 'border-gray-200 hover:border-gray-300'
+                      )}
+                    >
+                      <img src={p.url} alt={p.label} className="w-full h-full object-cover" />
+                      {active && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-[#3F8C62] text-white flex items-center justify-center">
+                          <Check size={10} />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
 
-            {editingTopic.has_image && (
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Position */}
-                <div className="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-lg">
-                  {([
-                    { val: 'cover', label: 'Сверху' },
-                    { val: 'left', label: 'Слева' },
-                    { val: 'right', label: 'Справа' },
-                    { val: 'background', label: 'Фоном' },
-                  ] as const).map(opt => {
-                    const active = (editingTopic.image_position ?? 'cover') === opt.val;
-                    return (
-                      <button
-                        key={opt.val}
-                        onClick={() => handleImagePositionChange(opt.val)}
-                        disabled={imageBusy}
-                        className={clsx(
-                          'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors',
-                          active ? 'bg-[#3F8C62] text-white' : 'text-gray-600 hover:bg-gray-100',
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Size slider — disabled for background */}
-                {(editingTopic.image_position ?? 'cover') !== 'background' && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">
-                      {(editingTopic.image_position ?? 'cover') === 'cover' ? 'Высота' : 'Ширина'}
-                    </span>
-                    <input
-                      type="range"
-                      min={(editingTopic.image_position ?? 'cover') === 'cover' ? 60 : 60}
-                      max={(editingTopic.image_position ?? 'cover') === 'cover' ? 260 : 220}
-                      value={editingTopic.image_size ?? 120}
-                      onChange={(e) => handleImageSizeChange(parseInt(e.target.value))}
-                      onMouseUp={handleImageSizeCommit}
-                      onTouchEnd={handleImageSizeCommit}
-                      className="w-32 accent-[#3F8C62]"
+                {/* Uploaded background tile (если background_url указывает на upload) */}
+                {editingTopic.has_image && editingTopic.background_url === uploadedBgUrl && (
+                  <div
+                    className="relative w-20 h-14 rounded-xl bg-white border-2 border-[#3F8C62] shadow-md shadow-[#3F8C62]/20 overflow-hidden"
+                    title="Свой фон"
+                  >
+                    <img
+                      src={`${uploadedBgUrl}?v=${imageCacheBust}`}
+                      alt=""
+                      className="w-full h-full object-cover"
                     />
-                    <span className="text-xs font-bold text-gray-700 tabular-nums w-10 text-right">
-                      {editingTopic.image_size ?? 120}px
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-[#3F8C62] text-white flex items-center justify-center">
+                      <Check size={10} />
                     </span>
                   </div>
                 )}
+
+                {/* Upload tile */}
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={imageBusy}
+                  className="w-20 h-14 rounded-xl bg-white border-2 border-dashed border-gray-200 hover:border-[#3F8C62] hover:text-[#3F8C62] text-gray-400 flex flex-col items-center justify-center gap-0.5 transition-colors disabled:opacity-60"
+                  title="Загрузить свой фон"
+                >
+                  {imageBusy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span className="text-[8px] font-bold uppercase">Загрузить</span>
+                </button>
+
+                {/* Clear / delete buttons */}
+                {editingTopic.background_url && editingTopic.background_url !== uploadedBgUrl && (
+                  <button
+                    onClick={() => handleSelectBackground(null)}
+                    className="w-20 h-14 rounded-xl bg-white border-2 border-dashed border-gray-200 hover:border-red-300 hover:text-red-500 text-gray-400 flex flex-col items-center justify-center gap-0.5 transition-colors"
+                    title="Без фона"
+                  >
+                    <X size={14} />
+                    <span className="text-[8px] font-bold uppercase">Снять</span>
+                  </button>
+                )}
+                {editingTopic.has_image && (
+                  <button
+                    onClick={handleImageDelete}
+                    disabled={imageBusy}
+                    className="w-20 h-14 rounded-xl bg-white border-2 border-red-200 hover:bg-red-50 text-red-500 flex flex-col items-center justify-center gap-0.5 transition-colors disabled:opacity-60"
+                    title="Удалить загруженный файл"
+                  >
+                    <Trash2 size={14} />
+                    <span className="text-[8px] font-bold uppercase">Удалить</span>
+                  </button>
+                )}
               </div>
-            )}
+              <div className="text-[10px] text-gray-400 font-medium leading-relaxed mt-2">
+                Можно выбрать готовый фон или загрузить свой. PNG / JPG / WebP, до 4 МБ.
+              </div>
+            </div>
           </div>
         </div>
       </div>

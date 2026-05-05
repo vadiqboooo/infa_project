@@ -10,21 +10,22 @@ input[type=number] {
   -moz-appearance: textfield;
 }
 
-/* Base input style: solid black bottom border */
+/* Base input style */
 .input {
     background: transparent;
     border: none;
-    border-bottom: 2px solid #000000;
+    border-bottom: 2px solid #243228;
     border-radius: 0;
     outline: none;
     transition: all 0.2s ease;
     padding: var(--sp-2) 0;
-    color: #000000;
-    font-weight: 500;
+    color: #16231a;
+    font-weight: 700;
 }
 
 .input:focus {
-    border-bottom-color: var(--clr-primary, #3F8C62);
+    border-bottom-color: #4e8c5a;
+    box-shadow: 0 8px 14px -14px rgba(78, 140, 90, 0.65);
 }
 
 /* Separator between inputs in a row */
@@ -32,7 +33,7 @@ input[type=number] {
     display: flex;
     align-items: flex-end;
     padding-bottom: var(--sp-2);
-    color: #000000;
+    color: #4e8c5a;
     font-weight: bold;
     opacity: 0.3;
     font-size: 1.2rem;
@@ -82,7 +83,7 @@ input[type=number] {
 .table-input {
     background: transparent;
     border: none;
-    border-bottom: 2px solid #000000 !important;
+    border-bottom: 2px solid #243228 !important;
     border-radius: 0 !important;
     outline: none;
     transition: all 0.2s ease;
@@ -94,7 +95,7 @@ input[type=number] {
 }
 
 .table-input:focus {
-    border-bottom-color: var(--clr-primary, #3F8C62) !important;
+    border-bottom-color: #4e8c5a !important;
 }
 
 /* Task 27 specific styles */
@@ -115,7 +116,7 @@ input[type=number] {
 .task-27-label {
     font-size: 10px;
     font-weight: 800;
-    color: #000000;
+    color: #526052;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 2px;

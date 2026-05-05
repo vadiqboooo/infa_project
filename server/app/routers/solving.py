@@ -1,23 +1,85 @@
 """Solving router — answer checking & AI-assisted hints."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect, status
+from jose import JWTError, jwt
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user, get_db
 from app.models.ai_chat_log import AIChatLog
 from app.models.exam_attempt import ExamAttempt
 from app.models.progress import ProgressStatus, UserProgress
 from app.models.task import Task
+from app.models.task_solution import UserTaskSolution
+from app.models.task_solution_comment import UserTaskSolutionComment
+from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
+from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
+from app.models.topic import Topic
 from app.models.user import User
+from app.realtime import solution_comment_ws_manager
 from app.schemas.ai import AIAssistRequest, AIAssistResponse
 from app.schemas.task import AnswerIn, CheckResult
 
 router = APIRouter(prefix="/tasks", tags=["solving"])
+
+
+class TaskSolutionIn(BaseModel):
+    code: str | None = None
+
+
+class TaskSolutionCommentOut(BaseModel):
+    id: int
+    from_offset: int | None = None
+    to_offset: int | None = None
+    from_line: int
+    from_col: int
+    to_line: int
+    to_col: int
+    text: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    reaction: str | None = None
+
+
+class TaskSolutionOut(BaseModel):
+    task_id: int
+    code: str | None = None
+    file_url: str | None = None
+    image_url: str | None = None
+    updated_at: datetime | None = None
+    comments: list[TaskSolutionCommentOut] = []
+
+
+class SolutionCommentNotificationOut(BaseModel):
+    id: int
+    task_id: int
+    topic_id: int
+    topic_category: str
+    topic_title: str
+    task_title: str | None = None
+    task_order_index: int
+    ege_number: int | None = None
+    text: str
+    from_line: int
+    to_line: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    is_read: bool = False
+
+
+class SolutionCommentNotificationsReadIn(BaseModel):
+    comment_ids: list[int] | None = None
+
+
+class SolutionCommentReactionIn(BaseModel):
+    reaction: str
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -208,6 +270,272 @@ async def _is_task_in_active_exam(task_id: int, user_id: int, db: AsyncSession) 
 
 
 # ── Check answer ──────────────────────────────────────────────
+
+async def _get_or_create_solution(db: AsyncSession, user_id: int, task_id: int) -> UserTaskSolution:
+    if await db.get(Task, task_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    result = await db.execute(
+        select(UserTaskSolution).where(
+            UserTaskSolution.user_id == user_id,
+            UserTaskSolution.task_id == task_id,
+        )
+    )
+    solution = result.scalar_one_or_none()
+    if solution is None:
+        solution = UserTaskSolution(user_id=user_id, task_id=task_id)
+        db.add(solution)
+    return solution
+
+
+def _solution_out(
+    task_id: int,
+    solution: UserTaskSolution | None,
+    comments: list[UserTaskSolutionComment] | None = None,
+    reactions_by_comment_id: dict[int, str] | None = None,
+) -> TaskSolutionOut:
+    if solution is None:
+        return TaskSolutionOut(task_id=task_id)
+    return TaskSolutionOut(
+        task_id=task_id,
+        code=solution.code,
+        file_url=solution.file_url,
+        image_url=solution.image_url,
+        updated_at=solution.updated_at,
+        comments=[
+            TaskSolutionCommentOut(
+                id=comment.id,
+                from_offset=comment.from_offset,
+                to_offset=comment.to_offset,
+                from_line=comment.from_line,
+                from_col=comment.from_col,
+                to_line=comment.to_line,
+                to_col=comment.to_col,
+                text=comment.text,
+                created_at=comment.created_at,
+                updated_at=comment.updated_at,
+                reaction=(reactions_by_comment_id or {}).get(comment.id),
+            )
+            for comment in (comments or [])
+        ],
+    )
+
+
+@router.get("/solution-comments/notifications", response_model=list[SolutionCommentNotificationOut])
+async def get_solution_comment_notifications(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all teacher comments attached to the current student's task solutions."""
+    result = await db.execute(
+        select(UserTaskSolutionComment, UserTaskSolution, Task, Topic, UserTaskSolutionCommentRead.id)
+        .join(UserTaskSolution, UserTaskSolution.id == UserTaskSolutionComment.solution_id)
+        .join(Task, Task.id == UserTaskSolution.task_id)
+        .join(Topic, Topic.id == Task.topic_id)
+        .outerjoin(
+            UserTaskSolutionCommentRead,
+            (UserTaskSolutionCommentRead.comment_id == UserTaskSolutionComment.id)
+            & (UserTaskSolutionCommentRead.user_id == user.id),
+        )
+        .where(UserTaskSolution.user_id == user.id)
+        .order_by(UserTaskSolutionComment.updated_at.desc(), UserTaskSolutionComment.id.desc())
+    )
+    return [
+        SolutionCommentNotificationOut(
+            id=comment.id,
+            task_id=task.id,
+            topic_id=topic.id,
+            topic_category=topic.category,
+            topic_title=topic.title,
+            task_title=task.title,
+            task_order_index=task.order_index,
+            ege_number=task.ege_number,
+            text=comment.text,
+            from_line=comment.from_line,
+            to_line=comment.to_line,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+            is_read=read_id is not None,
+        )
+        for comment, _, task, topic, read_id in result.all()
+    ]
+
+
+@router.post("/solution-comments/notifications/read")
+async def mark_solution_comment_notifications_read(
+    body: SolutionCommentNotificationsReadIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark current student's comment notifications as read without deleting history."""
+    query = (
+        select(UserTaskSolutionComment.id)
+        .join(UserTaskSolution, UserTaskSolution.id == UserTaskSolutionComment.solution_id)
+        .where(UserTaskSolution.user_id == user.id)
+    )
+    if body.comment_ids:
+        query = query.where(UserTaskSolutionComment.id.in_(body.comment_ids))
+
+    result = await db.execute(query)
+    comment_ids = [row[0] for row in result.all()]
+    if not comment_ids:
+        return {"ok": True, "read_count": 0}
+
+    existing_result = await db.execute(
+        select(UserTaskSolutionCommentRead.comment_id).where(
+            UserTaskSolutionCommentRead.user_id == user.id,
+            UserTaskSolutionCommentRead.comment_id.in_(comment_ids),
+        )
+    )
+    existing_ids = {row[0] for row in existing_result.all()}
+    new_ids = [comment_id for comment_id in comment_ids if comment_id not in existing_ids]
+
+    for comment_id in new_ids:
+        db.add(UserTaskSolutionCommentRead(user_id=user.id, comment_id=comment_id))
+
+    await db.commit()
+    return {"ok": True, "read_count": len(new_ids)}
+
+
+@router.get("/{task_id}/solution", response_model=TaskSolutionOut)
+async def get_own_task_solution(task_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.user_id == user.id, UserTaskSolution.task_id == task_id)
+    )
+    solution = result.scalar_one_or_none()
+    comments: list[UserTaskSolutionComment] = []
+    reactions_by_comment_id: dict[int, str] = {}
+    if solution is not None:
+        comments_result = await db.execute(
+            select(UserTaskSolutionComment)
+            .where(UserTaskSolutionComment.solution_id == solution.id)
+            .order_by(UserTaskSolutionComment.from_line, UserTaskSolutionComment.from_col, UserTaskSolutionComment.id)
+        )
+        comments = list(comments_result.scalars().all())
+        comment_ids = [comment.id for comment in comments]
+        if comment_ids:
+            reactions_result = await db.execute(
+                select(UserTaskSolutionCommentReaction.comment_id, UserTaskSolutionCommentReaction.reaction).where(
+                    UserTaskSolutionCommentReaction.user_id == user.id,
+                    UserTaskSolutionCommentReaction.comment_id.in_(comment_ids),
+                )
+            )
+            reactions_by_comment_id = {comment_id: reaction for comment_id, reaction in reactions_result.all()}
+    return _solution_out(task_id, solution, comments, reactions_by_comment_id)
+
+
+@router.post("/solution-comments/{comment_id}/reaction")
+async def set_solution_comment_reaction(
+    comment_id: int,
+    body: SolutionCommentReactionIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.reaction not in {"fixed", "need_help"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reaction")
+
+    result = await db.execute(
+        select(UserTaskSolutionCommentReaction).where(
+            UserTaskSolutionCommentReaction.user_id == user.id,
+            UserTaskSolutionCommentReaction.comment_id == comment_id,
+        )
+    )
+    reaction = result.scalar_one_or_none()
+    if reaction is None:
+        comment_result = await db.execute(
+            select(UserTaskSolutionComment)
+            .join(UserTaskSolution, UserTaskSolution.id == UserTaskSolutionComment.solution_id)
+            .where(UserTaskSolutionComment.id == comment_id, UserTaskSolution.user_id == user.id)
+        )
+        if comment_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+        reaction = UserTaskSolutionCommentReaction(
+            user_id=user.id,
+            comment_id=comment_id,
+            reaction=body.reaction,
+        )
+        db.add(reaction)
+    else:
+        reaction.reaction = body.reaction
+
+    await db.commit()
+    return {"ok": True, "reaction": body.reaction}
+
+
+@router.websocket("/{task_id}/solution/comments/ws")
+async def task_solution_comments_ws(
+    websocket: WebSocket,
+    task_id: int,
+    token: str = Query(...),
+):
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id = int(payload.get("sub", 0))
+    except (JWTError, ValueError):
+        await websocket.close(code=1008)
+        return
+
+    async with AsyncSessionLocal() as db:
+        user = await db.get(User, user_id)
+        task = await db.get(Task, task_id)
+        if user is None or task is None:
+            await websocket.close(code=1008)
+            return
+
+    await solution_comment_ws_manager.connect(user_id, task_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        solution_comment_ws_manager.disconnect(user_id, task_id, websocket)
+
+
+@router.put("/{task_id}/solution", response_model=TaskSolutionOut)
+async def save_own_task_solution(task_id: int, body: TaskSolutionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    solution = await _get_or_create_solution(db, user.id, task_id)
+    solution.code = body.code
+    await db.commit()
+    await db.refresh(solution)
+    return _solution_out(task_id, solution)
+
+
+ALLOWED_SOLUTION_FILE_EXTENSIONS = {".py", ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".ods", ".zip"}
+ALLOWED_SOLUTION_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+MAX_SOLUTION_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/{task_id}/solution/upload/{kind}", response_model=TaskSolutionOut)
+async def upload_own_task_solution_file(
+    task_id: int,
+    kind: str,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if kind not in {"file", "image"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload kind")
+    suffix = Path(file.filename or "").suffix.lower()
+    allowed = ALLOWED_SOLUTION_IMAGE_EXTENSIONS if kind == "image" else ALLOWED_SOLUTION_FILE_EXTENSIONS
+    if suffix not in allowed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
+    if len(data) > MAX_SOLUTION_UPLOAD_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is too large")
+    solution = await _get_or_create_solution(db, user.id, task_id)
+    upload_dir = Path(f"uploads/task_solutions/{user.id}/{task_id}")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    suffix_path = upload_dir / f"{kind}{suffix}"
+    suffix_path.write_bytes(data)
+    url = f"/uploads/task_solutions/{user.id}/{task_id}/{kind}{suffix}"
+    if kind == "image":
+        solution.image_url = url
+    else:
+        solution.file_url = url
+    await db.commit()
+    await db.refresh(solution)
+    return _solution_out(task_id, solution)
+
 
 @router.post("/{task_id}/check", response_model=CheckResult)
 async def check_answer(

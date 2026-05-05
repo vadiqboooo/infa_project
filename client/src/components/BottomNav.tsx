@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, BookOpen, ClipboardList, FileText, User, ShieldCheck } from 'lucide-react';
+import { Home, BookOpen, FileText, User, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ProfileModal } from './ProfileModal';
+import { NotificationsHoverCard } from './NotificationsHoverCard';
 import { useAuth } from '../context/AuthContext';
 
 const links = [
@@ -44,7 +45,9 @@ export function BottomNav() {
                                     active ? 'text-[#3F8C62]' : 'text-gray-400'
                                 )}
                             >
-                                <link.icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                                <span className="relative">
+                                    <link.icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+                                </span>
                                 <span>{link.label}</span>
                                 {active && (
                                     <span className="absolute bottom-0 w-6 h-0.5 bg-[#3F8C62] rounded-full" />
@@ -52,6 +55,15 @@ export function BottomNav() {
                             </Link>
                         );
                     })}
+
+                    <div className="flex-1 flex flex-col items-center justify-center gap-1">
+                        <NotificationsHoverCard
+                            side="top"
+                            align="end"
+                            triggerClassName="h-8 w-8 bg-transparent text-gray-400 hover:bg-[#3F8C62]/10"
+                        />
+                        <span className="text-[10px] font-medium text-gray-400">Увед.</span>
+                    </div>
 
                     {/* Profile button */}
                     <button

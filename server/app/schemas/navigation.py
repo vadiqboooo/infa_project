@@ -32,8 +32,11 @@ class TopicNav(BaseModel):
     ege_number_end: int | None = None
     analysis_published: bool = False
     draft_count: int = 0
+    new_tasks_count: int = 0
     has_image: bool = False
     image_position: str | None = None
     image_size: int | None = None
+    character_url: str | None = None
+    background_url: str | None = None
 
     model_config = {"from_attributes": True}

@@ -1,10 +1,20 @@
-import { useState, useEffect } from "react";
-import { Sparkles, Loader2, X, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Send, Globe, GlobeLock, Wand2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useState } from "react";
+import {
+    CheckCircle2,
+    ChevronDown,
+    ChevronUp,
+    ExternalLink,
+    FileText,
+    Globe,
+    GlobeLock,
+    Loader2,
+    Send,
+    X,
+    XCircle,
+} from "lucide-react";
 import { clsx } from "clsx";
 
 const API_BASE = "/api";
-const CACHE_KEY = (id: number) => `ai_analysis_attempt_${id}`;
 
 interface TaskResult {
     task_id: number;
@@ -23,7 +33,6 @@ interface Props {
     studentName: string;
     attemptId: number;
     apiKey?: string;
-    hasAnalysis?: boolean;
     onClose: () => void;
 }
 
@@ -50,7 +59,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
             color === "red" && "border-red-100 bg-red-50/30",
         )}>
             <div className="flex items-center gap-3 px-4 py-3">
-                {/* Task number badge */}
                 <div className={clsx(
                     "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
                     color === "emerald" && "bg-emerald-100 text-emerald-700",
@@ -60,7 +68,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
                     {r.ege_number ?? "?"}
                 </div>
 
-                {/* Icon */}
                 {r.is_correct
                     ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
                     : r.points > 0
@@ -68,7 +75,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
                         : <XCircle size={16} className="text-red-400 shrink-0" />
                 }
 
-                {/* Answers */}
                 <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-4 gap-y-0.5">
                     <div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide">Ответ ученика</span>
@@ -89,7 +95,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
                     )}
                 </div>
 
-                {/* Points */}
                 <div className={clsx(
                     "text-xs font-bold shrink-0 px-2 py-1 rounded-lg",
                     color === "emerald" && "text-emerald-700 bg-emerald-100",
@@ -100,7 +105,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
                 </div>
             </div>
 
-            {/* Code solution */}
             {r.code_solution && (
                 <div className="border-t border-gray-100">
                     <button
@@ -119,7 +123,6 @@ function TaskResultCard({ r }: { r: TaskResult }) {
                 </div>
             )}
 
-            {/* File solution link */}
             {r.file_solution_url && (
                 <div className="border-t border-gray-100 px-4 py-2">
                     <a
@@ -136,12 +139,7 @@ function TaskResultCard({ r }: { r: TaskResult }) {
     );
 }
 
-export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onClose }: Props) {
-    const cached = localStorage.getItem(CACHE_KEY(attemptId));
-    const [tab, setTab] = useState<"results" | "ai">("results");
-    const [analysis, setAnalysis] = useState<string | null>(cached);
-    const [aiLoading, setAiLoading] = useState(!cached && !!hasAnalysis);
-    const [aiError, setAiError] = useState<string | null>(null);
+export function AnalysisModal({ studentName, attemptId, apiKey, onClose }: Props) {
     const [results, setResults] = useState<{ primary_score: number | null; score: number | null; task_results: TaskResult[] } | null>(null);
     const [resultsLoading, setResultsLoading] = useState(true);
     const [resultsError, setResultsError] = useState<string | null>(null);
@@ -149,7 +147,7 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
     const [isPublished, setIsPublished] = useState(false);
     const [publishLoading, setPublishLoading] = useState(false);
     const [publishSuccess, setPublishSuccess] = useState(false);
-    const [polishLoading, setPolishLoading] = useState(false);
+    const [publishError, setPublishError] = useState<string | null>(null);
 
     const authHeaders = (): Record<string, string> => {
         const token = localStorage.getItem("jwt_token");
@@ -159,7 +157,6 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
         return h;
     };
 
-    // Load attempt results
     useEffect(() => {
         (async () => {
             try {
@@ -174,52 +171,25 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
         })();
     }, [attemptId]);
 
-    // Auto-load saved AI analysis
     useEffect(() => {
-        if (hasAnalysis) fetchSavedAnalysis();
-        else if (cached) { /* already set */ }
-    }, []);
-
-    async function fetchSavedAnalysis() {
-        setAiLoading(true);
-        setAiError(null);
-        try {
-            const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/analyze`, { headers: authHeaders() });
-            if (!res.ok) throw new Error(`Ошибка ${res.status}`);
-            const data = await res.json();
-            setAnalysis(data.analysis);
-            setComment(data.comment ?? "");
-            setIsPublished(data.is_published ?? false);
-            localStorage.setItem(CACHE_KEY(attemptId), data.analysis);
-        } catch (e: any) {
-            setAiError(e.message || "Не удалось загрузить анализ");
-        } finally {
-            setAiLoading(false);
-        }
-    }
-
-    async function runAnalysis() {
-        setAiLoading(true);
-        setAiError(null);
-        try {
-            const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/analyze`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...authHeaders() },
-            });
-            if (!res.ok) throw new Error(`Ошибка ${res.status}`);
-            const data = await res.json();
-            setAnalysis(data.analysis);
-            localStorage.setItem(CACHE_KEY(attemptId), data.analysis);
-        } catch (e: any) {
-            setAiError(e.message || "Не удалось получить анализ");
-        } finally {
-            setAiLoading(false);
-        }
-    }
+        (async () => {
+            try {
+                const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/analyze`, { headers: authHeaders() });
+                if (res.status === 404) return;
+                if (!res.ok) throw new Error(`Ошибка ${res.status}`);
+                const data = await res.json();
+                setComment(data.comment ?? "");
+                setIsPublished(data.is_published ?? false);
+            } catch {
+                // The results table remains usable even if publication metadata is unavailable.
+            }
+        })();
+    }, [attemptId]);
 
     async function handlePublish(publish: boolean) {
         setPublishLoading(true);
         setPublishSuccess(false);
+        setPublishError(null);
         try {
             const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/publish`, {
                 method: "POST",
@@ -232,25 +202,10 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
             setComment(data.comment ?? "");
             setPublishSuccess(true);
             setTimeout(() => setPublishSuccess(false), 3000);
-        } catch { /* ignore */ } finally {
+        } catch (e: any) {
+            setPublishError(e.message || "Не удалось сохранить публикацию");
+        } finally {
             setPublishLoading(false);
-        }
-    }
-
-    async function polishComment() {
-        if (!comment.trim()) return;
-        setPolishLoading(true);
-        try {
-            const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}/polish-comment`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...authHeaders() },
-                body: JSON.stringify({ comment }),
-            });
-            if (!res.ok) throw new Error(`Ошибка ${res.status}`);
-            const data = await res.json();
-            setComment(data.comment);
-        } catch { /* ignore */ } finally {
-            setPolishLoading(false);
         }
     }
 
@@ -263,11 +218,10 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
-                            <Sparkles size={16} />
+                        <div className="w-8 h-8 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center">
+                            <FileText size={16} />
                         </div>
                         <div>
                             <div className="text-sm font-bold text-gray-900">{studentName}</div>
@@ -278,168 +232,99 @@ export function AnalysisModal({ studentName, attemptId, apiKey, hasAnalysis, onC
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                        {tab === "ai" && analysis && !aiLoading && (
-                            <button onClick={runAnalysis} title="Обновить анализ"
-                                className="p-1.5 text-gray-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
-                                <RefreshCw size={15} />
-                            </button>
-                        )}
-                        <button onClick={onClose}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-                            <X size={18} />
-                        </button>
-                    </div>
+                    <button onClick={onClose}
+                        className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
+                        <X size={18} />
+                    </button>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-1 px-6 pt-3 pb-0 shrink-0">
-                    {([["results", "Решения"], ["ai", "Анализ ИИ"]] as const).map(([key, label]) => (
-                        <button key={key} onClick={() => setTab(key)}
-                            className={clsx(
-                                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
-                                tab === key ? "bg-violet-100 text-violet-700" : "text-gray-500 hover:bg-gray-100"
-                            )}>
-                            {label}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto px-6 py-4">
-                    {tab === "results" ? (
-                        resultsLoading ? (
-                            <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
-                                <Loader2 size={24} className="animate-spin text-violet-400" />
-                                <span className="text-sm">Загрузка...</span>
-                            </div>
-                        ) : resultsError ? (
-                            <div className="text-sm text-red-500 text-center py-8">{resultsError}</div>
-                        ) : results && results.task_results.length > 0 ? (
-                            <div className="space-y-2">
-                                {results.task_results
-                                    .slice()
-                                    .sort((a, b) => (a.ege_number ?? 99) - (b.ege_number ?? 99))
-                                    .map(r => <TaskResultCard key={r.task_id} r={r} />)
-                                }
-                            </div>
-                        ) : (
-                            <div className="text-center py-16 text-gray-400 text-sm">Нет данных о решениях</div>
-                        )
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                    {resultsLoading ? (
+                        <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+                            <Loader2 size={24} className="animate-spin text-emerald-500" />
+                            <span className="text-sm">Загрузка...</span>
+                        </div>
+                    ) : resultsError ? (
+                        <div className="text-sm text-red-500 text-center py-8">{resultsError}</div>
+                    ) : results && results.task_results.length > 0 ? (
+                        <div className="space-y-2">
+                            {results.task_results
+                                .slice()
+                                .sort((a, b) => (a.ege_number ?? 99) - (b.ege_number ?? 99))
+                                .map(r => <TaskResultCard key={r.task_id} r={r} />)
+                            }
+                        </div>
                     ) : (
-                        // AI Analysis tab
-                        aiLoading ? (
-                            <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-                                <Loader2 size={28} className="animate-spin text-violet-500" />
-                                <span className="text-sm">Загружаю анализ...</span>
-                            </div>
-                        ) : analysis ? (
-                            <div className="space-y-4">
-                                {/* AI Analysis text */}
-                                <div className="prose prose-sm max-w-none text-gray-700
-                                    [&>h1]:text-base [&>h1]:font-bold [&>h1]:text-gray-900
-                                    [&>h2]:text-sm [&>h2]:font-bold [&>h2]:text-gray-900 [&>h2]:mt-4
-                                    [&>h3]:text-sm [&>h3]:font-semibold [&>h3]:text-gray-800 [&>h3]:mt-3
-                                    [&>p]:leading-relaxed [&>p]:mb-2
-                                    [&>ul]:pl-4 [&>ul]:mb-2 [&>ol]:pl-4 [&>ol]:mb-2
-                                    [&>li]:mb-1
-                                    [&>strong]:text-gray-900
-                                    [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs
-                                    [&>pre]:bg-gray-50 [&>pre]:rounded-xl [&>pre]:p-4 [&>pre]:text-xs [&>pre]:overflow-x-auto
-                                    [&>blockquote]:border-l-4 [&>blockquote]:border-violet-200 [&>blockquote]:pl-4 [&>blockquote]:text-gray-500">
-                                    <ReactMarkdown>{analysis}</ReactMarkdown>
-                                </div>
-
-                                {/* Comment + Publish section */}
-                                <div className="border-t border-gray-100 pt-4 space-y-3">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <label className="text-xs font-bold text-gray-600">
-                                                Комментарий учителя
-                                            </label>
-                                            <button
-                                                onClick={polishComment}
-                                                disabled={polishLoading || !comment.trim()}
-                                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-violet-600 hover:bg-violet-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                            >
-                                                {polishLoading ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
-                                                Улучшить текст
-                                            </button>
-                                        </div>
-                                        <textarea
-                                            value={comment}
-                                            onChange={e => setComment(e.target.value)}
-                                            placeholder="Напишите личный комментарий ученику по результатам пробника..."
-                                            rows={3}
-                                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 placeholder:text-gray-300 transition-all"
-                                        />
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        {isPublished ? (
-                                            <>
-                                                <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg font-semibold flex-1">
-                                                    <Globe size={12} /> Опубликовано — ученик видит результат
-                                                </div>
-                                                <button
-                                                    onClick={() => handlePublish(false)}
-                                                    disabled={publishLoading}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
-                                                >
-                                                    {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <GlobeLock size={12} />}
-                                                    Снять
-                                                </button>
-                                                <button
-                                                    onClick={() => handlePublish(true)}
-                                                    disabled={publishLoading}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-violet-600 hover:bg-violet-50 border border-violet-200 rounded-lg transition-colors disabled:opacity-50"
-                                                >
-                                                    {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                                                    Обновить
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                {publishSuccess && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 flex-1">
-                                                        <CheckCircle2 size={12} /> Сохранено
-                                                    </div>
-                                                )}
-                                                <button
-                                                    onClick={() => handlePublish(true)}
-                                                    disabled={publishLoading}
-                                                    className="flex items-center gap-2 px-4 py-2 text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all shadow-sm shadow-violet-600/20 disabled:opacity-50 ml-auto"
-                                                >
-                                                    {publishLoading ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
-                                                    Опубликовать
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : aiError ? (
-                            <div className="text-sm text-red-500 text-center py-8">{aiError}</div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center gap-4">
-                                <div className="w-14 h-14 bg-violet-100 text-violet-500 rounded-2xl flex items-center justify-center">
-                                    <Sparkles size={28} />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-gray-900 mb-1">ИИ-анализ работы</p>
-                                    <p className="text-sm text-gray-400 max-w-xs">
-                                        ИИ проанализирует причины ошибок и подскажет какие темы повторить
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={runAnalysis}
-                                    className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-violet-600/20 mt-2"
-                                >
-                                    <Sparkles size={16} /> Запустить анализ
-                                </button>
-                            </div>
-                        )
+                        <div className="text-center py-16 text-gray-400 text-sm">Нет данных о решениях</div>
                     )}
+
+                    <div className="border-t border-gray-100 pt-4 space-y-3">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-600 mb-1.5">
+                                Комментарий учителя
+                            </label>
+                            <textarea
+                                value={comment}
+                                onChange={e => setComment(e.target.value)}
+                                placeholder="Напишите комментарий ученику по результатам пробника..."
+                                rows={4}
+                                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 placeholder:text-gray-300 transition-all"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {isPublished ? (
+                                <>
+                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg font-semibold flex-1">
+                                        <Globe size={12} /> Опубликовано
+                                    </div>
+                                    <button
+                                        onClick={() => handlePublish(false)}
+                                        disabled={publishLoading}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <GlobeLock size={12} />}
+                                        Снять
+                                    </button>
+                                    <button
+                                        onClick={() => handlePublish(true)}
+                                        disabled={publishLoading}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {publishLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                        Обновить
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {publishSuccess && (
+                                        <div className="flex items-center gap-1.5 text-xs text-emerald-600 flex-1">
+                                            <CheckCircle2 size={12} /> Сохранено
+                                        </div>
+                                    )}
+                                    {publishError && (
+                                        <div className="text-xs text-red-500 flex-1">{publishError}</div>
+                                    )}
+                                    <button
+                                        onClick={() => handlePublish(false)}
+                                        disabled={publishLoading}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl transition-colors disabled:opacity-50 ml-auto"
+                                    >
+                                        {publishLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                        Сохранить
+                                    </button>
+                                    <button
+                                        onClick={() => handlePublish(true)}
+                                        disabled={publishLoading}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow-sm shadow-emerald-600/20 disabled:opacity-50"
+                                    >
+                                        {publishLoading ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                                        Опубликовать
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
