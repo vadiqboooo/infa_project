@@ -27,6 +27,11 @@ def _strip_html(html: str, limit: int = 600) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text[:limit]
 
+
+def _answer_has_value(value) -> bool:
+    return value is not None and value != "" and value != []
+
+
 router = APIRouter(prefix="/exams", tags=["exams"])
 
 
@@ -75,11 +80,14 @@ async def get_exam_by_topic(
 
     # Check for active attempt
     active_attempt = await db.execute(
-        select(ExamAttempt).where(
+        select(ExamAttempt)
+        .where(
             ExamAttempt.user_id == user.id,
             ExamAttempt.exam_id == exam.id,
             ExamAttempt.finished_at.is_(None),
         )
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+        .limit(1)
     )
     attempt = active_attempt.scalar_one_or_none()
 
@@ -95,6 +103,44 @@ async def get_exam_by_topic(
         .limit(1)
     )
     finished = finished_attempt.scalar_one_or_none()
+
+    # If variants are reopened without a timer, an empty active attempt can coexist with
+    # the last finished attempt. Seed it once so previously solved tasks stay visible.
+    if attempt and finished:
+        active_results = attempt.results_json or {}
+        active_drafts = active_results.get("draft_answers", {}) or {}
+        active_scores = active_results.get("scored_answers", {}) or {}
+        if not active_drafts and not active_scores:
+            finished_results = finished.results_json or {}
+            task_results = finished_results.get("task_results", []) or []
+            seeded_drafts = {}
+            seeded_scores = {}
+            seeded_codes = {}
+            for item in task_results:
+                task_id = item.get("task_id")
+                if task_id is None:
+                    continue
+                task_key = str(task_id)
+                user_answer = item.get("user_answer")
+                if isinstance(user_answer, dict) and _answer_has_value(user_answer.get("val")):
+                    seeded_drafts[task_key] = user_answer
+                if "is_correct" in item and "points" in item:
+                    seeded_scores[task_key] = {
+                        "is_correct": bool(item.get("is_correct")),
+                        "points": item.get("points") or 0,
+                    }
+                code_solution = item.get("code_solution")
+                if code_solution:
+                    seeded_codes[task_key] = code_solution
+
+            if seeded_drafts or seeded_scores or seeded_codes:
+                active_results["draft_answers"] = seeded_drafts
+                active_results["scored_answers"] = seeded_scores
+                if seeded_codes:
+                    active_results["draft_codes"] = seeded_codes
+                attempt.results_json = active_results
+                flag_modified(attempt, "results_json")
+                await db.commit()
 
     return {
         "id": exam.id,
@@ -136,11 +182,14 @@ async def get_exam(
 
     # Check for active attempt
     active_attempt = await db.execute(
-        select(ExamAttempt).where(
+        select(ExamAttempt)
+        .where(
             ExamAttempt.user_id == user.id,
             ExamAttempt.exam_id == exam_id,
             ExamAttempt.finished_at.is_(None),
         )
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+        .limit(1)
     )
     attempt = active_attempt.scalar_one_or_none()
 
@@ -171,11 +220,14 @@ async def start_exam(
 
     # Return existing active attempt (idempotent)
     active = await db.execute(
-        select(ExamAttempt).where(
+        select(ExamAttempt)
+        .where(
             ExamAttempt.user_id == user.id,
             ExamAttempt.exam_id == exam_id,
             ExamAttempt.finished_at.is_(None),
         )
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+        .limit(1)
     )
     existing = active.scalar_one_or_none()
     if existing is not None:
@@ -276,11 +328,14 @@ async def submit_exam(
     """Submit answers for all exam tasks, compute score, and close the attempt."""
     # Get active attempt
     attempt_result = await db.execute(
-        select(ExamAttempt).where(
+        select(ExamAttempt)
+        .where(
             ExamAttempt.user_id == user.id,
             ExamAttempt.exam_id == exam_id,
             ExamAttempt.finished_at.is_(None),
         )
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+        .limit(1)
     )
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:

@@ -104,7 +104,12 @@ async def get_navigation(
         select(ExamAttempt, Exam)
         .join(Exam, Exam.id == ExamAttempt.exam_id)
         .where(ExamAttempt.user_id == user.id)
-        .order_by(ExamAttempt.finished_at.desc())
+        .order_by(
+            ExamAttempt.finished_at.is_(None).desc(),
+            ExamAttempt.finished_at.desc(),
+            ExamAttempt.started_at.desc(),
+            ExamAttempt.id.desc(),
+        )
     )
 
     # EGE primary→test conversion table (0–29 → 0–100)
@@ -122,6 +127,8 @@ async def get_navigation(
     active_scores: dict[int, dict] = {}
     for attempt, exam in attempts_query.all():
         if attempt.finished_at is None:
+            if exam.topic_id in active_scores:
+                continue
             # Active attempt — count draft answers and compute current score
             results = attempt.results_json or {}
             drafts = results.get("draft_answers", {})
