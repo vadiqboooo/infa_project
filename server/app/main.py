@@ -29,10 +29,12 @@ async def lifespan(app: FastAPI):
         from app.models import group as group_module  # noqa: ensure models are registered
         from app.models import topic_seen  # noqa: ensure model is registered
         from app.models import (
+            admin_help_notification_read,
             task_solution,
             task_solution_comment,
             task_solution_comment_read,
             task_solution_comment_reaction,
+            task_solution_help_request,
         )  # noqa: ensure models are registered
         async with engine.begin() as conn:
             await conn.run_sync(
@@ -62,6 +64,16 @@ async def lifespan(app: FastAPI):
             )
             await conn.run_sync(
                 lambda sync_conn: task_solution_comment_reaction.UserTaskSolutionCommentReaction.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution_help_request.UserTaskSolutionHelpRequest.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
+                lambda sync_conn: admin_help_notification_read.AdminHelpNotificationRead.__table__.create(
                     sync_conn, checkfirst=True
                 )
             )

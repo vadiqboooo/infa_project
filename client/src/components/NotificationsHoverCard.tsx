@@ -9,6 +9,7 @@ import {
 } from "./ui/popover";
 import {
   useAdminHelpNotifications,
+  useMarkAdminHelpNotificationRead,
   useMarkSolutionCommentNotificationsRead,
   useSolutionCommentNotifications,
 } from "../hooks/useApi";
@@ -23,7 +24,11 @@ type NotificationsHoverCardProps = {
 };
 
 function taskPath(topicCategory: string, topicId: number, taskId: number) {
-  const base = topicCategory === "homework" ? "/homework" : "/tasks";
+  const base = ["variants", "mock", "control"].includes(topicCategory)
+    ? "/exams"
+    : topicCategory === "homework"
+      ? "/homework"
+      : "/tasks";
   return `${base}/${topicId}?task=${taskId}&solution=1`;
 }
 
@@ -52,10 +57,12 @@ export function NotificationsHoverCard({
   const { data: notifications = [], isLoading } = useSolutionCommentNotifications(!isAdmin);
   const { data: adminNotifications = [], isLoading: isAdminLoading } = useAdminHelpNotifications(isAdmin);
   const markRead = useMarkSolutionCommentNotificationsRead();
+  const markAdminRead = useMarkAdminHelpNotificationRead();
   const unreadNotifications = notifications.filter(
     (item) => !item.is_read && !locallyReadIds.has(item.id),
   );
-  const unreadCount = isAdmin ? adminNotifications.length : unreadNotifications.length;
+  const unreadAdminNotifications = adminNotifications.filter((item) => !item.is_read);
+  const unreadCount = isAdmin ? unreadAdminNotifications.length : unreadNotifications.length;
   const count = isAdmin ? adminNotifications.length : notifications.length;
   const isListLoading = isAdmin ? isAdminLoading : isLoading;
 
@@ -146,13 +153,19 @@ export function NotificationsHoverCard({
             <div className="space-y-1">
               {isAdmin ? adminNotifications.map((item) => (
                 <button
-                  key={item.id}
+                  key={`${item.source}:${item.id}`}
                   type="button"
                   onClick={() => {
                     setOpen(false);
+                    if (!item.is_read) {
+                      markAdminRead.mutate({ source: item.source, source_id: item.id });
+                    }
                     navigate(`/admin/students/${item.student_id}?reviewTask=${item.task_id}`);
                   }}
-                  className="group flex w-full items-start gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-amber-50"
+                  className={clsx(
+                    "group flex w-full items-start gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-amber-50",
+                    item.is_read && "opacity-70",
+                  )}
                 >
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
                     <MessageSquare size={16} />
@@ -167,7 +180,7 @@ export function NotificationsHoverCard({
                       </span>
                     </div>
                     <div className="mt-0.5 truncate text-[11px] font-bold text-[#667568]">
-                      {item.student_name}
+                      {item.student_name} · {item.source === "direct_request" ? "просит помощи" : "нужна помощь с комментарием"}
                     </div>
                     <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-[#344238]">
                       {item.text}

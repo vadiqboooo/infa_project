@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
 import Skeleton from "../components/Skeleton";
+import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import type { AnswerVal, TaskNav, TaskResult } from "../api/types";
 import { authFetch } from "../api/client";
 import confetti from "canvas-confetti";
@@ -18,6 +19,7 @@ import confetti from "canvas-confetti";
 export default function ExamPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { data: allTopics, isLoading: navLoading } = useNavigation();
     
     const queryClient = useQueryClient();
@@ -74,6 +76,27 @@ export default function ExamPage() {
     const saveCodeMutation = useSaveCodeSolution(finishedAttemptId);
     const checkCodeMutation = useCheckCode(finishedAttemptId);
     const [publishedAnalysis, setPublishedAnalysis] = useState<{ analysis_text: string; comment: string | null } | null>(null);
+
+    useEffect(() => {
+        if (tasks.length === 0) return;
+        const params = new URLSearchParams(location.search);
+        const taskId = Number(params.get("task"));
+        if (!Number.isFinite(taskId) || taskId <= 0) return;
+
+        const nextIndex = tasks.findIndex((item) => item.id === taskId);
+        if (nextIndex >= 0 && nextIndex !== taskIndex) {
+            setTaskIndex(nextIndex);
+        }
+    }, [location.search, tasks, taskIndex]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get("solution") !== "1") return;
+
+        const taskId = Number(params.get("task"));
+        if (!Number.isFinite(taskId) || taskId <= 0) return;
+        setSolutionPanelTaskId(taskId);
+    }, [location.search]);
 
     useEffect(() => {
         if (!finishedAttemptId) return;
@@ -1247,7 +1270,33 @@ export default function ExamPage() {
             </div>
 
             {/* Solution drawer panel */}
-            {solutionPanelTaskId !== null && (() => {
+            {solutionPanelTaskId !== null && (
+                <div className="fixed inset-0 z-50 flex">
+                    <div className="flex-1 bg-black/20" onClick={() => setSolutionPanelTaskId(null)} />
+                    <div className="w-full md:w-[620px] bg-[#f8fbf8] h-full shadow-2xl flex flex-col border-l border-gray-200 p-4 overflow-y-auto">
+                        <div className="mb-3 flex items-center justify-between shrink-0">
+                            <div>
+                                <div className="text-sm font-black text-[#18251d]">Прикрепить решение</div>
+                                <div className="text-[11px] text-[#7a877c]">Сохранится для этой задачи и комментариев преподавателя</div>
+                            </div>
+                            <button
+                                onClick={() => setSolutionPanelTaskId(null)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <TaskSolutionPanel
+                            taskId={solutionPanelTaskId}
+                            onChanged={() => {
+                                queryClient.invalidateQueries({ queryKey: ["task", solutionPanelTaskId] });
+                                queryClient.invalidateQueries({ queryKey: ["solution-comment-notifications"] });
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+            {false && solutionPanelTaskId !== null && (() => {
                 const egeNum = task?.id === solutionPanelTaskId ? task?.ege_number ?? null : null;
                 const isFileTask = egeNum !== null && FILE_TASK_NUMS.has(egeNum);
                 return (
@@ -1462,7 +1511,28 @@ export default function ExamPage() {
                                     </button>
                                     
                                     {/* Solution attachment button */}
-                                    {task?.ege_number && (CODE_TASK_NUMS.has(task.ege_number) || FILE_TASK_NUMS.has(task.ege_number)) && (
+                                    {task && (
+                                        <button
+                                            onClick={() => setSolutionPanelTaskId(task.id)}
+                                            disabled={isSubmitting}
+                                            className={clsx(
+                                                "w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 border",
+                                                task.solution_comments_count
+                                                    ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                                                    : task.has_own_solution
+                                                        ? "bg-emerald-50 text-[#1f6f46] border-emerald-200 hover:bg-emerald-100"
+                                                        : "bg-gray-50 text-gray-500 hover:bg-[#3F8C62]/5 hover:text-[#3F8C62] border-gray-200"
+                                            )}
+                                        >
+                                            {task.solution_comments_count ? <MessageSquare size={14} /> : <Paperclip size={14} />}
+                                            {task.solution_comments_count
+                                                ? `Комментарий${task.solution_comments_count > 1 ? ` (${task.solution_comments_count})` : ""}`
+                                                : task.has_own_solution
+                                                    ? "Решение есть ✓"
+                                                    : "Прикрепить решение"}
+                                        </button>
+                                    )}
+                                    {false && task?.ege_number && (CODE_TASK_NUMS.has(task.ege_number) || FILE_TASK_NUMS.has(task.ege_number)) && (
                                         <button
                                             onClick={() => {
                                                 setSolutionPanelTaskId(task.id);

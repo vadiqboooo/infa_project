@@ -166,6 +166,8 @@ class StudentTaskSolutionReviewOut(BaseModel):
     student_id: int
     task_id: int
     task_title: str | None = None
+    task_content_html: str | None = None
+    task_description: str | None = None
     ege_number: int | None = None
     code: str | None = None
     file_url: str | None = None

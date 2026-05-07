@@ -67,6 +67,26 @@ function formatAnswerForInput(correct: any): string {
     return '';
 }
 
+function formatAnswerForDisplay(correct: any): string {
+    return formatAnswerForInput(correct).replace(/\s*\n+\s*/g, '; ').trim();
+}
+
+function formatTaskCorrectAnswer(task: TaskAdmin): string {
+    const parts: string[] = [];
+    const mainAnswer = formatAnswerForDisplay(task.correct_answer);
+    if (mainAnswer) {
+        parts.push(mainAnswer);
+    }
+
+    for (const subTask of task.sub_tasks ?? []) {
+        const answer = formatAnswerForDisplay(subTask.correct_answer);
+        if (!answer) continue;
+        parts.push(`${subTask.number ?? '-'}: ${answer}`);
+    }
+
+    return parts.join(' · ');
+}
+
 // Parse user input back into stored shape {val: ...} based on answer_type
 function parseAnswerInput(text: string, answerType: string): any | null {
     if (!text || !text.trim()) return null;
@@ -101,6 +121,7 @@ interface TopicDetailProps {
   onBack: () => void;
   onSaveTopic: (data: Partial<TopicAdmin>) => void;
   onSaveTask: (data: Partial<TaskAdmin>) => void;
+  onReorderTasks: (orderedTasks: TaskAdmin[]) => void;
   onDeleteTask: (id: number) => void;
   apiKey?: string;
 }
@@ -111,14 +132,20 @@ export function TopicDetail({
   onBack,
   onSaveTopic,
   onSaveTask,
+  onReorderTasks,
   onDeleteTask,
   apiKey,
 }: TopicDetailProps) {
   const [editingTopic, setEditingTopic] = useState(topic);
   const [editingTask, setEditingTask] = useState<Partial<TaskAdmin> | null>(null);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
+  const [isCardPreviewOpen, setIsCardPreviewOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
+  const [dragTarget, setDragTarget] = useState<{ index: number; position: 'before' | 'after' } | null>(null);
+  const [dragCursor, setDragCursor] = useState<{ x: number; y: number } | null>(null);
+  const skipTaskClickRef = useRef(false);
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
 
   // ── Card image management ────────────────────────────────────────────────
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -220,22 +247,56 @@ export function TopicDetail({
     );
   }, [tasks, search]);
 
-  const handleMoveTask = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return;
-    const fromTask = filteredTasks[fromIndex];
-    const toTask = filteredTasks[toIndex];
-    onSaveTask({ ...fromTask, order_index: toTask.order_index });
-    onSaveTask({ ...toTask, order_index: fromTask.order_index });
+  const handleMoveTask = (fromIndex: number, insertionIndex: number) => {
+    if (fromIndex === insertionIndex || fromIndex + 1 === insertionIndex) return;
+    const movedTask = filteredTasks[fromIndex];
+    if (!movedTask) return;
+
+    const beforeTask = filteredTasks[insertionIndex] ?? null;
+    const ordered = [...tasks].sort((a, b) => a.order_index - b.order_index || a.id - b.id);
+    const withoutMoved = ordered.filter((task) => task.id !== movedTask.id);
+    const insertAt = beforeTask
+      ? Math.max(0, withoutMoved.findIndex((task) => task.id === beforeTask.id))
+      : withoutMoved.length;
+
+    const nextTasks = [
+      ...withoutMoved.slice(0, insertAt),
+      movedTask,
+      ...withoutMoved.slice(insertAt),
+    ].map((task, index) => ({ ...task, order_index: index }));
+
+    const changed = nextTasks.some((task) => {
+      const previous = tasks.find((item) => item.id === task.id);
+      return previous?.order_index !== task.order_index;
+    });
+
+    if (changed) {
+      onReorderTasks(nextTasks);
+    }
   };
 
-  const handleDragStart = (e: React.DragEvent, taskId: number) => {
-    setDraggedTaskId(taskId);
+  const removeDragPreview = () => {
+    dragPreviewRef.current?.remove();
+    dragPreviewRef.current = null;
+  };
+
+  const handleDragStart = (e: React.DragEvent, task: TaskAdmin) => {
+    setDraggedTaskId(task.id);
+    setDragCursor({ x: e.clientX, y: e.clientY });
+    skipTaskClickRef.current = true;
     e.dataTransfer.effectAllowed = 'move';
+    removeDragPreview();
+
     const dragImage = document.createElement('div');
+    dragImage.style.position = 'fixed';
+    dragImage.style.top = '-1000px';
+    dragImage.style.left = '-1000px';
+    dragImage.style.width = '1px';
+    dragImage.style.height = '1px';
     dragImage.style.opacity = '0';
     document.body.appendChild(dragImage);
+    dragPreviewRef.current = dragImage;
     e.dataTransfer.setDragImage(dragImage, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -243,15 +304,37 @@ export function TopicDetail({
     e.dataTransfer.dropEffect = 'move';
   };
 
+  const handleTaskDragOver = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
+    handleDragOver(e);
+    setDragCursor({ x: e.clientX, y: e.clientY });
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
+    setDragTarget({ index, position });
+  };
+
   const handleDrop = (e: React.DragEvent, toIndex: number) => {
     e.preventDefault();
     if (draggedTaskId === null) return;
     const fromIndex = filteredTasks.findIndex((t) => t.id === draggedTaskId);
-    if (fromIndex !== -1 && fromIndex !== toIndex) handleMoveTask(fromIndex, toIndex);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropAfter = e.clientY > rect.top + rect.height / 2;
+    const insertionIndex = toIndex + (dropAfter ? 1 : 0);
+    if (fromIndex !== -1) handleMoveTask(fromIndex, insertionIndex);
     setDraggedTaskId(null);
+    setDragTarget(null);
+    setDragCursor(null);
+    removeDragPreview();
   };
 
-  const handleDragEnd = () => setDraggedTaskId(null);
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragTarget(null);
+    setDragCursor(null);
+    removeDragPreview();
+    window.setTimeout(() => {
+      skipTaskClickRef.current = false;
+    }, 0);
+  };
 
   const handleTopicFieldChange = (field: keyof TopicAdmin, value: any) => {
     setEditingTopic((prev) => ({ ...prev, [field]: value }));
@@ -430,6 +513,13 @@ export function TopicDetail({
             />
           </div>
           <button
+            onClick={() => setIsCardPreviewOpen(true)}
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-[#3F8C62]/30 hover:bg-[#3F8C62]/5 text-gray-600 hover:text-[#3F8C62] px-4 py-2 rounded-xl text-xs font-bold transition-all"
+          >
+            <ImageIcon size={14} />
+            Превью карточки
+          </button>
+          <button
             onClick={() =>
               setEditingTask({
                 topic_id: topic.id,
@@ -447,8 +537,22 @@ export function TopicDetail({
       </div>
 
       {/* Card visuals: preview + character picker + background picker */}
-      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 shrink-0">
-        <div className="flex items-start gap-6 flex-wrap">
+      {isCardPreviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+              <div>
+                <div className="text-sm font-black text-gray-900">Превью карточки</div>
+                <div className="text-xs font-medium text-gray-400">Настройка фона и персонажа топика</div>
+              </div>
+              <button
+                onClick={() => setIsCardPreviewOpen(false)}
+                className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex items-start gap-6 flex-wrap px-6 py-5 bg-gray-50/50">
           {/* Live card preview */}
           <div className="shrink-0">
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -657,6 +761,37 @@ export function TopicDetail({
           </div>
         </div>
       </div>
+        </div>
+      )}
+
+      {draggedTaskId !== null && dragCursor && (() => {
+        const draggedTask = tasks.find((item) => item.id === draggedTaskId);
+        if (!draggedTask) return null;
+        const answer = formatTaskCorrectAnswer(draggedTask);
+        return (
+          <div
+            className="pointer-events-none fixed z-[80] w-[360px] -translate-y-5 translate-x-5 rounded-[22px] border border-[#3F8C62]/25 bg-white p-4 shadow-[0_34px_90px_rgba(15,23,20,0.28)] ring-1 ring-white/80"
+            style={{ left: dragCursor.x, top: dragCursor.y }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 min-w-11 items-center justify-center rounded-2xl bg-[#3F8C62]/12 text-sm font-black text-[#3F8C62]">
+                {draggedTask.order_index + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-black leading-5 text-[#18251d]">
+                  {draggedTask.title || 'Без названия'}
+                </div>
+                <div className="mt-1 truncate text-xs font-bold leading-4 text-[#667568]">
+                  ЕГЭ {draggedTask.ege_number ?? '-'}{answer ? ` · Ответ: ${answer}` : ''}
+                </div>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f0f5f0] text-base font-black text-[#3F8C62]">
+                ⋮⋮
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Tasks Table */}
       <div className="flex-1 overflow-y-auto">
@@ -664,8 +799,10 @@ export function TopicDetail({
           <thead>
             <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
               <th className="px-6 py-4 w-12"></th>
+              <th className="px-4 py-4 w-24 text-center">№ в топике</th>
               <th className="px-6 py-4 w-16 text-center">№ ЕГЭ</th>
               <th className="px-6 py-4">Описание задачи</th>
+              <th className="px-4 py-4 w-40">Ответ</th>
               <th className="px-6 py-4 w-32 text-center">Решение</th>
               <th className="px-6 py-4 w-32 text-center">План</th>
               <th className="px-6 py-4 w-32">Сложность</th>
@@ -675,24 +812,40 @@ export function TopicDetail({
           <tbody className="divide-y divide-gray-50">
             {filteredTasks.map((task, index) => {
               const isDragged = draggedTaskId === task.id;
+              const isDropBefore = dragTarget?.index === index && dragTarget.position === 'before' && !isDragged;
+              const isDropAfter = dragTarget?.index === index && dragTarget.position === 'after' && !isDragged;
               return (
                 <tr
                   key={task.id}
                   draggable
-                  onDragStart={(e) => handleDragStart(e, task.id)}
-                  onDragOver={handleDragOver}
+                  onClick={() => {
+                    if (skipTaskClickRef.current) return;
+                    setEditingTask(task);
+                  }}
+                  onDragStart={(e) => handleDragStart(e, task)}
+                  onDragOver={(e) => handleTaskDragOver(e, index)}
                   onDrop={(e) => handleDrop(e, index)}
                   onDragEnd={handleDragEnd}
                   className={clsx(
-                    'hover:bg-gray-50/50 transition-colors group cursor-move',
-                    isDragged && 'opacity-50 bg-[#3F8C62]/5'
+                    'relative hover:bg-gray-50/50 transition-all group cursor-pointer',
+                    isDragged && 'scale-[0.995] bg-white opacity-45 shadow-lg shadow-[#3F8C62]/20 ring-2 ring-[#3F8C62]/25',
+                    isDropBefore && 'shadow-[inset_0_3px_0_#3F8C62]',
+                    isDropAfter && 'shadow-[inset_0_-3px_0_#3F8C62]'
                   )}
                 >
                   <td className="px-6 py-4 text-center">
                     <GripVertical
-                      size={14}
-                      className={clsx('mx-auto', isDragged ? 'text-[#3F8C62]' : 'text-gray-300')}
+                      size={16}
+                      className={clsx(
+                        'mx-auto transition-all',
+                        isDragged ? 'scale-125 text-[#3F8C62]' : 'text-gray-300 group-hover:text-[#3F8C62]'
+                      )}
                     />
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-[#3F8C62]/10 px-2 text-xs font-black text-[#3F8C62]">
+                      {task.order_index + 1}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className="text-xs font-bold text-gray-400">
@@ -717,6 +870,21 @@ export function TopicDetail({
                         }}
                       />
                     </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    {(() => {
+                      const answer = formatTaskCorrectAnswer(task);
+                      return answer ? (
+                        <span
+                          className="block max-w-[190px] truncate rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700"
+                          title={answer}
+                        >
+                          {answer}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-gray-300 uppercase">Нет</span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-center">
                     {task.full_solution_code ? (
@@ -757,13 +925,19 @@ export function TopicDetail({
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                       <button
-                        onClick={() => setEditingTask(task)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTask(task);
+                        }}
                         className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-gray-400 hover:text-[#3F8C62] transition-all"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() => onDeleteTask(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteTask(task.id);
+                        }}
                         className="p-1.5 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-500 transition-all"
                       >
                         <Trash2 size={14} />

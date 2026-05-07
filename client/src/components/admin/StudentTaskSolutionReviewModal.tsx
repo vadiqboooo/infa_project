@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
 import type { EditorView } from "@codemirror/view";
-import { Code2, ExternalLink, Loader2, Save, Trash2, X } from "lucide-react";
+import { BookOpen, Code2, ExternalLink, Loader2, Save, Trash2, X } from "lucide-react";
 import type { StudentTaskSolutionReview, TaskSolutionComment } from "../../api/types";
 import { commentRangeToOffsets, createCodeCommentExtensions } from "../codeCommentExtensions";
 
@@ -175,7 +175,28 @@ export function StudentTaskSolutionReviewModal({
         ) : (
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px]">
             <div className="min-h-0 min-w-0 overflow-hidden p-5">
-              <div className="mb-4 flex items-center gap-2">
+              <div className="mb-4 space-y-3">
+                {(review?.task_content_html || review?.task_description || review?.task_title) && (
+                  <div className="rounded-[22px] border border-[#dfe8df] bg-white px-4 py-4 shadow-[0_10px_28px_rgba(15,23,20,0.05)]">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#3F8C62]">
+                      <BookOpen size={14} />
+                      Условие задачи
+                    </div>
+                    {review?.task_title && (
+                      <div className="mb-2 text-sm font-black text-[#18251d]">{review.task_title}</div>
+                    )}
+                    {review?.task_description && (
+                      <div className="mb-2 text-sm leading-relaxed text-[#526058]">{review.task_description}</div>
+                    )}
+                    {review?.task_content_html && (
+                      <div
+                        className="max-h-56 overflow-y-auto text-sm leading-relaxed text-[#18251d]"
+                        dangerouslySetInnerHTML={{ __html: review.task_content_html }}
+                      />
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8df] bg-white px-3 py-1.5 text-xs font-semibold text-[#18251d]">
                   <Code2 size={13} />
                   Code
@@ -192,6 +213,7 @@ export function StudentTaskSolutionReviewModal({
                     Фото
                   </a>
                 )}
+                </div>
               </div>
 
               {code.trim() ? (

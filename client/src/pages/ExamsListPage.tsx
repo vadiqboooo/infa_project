@@ -50,7 +50,6 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
     const style = CATEGORY_STYLE[categoryKey];
     const CatIcon = style.icon;
 
-    const isSolved = variant.latest_score != null;
     const isMock = categoryKey === 'mock';
     const isVariant = categoryKey === 'variants';
     const isControl = categoryKey === 'control';
@@ -58,13 +57,17 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
 
     const totalTasks = variant.tasks.length;
     const draftCount = variant.draft_count ?? 0;
+    const hasStarted = draftCount > 0;
+    const isSolved = variant.latest_score != null;
+    const hasCurrentScore = !isSolved && !isMock && hasStarted && variant.current_score != null;
+    const showScore = isSolved || hasCurrentScore;
     const solvedCount = variant.tasks.filter(t => t.status === 'solved').length;
     // For in-progress exams use draft count, for finished use solved count
     const answeredCount = isSolved ? solvedCount : draftCount;
     const progressPercent = totalTasks > 0 ? Math.min(100, Math.round(answeredCount / totalTasks * 100)) : 0;
 
-    const score = variant.latest_score;
-    const primaryScore = variant.latest_primary_score;
+    const score = isSolved ? variant.latest_score : variant.current_score;
+    const primaryScore = isSolved ? variant.latest_primary_score : variant.current_primary_score;
     // For control works: percentage and correct/total instead of EGE scores
     const correctCount = primaryScore ?? 0;
     const pctScore = totalTasks > 0 ? Math.round((correctCount / totalTasks) * 100) : 0;
@@ -82,7 +85,7 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
                 style={{ background: isSolved ? '#fefce8' : style.blob2, borderRadius: '40% 60% 70% 30% / 60% 30% 70% 40%', opacity: 0.8 }} />
 
             {/* Large background score */}
-            {isSolved && (!isMock || isPublished) && (
+            {showScore && (!isMock || isPublished) && (
                 <div className="absolute right-3 bottom-1 select-none pointer-events-none z-0 transition-transform group-hover:scale-105 duration-700">
                     <span className={clsx(
                         'text-[120px] font-black leading-none tracking-tighter',
@@ -119,9 +122,9 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
                     {/* Right info */}
                     <div className={clsx(
                         'px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0',
-                        isSolved ? 'bg-amber-50 text-amber-500' : 'bg-white/50 text-gray-500'
+                        showScore ? 'bg-amber-50 text-amber-500' : 'bg-white/50 text-gray-500'
                     )}>
-                        {isSolved ? (isControl ? `${pctScore}%` : `${score?.toFixed(0)} б`) : `${totalTasks} зад`}
+                        {showScore ? (isControl ? `${pctScore}%` : `${score?.toFixed(0)} б`) : `${totalTasks} зад`}
                     </div>
                 </div>
 
@@ -155,8 +158,8 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
                                 Ответы записаны
                             </div>
                         )
-                    ) : isSolved ? (
-                        /* Regular solved */
+                    ) : showScore ? (
+                        /* Regular solved / in progress with current score */
                         <div className="mb-3">
                             <div className="flex items-center gap-2 mb-1.5">
                                 <div className="flex-1 bg-white/50 h-1.5 rounded-full overflow-hidden">
@@ -168,7 +171,7 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
                                 </div>
                             </div>
                             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                                {isControl ? `${correctCount}/${totalTasks} заданий` : `Первичный: ${primaryScore}/29`}
+                                {isControl ? `${correctCount}/${totalTasks} заданий` : `Первичный: ${primaryScore ?? 0}/29`}
                             </div>
                         </div>
                     ) : (

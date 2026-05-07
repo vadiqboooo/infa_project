@@ -97,6 +97,20 @@ export function useSubmitExam(examId: number) {
     });
 }
 
+export function useSaveExamDraftAnswer(attemptId: number) {
+    const qc = useQueryClient();
+    return useMutation<{ ok: boolean; primary_score: number }, Error, { taskId: number; answer: { val: AnswerVal } }>({
+        mutationFn: ({ taskId, answer }) =>
+            api<{ ok: boolean; primary_score: number }>(`/exams/attempt/${attemptId}/save-answer`, {
+                method: "PUT",
+                body: JSON.stringify({ task_id: taskId, answer }),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["navigation"] });
+        },
+    });
+}
+
 export function useSaveCodeSolution(attemptId: number) {
     return useMutation<{ ok: boolean }, Error, { taskId: number; code: string }>({
         mutationFn: ({ taskId, code }) =>
@@ -151,7 +165,7 @@ export function useSolutionCommentNotifications(enabled: boolean = true) {
         queryKey: ["solution-comment-notifications"],
         queryFn: () => api<SolutionCommentNotification[]>("/tasks/solution-comments/notifications"),
         enabled,
-        refetchInterval: 30000,
+        refetchInterval: 5000,
     });
 }
 
@@ -160,7 +174,21 @@ export function useAdminHelpNotifications(enabled: boolean = true) {
         queryKey: ["admin-help-notifications"],
         queryFn: () => api<AdminHelpNotification[]>("/admin/help-notifications"),
         enabled,
-        refetchInterval: 30000,
+        refetchInterval: 5000,
+    });
+}
+
+export function useMarkAdminHelpNotificationRead() {
+    const qc = useQueryClient();
+    return useMutation<{ ok: boolean }, Error, { source: "comment_reaction" | "direct_request"; source_id: number }>({
+        mutationFn: (body) =>
+            api<{ ok: boolean }>("/admin/help-notifications/read", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
+        },
     });
 }
 
@@ -174,6 +202,20 @@ export function useMarkSolutionCommentNotificationsRead() {
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["solution-comment-notifications"] });
+        },
+    });
+}
+
+export function useRequestTeacherHelp(taskId: number) {
+    const qc = useQueryClient();
+    return useMutation<{ ok: boolean; help_request_id: number }, Error, { message?: string } | void>({
+        mutationFn: (body) =>
+            api<{ ok: boolean; help_request_id: number }>(`/tasks/${taskId}/solution/help-request`, {
+                method: "POST",
+                body: JSON.stringify({ message: body?.message }),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
         },
     });
 }

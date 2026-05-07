@@ -11,7 +11,7 @@ import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
 import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip } from "lucide-react";
 import { clsx } from "clsx";
-import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam } from "../hooks/useApi";
+import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer } from "../hooks/useApi";
 import type { AnswerVal, TaskNav, TopicNav, ExamResult } from "../api/types";
 import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
@@ -167,10 +167,23 @@ export default function TasksPage() {
     const { data: examInfo } = useExamByTopic(isVariant ? currentTopic?.id ?? null : null);
     const startExam = useStartExam(examInfo?.id ?? 0);
     const submitExam = useSubmitExam(examInfo?.id ?? 0);
+    const saveExamDraftAnswer = useSaveExamDraftAnswer(examInfo?.active_attempt?.id ?? 0);
     const hasFinishedAttempt = examInfo?.finished_attempt != null;
 
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const check = useCheckAnswer(currentTaskNav?.id ?? 0);
+
+    const reviewExamAttempt = viewingFinishedExam ? (examResult ?? examInfo?.finished_attempt ?? null) : null;
+    const reviewExamAnswers = useMemo<Record<number, AnswerVal>>(() => {
+        const taskResults = reviewExamAttempt?.task_results ?? [];
+        const result: Record<number, AnswerVal> = {};
+        taskResults.forEach((item) => {
+            if (item.user_answer?.val !== undefined) {
+                result[item.task_id] = item.user_answer.val;
+            }
+        });
+        return result;
+    }, [reviewExamAttempt]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -219,6 +232,19 @@ export default function TasksPage() {
         setAttachSolutionOpen(false);
     }, [taskIndex, id]);
 
+    useEffect(() => {
+        if (!isVariant || !examInfo?.active_attempt) return;
+
+        const drafts = examInfo.active_attempt.draft_answers ?? {};
+        const nextAnswers: Record<number, AnswerVal> = {};
+        Object.entries(drafts).forEach(([taskId, answer]) => {
+            if (answer?.val !== undefined) {
+                nextAnswers[Number(taskId)] = answer.val;
+            }
+        });
+        setExamAnswers(nextAnswers);
+    }, [isVariant, examInfo?.active_attempt?.id]);
+
     const answer = savedAnswers[currentTaskNav?.id ?? 0] ?? 0;
 
     const handleCheck = async () => {
@@ -251,6 +277,17 @@ export default function TasksPage() {
         } catch {}
     };
 
+    const handleExamAnswerChange = (taskId: number, val: AnswerVal) => {
+        const attemptId = examInfo?.active_attempt?.id;
+        setExamAnswers(prev => ({ ...prev, [taskId]: val }));
+
+        if (!attemptId) return;
+        saveExamDraftAnswer.mutate(
+            { taskId, answer: { val } },
+            { onError: (error) => console.error("Failed to save exam draft answer:", error) },
+        );
+    };
+
     const handleStartExam = async () => {
         if (!examInfo) return;
         try {
@@ -270,6 +307,8 @@ export default function TasksPage() {
             }));
             const result = await submitExam.mutateAsync({ answers });
             setExamResult(result);
+            queryClient.invalidateQueries({ queryKey: ["exam"] });
+            queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (error) {
             console.error("Failed to submit exam:", error);
         }
@@ -475,8 +514,7 @@ export default function TasksPage() {
                                                             Помощь
                                                         </button>
                                                     )}
-                                                    {!isVariant && (
-                                                        <button
+                                                    <button
                                                             onClick={() => {
                                                                 setMentorOpen(false);
                                                                 setAttachSolutionOpen(o => !o);
@@ -508,8 +546,7 @@ export default function TasksPage() {
                                                                     {task.solution_comments_count}
                                                                 </span>
                                                             ) : null}
-                                                        </button>
-                                                    )}
+                                                    </button>
                                                     {task.solution_steps && task.solution_steps.length > 0 && (
                                                         <button
                                                             onClick={() => setSolutionOpen(true)}
@@ -541,10 +578,16 @@ export default function TasksPage() {
                                                         <AnswerInput
                                                             type={task.answer_type || 'single_number'}
                                                             egeNumber={task.ege_number}
-                                                            value={isVariant && examInfo?.active_attempt ? (examAnswers[task.id] ?? 0) : (savedAnswers[task.id] ?? 0)}
+                                                            value={
+                                                                isVariant && viewingFinishedExam
+                                                                    ? (reviewExamAnswers[task.id] ?? 0)
+                                                                    : isVariant && examInfo?.active_attempt
+                                                                        ? (examAnswers[task.id] ?? 0)
+                                                                        : (savedAnswers[task.id] ?? 0)
+                                                            }
                                                             onChange={(val) => {
                                                                 if (isVariant && examInfo?.active_attempt) {
-                                                                    setExamAnswers(prev => ({ ...prev, [task.id]: val }));
+                                                                    handleExamAnswerChange(task.id, val);
                                                                 } else {
                                                                     setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
                                                                     setCheckResult(null);
@@ -655,7 +698,7 @@ export default function TasksPage() {
                     ) : null}
 
                     {/* Final Result Screen */}
-                    {examResult && (
+                    {examResult && !viewingFinishedExam && (
                         <div className="max-w-4xl mx-auto mt-6 animate-in zoom-in duration-300">
                              <div className="bg-white border border-gray-200 rounded-3xl p-10 text-center shadow-xl mb-6">
                                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -674,7 +717,7 @@ export default function TasksPage() {
                                     </div>
                                 </div>
                                 <div className="flex gap-3 justify-center">
-                                    <button onClick={() => { setViewingFinishedExam(true); setExamResult(null); }} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all">Просмотреть задания</button>
+                                    <button onClick={() => setViewingFinishedExam(true)} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all">Просмотреть задания</button>
                                     <button onClick={() => navigate(backPath)} className="px-6 py-3 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all">К списку вариантов</button>
                                 </div>
                             </div>
@@ -753,7 +796,7 @@ export default function TasksPage() {
                                 <X size={18} />
                             </button>
                         </div>
-                        <TaskSolutionPanel taskId={task.id} disabled={viewingFinishedExam} onChanged={refreshCurrentTask} />
+                        <TaskSolutionPanel taskId={task.id} onChanged={refreshCurrentTask} />
                     </div>
                 )}
             </div>

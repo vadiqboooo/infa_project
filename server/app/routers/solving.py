@@ -14,6 +14,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user, get_db
 from app.models.ai_chat_log import AIChatLog
+from app.models.exam import Exam
 from app.models.exam_attempt import ExamAttempt
 from app.models.progress import ProgressStatus, UserProgress
 from app.models.task import Task
@@ -21,6 +22,7 @@ from app.models.task_solution import UserTaskSolution
 from app.models.task_solution_comment import UserTaskSolutionComment
 from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
+from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
 from app.models.topic import Topic
 from app.models.user import User
 from app.realtime import solution_comment_ws_manager
@@ -80,6 +82,10 @@ class SolutionCommentNotificationsReadIn(BaseModel):
 
 class SolutionCommentReactionIn(BaseModel):
     reaction: str
+
+
+class TaskSolutionHelpRequestIn(BaseModel):
+    message: str | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -320,6 +326,41 @@ def _solution_out(
     )
 
 
+async def _get_exam_attempt_solution_for_task(
+    db: AsyncSession,
+    user_id: int,
+    task_id: int,
+) -> dict:
+    task = await db.get(Task, task_id)
+    if task is None:
+        return {}
+    exam_result = await db.execute(select(Exam).where(Exam.topic_id == task.topic_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam is None:
+        return {}
+
+    attempts_result = await db.execute(
+        select(ExamAttempt)
+        .where(ExamAttempt.user_id == user_id, ExamAttempt.exam_id == exam.id)
+        .order_by(ExamAttempt.finished_at.is_(None).desc(), ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+    )
+    task_id_str = str(task_id)
+    for attempt in attempts_result.scalars().all():
+        results = attempt.results_json or {}
+        draft_codes = results.get("draft_codes", {}) or {}
+        if draft_codes.get(task_id_str):
+            return {"code": draft_codes.get(task_id_str)}
+
+        for task_result in results.get("task_results", []) or []:
+            if task_result.get("task_id") != task_id:
+                continue
+            return {
+                "code": task_result.get("code_solution"),
+                "file_url": task_result.get("file_solution_url"),
+            }
+    return {}
+
+
 @router.get("/solution-comments/notifications", response_model=list[SolutionCommentNotificationOut])
 async def get_solution_comment_notifications(
     user: User = Depends(get_current_user),
@@ -420,6 +461,19 @@ async def get_own_task_solution(task_id: int, user: User = Depends(get_current_u
                 )
             )
             reactions_by_comment_id = {comment_id: reaction for comment_id, reaction in reactions_result.all()}
+    exam_solution = await _get_exam_attempt_solution_for_task(db, user.id, task_id)
+    if solution is None and exam_solution:
+        return TaskSolutionOut(
+            task_id=task_id,
+            code=exam_solution.get("code"),
+            file_url=exam_solution.get("file_url"),
+            comments=[],
+        )
+    if solution is not None:
+        if not solution.code and exam_solution.get("code"):
+            solution.code = exam_solution["code"]
+        if not solution.file_url and exam_solution.get("file_url"):
+            solution.file_url = exam_solution["file_url"]
     return _solution_out(task_id, solution, comments, reactions_by_comment_id)
 
 
@@ -459,6 +513,36 @@ async def set_solution_comment_reaction(
 
     await db.commit()
     return {"ok": True, "reaction": body.reaction}
+
+
+@router.post("/{task_id}/solution/help-request")
+async def request_teacher_help_for_solution(
+    task_id: int,
+    body: TaskSolutionHelpRequestIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    solution = await _get_or_create_solution(db, user.id, task_id)
+    await db.flush()
+
+    existing_result = await db.execute(
+        select(UserTaskSolutionHelpRequest).where(
+            UserTaskSolutionHelpRequest.solution_id == solution.id,
+            UserTaskSolutionHelpRequest.is_resolved.is_(False),
+        )
+    )
+    help_request = existing_result.scalar_one_or_none()
+    message = (body.message or "").strip() or "Ученик попросил помощь у преподавателя"
+    if help_request is None:
+        help_request = UserTaskSolutionHelpRequest(solution_id=solution.id, message=message)
+        db.add(help_request)
+    else:
+        help_request.message = message
+
+    await db.flush()
+    help_request_id = help_request.id
+    await db.commit()
+    return {"ok": True, "help_request_id": help_request_id}
 
 
 @router.websocket("/{task_id}/solution/comments/ws")

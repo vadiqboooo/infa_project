@@ -7,7 +7,11 @@ import {
 } from "../hooks/useApi";
 
 function taskPath(topicCategory: string, topicId: number, taskId: number) {
-  const base = topicCategory === "homework" ? "/homework" : "/tasks";
+  const base = ["variants", "mock", "control"].includes(topicCategory)
+    ? "/exams"
+    : topicCategory === "homework"
+      ? "/homework"
+      : "/tasks";
   return `${base}/${topicId}?task=${taskId}&solution=1`;
 }
 

@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, X, Loader2, ChevronDo
 import { clsx } from "clsx";
 import type { TopicStatsOut, GroupOut, TopicStatsStudentRow, TopicStatsTaskInfo } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
+import { StudentTaskSolutionReviewModal } from "./StudentTaskSolutionReviewModal";
 
 const API_BASE = "/api";
 
@@ -118,7 +119,9 @@ function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
                                     ? <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
                                     : status === "failed"
                                         ? <XCircle size={15} className="text-red-400 shrink-0" />
-                                        : <Circle size={15} className="text-gray-300 shrink-0" />
+                                        : status === "draft"
+                                            ? <Circle size={15} className="text-amber-400 fill-amber-100 shrink-0" />
+                                            : <Circle size={15} className="text-gray-300 shrink-0" />
                                 }
                                 <span className={clsx(
                                     "text-sm font-mono font-bold",
@@ -200,6 +203,20 @@ function CellDetailModal({ student, task, onClose, apiKey }: CellModalProps) {
                         </div>
                     )}
 
+                    {ans?.image_solution_url && (
+                        <div className="rounded-xl border border-gray-100 px-4 py-3 bg-gray-50">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Фото решения</div>
+                            <a
+                                href={ans.image_solution_url.startsWith("http") ? ans.image_solution_url : `/api${ans.image_solution_url}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline font-medium"
+                            >
+                                <ExternalLink size={13} /> Открыть фото
+                            </a>
+                        </div>
+                    )}
+
                     {/* Etalon code solution */}
                     {taskData?.full_solution_code && (
                         <div className="rounded-xl border border-emerald-100 overflow-hidden">
@@ -251,11 +268,12 @@ function Cell({
             <div className="flex flex-col items-center gap-0.5">
                 {status === "solved" && <CheckCircle2 size={14} className="text-emerald-500" />}
                 {status === "failed" && <XCircle size={14} className="text-red-400" />}
+                {status === "draft" && <Circle size={12} className="text-amber-400 fill-amber-100" />}
                 {!status && <Circle size={12} className="text-gray-200" />}
                 {answer && (
                     <span className={clsx(
                         "text-[9px] font-mono leading-tight max-w-[56px] truncate",
-                        status === "solved" ? "text-emerald-600" : status === "failed" ? "text-red-400" : "text-gray-400"
+                        status === "solved" ? "text-emerald-600" : status === "failed" ? "text-red-400" : status === "draft" ? "text-amber-600" : "text-gray-400"
                     )}>
                         {answer}
                     </span>
@@ -282,6 +300,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
     const [analysisFor, setAnalysisFor] = useState<{ studentId: number; studentName: string; attemptId: number } | null>(null);
     const [groupFilter, setGroupFilter] = useState<number | null>(null);
     const [cellDetail, setCellDetail] = useState<{ student: TopicStatsStudentRow; task: TopicStatsTaskInfo } | null>(null);
+    const [reviewFor, setReviewFor] = useState<{ student: TopicStatsStudentRow; task: TopicStatsTaskInfo } | null>(null);
 
     const filteredStudents = groupFilter === null
         ? stats.students
@@ -458,7 +477,14 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                     const ans = student.answers?.[task.task_id];
                                                     const ansText = fmtAnswer(ans?.user_answer);
                                                     const hasDetail = !!(student.results[task.task_id] || ans);
-                                                    const hasSolution = !!(ans?.code_solution || ans?.file_solution_url);
+                                                    const hasSolution = !!(ans?.code_solution || ans?.file_solution_url || ans?.image_solution_url);
+                                                    const openDetail = () => {
+                                                        if (hasSolution) {
+                                                            setReviewFor({ student, task });
+                                                        } else {
+                                                            setCellDetail({ student, task });
+                                                        }
+                                                    };
                                                     return (
                                                         <Cell
                                                             key={task.task_id}
@@ -467,7 +493,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                             hasDetail={hasDetail}
                                                             hasSolution={hasSolution}
                                                             timeSpent={ans?.time_spent_seconds}
-                                                            onClick={() => setCellDetail({ student, task })}
+                                                            onClick={openDetail}
                                                         />
                                                     );
                                                 })}
@@ -555,6 +581,17 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                     attemptId={analysisFor.attemptId}
                     apiKey={apiKey}
                     onClose={() => setAnalysisFor(null)}
+                />
+            )}
+
+            {reviewFor && (
+                <StudentTaskSolutionReviewModal
+                    studentId={reviewFor.student.student_id}
+                    taskId={reviewFor.task.task_id}
+                    studentName={reviewFor.student.student_name}
+                    apiKey={apiKey}
+                    onClose={() => setReviewFor(null)}
+                    onChanged={onRefresh}
                 />
             )}
         </>

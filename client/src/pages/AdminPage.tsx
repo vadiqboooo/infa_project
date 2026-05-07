@@ -93,16 +93,27 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
     });
 }
 
-type FilterCategory = 'все' | 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+type FilterCategory = 'все' | 'learning' | 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
 
 const FILTER_OPTIONS: { key: FilterCategory; label: string }[] = [
     { key: 'все', label: 'Все' },
-    { key: 'tutorial', label: 'Разбор' },
-    { key: 'homework', label: 'Домашняя работа' },
+    { key: 'learning', label: 'Разбор + ДЗ' },
     { key: 'control', label: 'Контрольная' },
     { key: 'variants', label: 'Вариант' },
     { key: 'mock', label: 'Пробник' },
 ];
+
+function normalizeTopicFilter(filter?: FilterCategory): FilterCategory {
+    return filter === 'tutorial' || filter === 'homework' ? 'learning' : (filter ?? 'все');
+}
+
+function topicEgeLabel(topic: Pick<TopicAdmin, "ege_number" | "ege_number_end">) {
+    if (topic.ege_number == null) return "—";
+    if (topic.ege_number_end != null && topic.ege_number_end > topic.ege_number) {
+        return `${topic.ege_number}-${topic.ege_number_end}`;
+    }
+    return String(topic.ege_number);
+}
 
 export default function AdminPage() {
     const { user, loggedIn } = useAuth();
@@ -225,11 +236,10 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const [groups, setGroups] = useState<GroupOut[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState(savedState.search ?? "");
-    const [filter, setFilter] = useState<FilterCategory>("все");
+    const [filter, setFilter] = useState<FilterCategory>(normalizeTopicFilter(savedState.filter));
     const [showImport, setShowImport] = useState(false);
     const topicsScrollRef = useRef<HTMLDivElement | null>(null);
     const studentsScrollRef = useRef<HTMLDivElement | null>(null);
-    const filterRestoredRef = useRef(!savedState.filter);
 
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -255,21 +265,23 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     }, [loadData]);
 
     useEffect(() => {
-        if (savedState.filter) setFilter(savedState.filter);
-    }, []);
-
-    useEffect(() => {
-        if (!filterRestoredRef.current) {
-            if (filter !== savedState.filter) return;
-            filterRestoredRef.current = true;
-        }
         saveAdminDashboardState({ activeTab, search, filter });
     }, [activeTab, search, filter]);
 
     const filteredTopics = useMemo(() => {
+        const query = search.trim().toLowerCase();
         return topics.filter(t => {
-            const matchesFilter = filter === 'все' || t.category === filter;
-            const matchesSearch = search === '' || t.title.toLowerCase().includes(search.toLowerCase());
+            const matchesFilter =
+                filter === 'все'
+                || (filter === 'learning' && (t.category === 'tutorial' || t.category === 'homework'))
+                || t.category === filter;
+            const egeLabel = topicEgeLabel(t).toLowerCase();
+            const matchesSearch =
+                query === ''
+                || t.title.toLowerCase().includes(query)
+                || egeLabel.includes(query)
+                || (t.ege_number != null && String(t.ege_number).includes(query))
+                || (t.ege_number_end != null && String(t.ege_number_end).includes(query));
             return matchesFilter && matchesSearch;
         });
     }, [topics, filter, search]);
@@ -408,7 +420,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                 type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Поиск топика..."
+                                placeholder="Поиск по топику или № задания..."
                                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62] bg-white transition-all shadow-sm"
                             />
                         </div>
@@ -463,6 +475,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
+                                        <th className="px-6 py-4 w-28 text-center">№ задания</th>
                                         <th className="px-6 py-4">Топик</th>
                                         <th className="px-6 py-4 w-40">Категория</th>
                                         <th className="px-6 py-4 w-28 text-center">Задач</th>
@@ -473,7 +486,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                     {loading ? (
                                         [1,2,3].map(i => (
                                             <tr key={i} className="animate-pulse">
-                                                <td colSpan={4} className="px-6 py-4 h-16 bg-white" />
+                                                <td colSpan={5} className="px-6 py-4 h-16 bg-white" />
                                             </tr>
                                         ))
                                     ) : filteredTopics.map((topic) => (
@@ -482,6 +495,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                             onClick={() => navigate(`topics/${topic.id}`)}
                                             className="hover:bg-gray-50/80 transition-all cursor-pointer group"
                                         >
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={clsx(
+                                                    "inline-flex min-w-9 items-center justify-center rounded-xl px-2.5 py-1 text-xs font-black",
+                                                    topic.ege_number == null
+                                                        ? "bg-gray-100 text-gray-400"
+                                                        : "bg-[#3F8C62]/10 text-[#3F8C62]"
+                                                )}>
+                                                    {topicEgeLabel(topic)}
+                                                </span>
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-[#3F8C62]/10 flex items-center justify-center shrink-0">
@@ -612,17 +635,28 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
     const [groups, setGroups] = useState<GroupOut[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const loadStats = useCallback(async () => {
+    const loadStats = useCallback(async (silent = false) => {
         if (!id) return;
-        setLoading(true);
-        Promise.all([
-            adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey),
-            adminFetch<GroupOut[]>(`/admin/groups`, apiKey),
-        ]).then(([s, g]) => { setStats(s); setGroups(g); })
-          .finally(() => setLoading(false));
+        if (!silent) setLoading(true);
+        try {
+            const [s, g] = await Promise.all([
+                adminFetch<TopicStatsOut>(`/admin/topics/${id}/stats`, apiKey),
+                adminFetch<GroupOut[]>(`/admin/groups`, apiKey),
+            ]);
+            setStats(s);
+            setGroups(g);
+        } finally {
+            if (!silent) setLoading(false);
+        }
     }, [id, apiKey]);
 
     useEffect(() => { loadStats(); }, [loadStats]);
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            loadStats(true).catch((error) => console.error("Failed to refresh topic stats:", error));
+        }, 3000);
+        return () => window.clearInterval(interval);
+    }, [loadStats]);
 
     if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
     if (!stats) return null;
@@ -731,6 +765,45 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
         await loadTopicData();
     };
 
+    const handleReorderTasks = async (orderedTasks: TaskAdmin[]) => {
+        if (!topic) return;
+        const previousTasks = tasks;
+        setTasks(orderedTasks);
+
+        const changedTasks = orderedTasks.filter((task) => {
+            const previous = previousTasks.find((item) => item.id === task.id);
+            return previous?.order_index !== task.order_index;
+        });
+
+        try {
+            await Promise.all(changedTasks.map((task) =>
+                adminFetch(`/admin/tasks/${task.id}`, apiKey, {
+                    method: "PUT",
+                    body: JSON.stringify({
+                        topic_id: topic.id,
+                        external_id: task.external_id,
+                        ege_number: task.ege_number,
+                        title: task.title,
+                        description: task.description,
+                        content_html: task.content_html,
+                        answer_type: task.answer_type,
+                        difficulty: task.difficulty,
+                        correct_answer: task.correct_answer,
+                        solution_steps: task.solution_steps,
+                        full_solution_code: task.full_solution_code,
+                        media_resources: (task as any).media_resources,
+                        order_index: task.order_index,
+                    }),
+                })
+            ));
+            queryClient.invalidateQueries({ queryKey: ["navigation"] });
+        } catch (err) {
+            setTasks(previousTasks);
+            console.error("Failed to reorder tasks:", err);
+            alert("Не удалось изменить порядок задач");
+        }
+    };
+
     const handleDeleteTask = async (taskId: number) => {
         if (!confirm("Удалить задачу?")) return;
         await adminFetch(`/admin/tasks/${taskId}`, apiKey, { method: "DELETE" });
@@ -750,6 +823,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
                     onBack={() => navigate("/admin")}
                     onSaveTopic={handleSaveTopic}
                     onSaveTask={handleSaveTask}
+                    onReorderTasks={handleReorderTasks}
                     onDeleteTask={handleDeleteTask}
                     apiKey={apiKey}
                 />

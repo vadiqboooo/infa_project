@@ -148,6 +148,8 @@ export interface ExamInfo {
         finished_at: string;
         primary_score: number;
         score: number;
+        task_results?: TaskResult[];
+        submitted_for_review?: boolean;
     } | null;
 }
 
@@ -379,7 +381,9 @@ export interface SolutionCommentNotification {
 
 export interface AdminHelpNotification {
     id: number;
-    comment_id: number;
+    source: "comment_reaction" | "direct_request";
+    comment_id?: number | null;
+    help_request_id?: number | null;
     student_id: number;
     student_name: string;
     task_id: number;
@@ -389,12 +393,15 @@ export interface AdminHelpNotification {
     topic_title: string;
     text: string;
     updated_at?: string | null;
+    is_read?: boolean;
 }
 
 export interface StudentTaskSolutionReview {
     student_id: number;
     task_id: number;
     task_title: string | null;
+    task_content_html?: string | null;
+    task_description?: string | null;
     ege_number: number | null;
     code: string | null;
     file_url: string | null;
@@ -459,6 +466,7 @@ export interface TopicStatsStudentRow {
         user_answer: { val: any } | null;
         code_solution?: string | null;
         file_solution_url?: string | null;
+        image_solution_url?: string | null;
         is_correct?: boolean;
         points?: number;
         max_points?: number;

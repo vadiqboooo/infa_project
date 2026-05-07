@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
-import { Code2, ExternalLink, FileUp, ImageUp, Loader2, Save } from "lucide-react";
+import { Code2, ExternalLink, FileUp, HelpCircle, ImageUp, Loader2, Save } from "lucide-react";
 import { api, authFetch } from "../api/client";
 import { createCodeCommentExtensions } from "./codeCommentExtensions";
+import { useRequestTeacherHelp } from "../hooks/useApi";
 
 type SolutionComment = {
   id: number;
@@ -43,8 +44,10 @@ export function TaskSolutionPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [helpRequested, setHelpRequested] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const helpRequest = useRequestTeacherHelp(taskId);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +55,7 @@ export function TaskSolutionPanel({
     setSolution(null);
     setCode("");
     setSaved(false);
+    setHelpRequested(false);
     api<TaskSolution>(`/tasks/${taskId}/solution`)
       .then((data) => {
         if (cancelled) return;
@@ -159,6 +163,13 @@ export function TaskSolutionPanel({
     });
   }, []);
 
+  async function requestTeacherHelp() {
+    await helpRequest.mutateAsync({
+      message: "Ученик попросил помощь у преподавателя по этому решению",
+    });
+    setHelpRequested(true);
+  }
+
   const fileHref = solution?.file_url ? `/api${solution.file_url}` : null;
   const imageHref = solution?.image_url ? `/api${solution.image_url}` : null;
   const comments = solution?.comments ?? [];
@@ -238,6 +249,14 @@ export function TaskSolutionPanel({
           >
             <ImageUp size={13} />
             Фото
+          </button>
+          <button
+            onClick={requestTeacherHelp}
+            disabled={disabled || loading || helpRequest.isPending || helpRequested}
+            className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-55"
+          >
+            {helpRequest.isPending ? <Loader2 size={13} className="animate-spin" /> : <HelpCircle size={13} />}
+            {helpRequested ? "Запрос отправлен" : "Попросить помощи у преподавателя"}
           </button>
           {saved && <span className="text-xs font-semibold text-emerald-600">Сохранено</span>}
           {fileHref && (

@@ -16,7 +16,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.dependencies import get_db, verify_parser_api_key
+from app.dependencies import get_current_user, get_db, verify_parser_api_key
+from app.models.admin_help_notification_read import AdminHelpNotificationRead
 from app.models.exam import Exam, exam_tasks
 from app.models.task import AnswerType, Task
 from app.models.topic import Topic
@@ -28,6 +29,7 @@ from app.models.group import Group, user_groups
 from app.models.task_solution import UserTaskSolution
 from app.models.task_solution_comment import UserTaskSolutionComment
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
+from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
 from app.realtime import solution_comment_ws_manager
 from app.schemas.admin import (
     ImportVariantIn,
@@ -75,7 +77,9 @@ router = APIRouter(
 
 class AdminHelpNotificationOut(BaseModel):
     id: int
-    comment_id: int
+    source: str
+    comment_id: int | None = None
+    help_request_id: int | None = None
     student_id: int
     student_name: str
     task_id: int
@@ -85,13 +89,29 @@ class AdminHelpNotificationOut(BaseModel):
     topic_title: str
     text: str
     updated_at: datetime | None = None
+    is_read: bool = False
 
 
 # ── Topics ────────────────────────────────────────────────────
 
+class AdminHelpNotificationReadIn(BaseModel):
+    source: str
+    source_id: int
+
+
 @router.get("/help-notifications", response_model=list[AdminHelpNotificationOut])
-async def get_help_notifications(db: AsyncSession = Depends(get_db)):
+async def get_help_notifications(
+    current_admin: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Return active student requests for help on teacher comments."""
+    reads_result = await db.execute(
+        select(AdminHelpNotificationRead.source, AdminHelpNotificationRead.source_id).where(
+            AdminHelpNotificationRead.user_id == current_admin.id,
+        )
+    )
+    read_keys = {(source, source_id) for source, source_id in reads_result.all()}
+
     result = await db.execute(
         select(
             UserTaskSolutionCommentReaction,
@@ -111,6 +131,7 @@ async def get_help_notifications(db: AsyncSession = Depends(get_db)):
     )
     notifications: list[AdminHelpNotificationOut] = []
     for reaction, comment, solution, user, task, topic in result.all():
+        is_read = ("comment_reaction", reaction.id) in read_keys
         student_name = (
             f"{user.first_name_real or ''} {user.last_name_real or ''}".strip()
             or user.first_name
@@ -120,6 +141,7 @@ async def get_help_notifications(db: AsyncSession = Depends(get_db)):
         notifications.append(
             AdminHelpNotificationOut(
                 id=reaction.id,
+                source="comment_reaction",
                 comment_id=comment.id,
                 student_id=solution.user_id,
                 student_name=student_name,
@@ -130,9 +152,66 @@ async def get_help_notifications(db: AsyncSession = Depends(get_db)):
                 topic_title=topic.title,
                 text=comment.text,
                 updated_at=reaction.updated_at,
+                is_read=is_read,
             )
         )
+    requests_result = await db.execute(
+        select(UserTaskSolutionHelpRequest, UserTaskSolution, User, Task, Topic)
+        .join(UserTaskSolution, UserTaskSolution.id == UserTaskSolutionHelpRequest.solution_id)
+        .join(User, User.id == UserTaskSolution.user_id)
+        .join(Task, Task.id == UserTaskSolution.task_id)
+        .join(Topic, Topic.id == Task.topic_id)
+        .order_by(UserTaskSolutionHelpRequest.updated_at.desc(), UserTaskSolutionHelpRequest.id.desc())
+    )
+    for help_request, solution, user, task, topic in requests_result.all():
+        is_read = ("direct_request", help_request.id) in read_keys
+        student_name = (
+            f"{user.first_name_real or ''} {user.last_name_real or ''}".strip()
+            or user.first_name
+            or user.login
+            or f"User {user.id}"
+        )
+        notifications.append(
+            AdminHelpNotificationOut(
+                id=help_request.id,
+                source="direct_request",
+                help_request_id=help_request.id,
+                student_id=solution.user_id,
+                student_name=student_name,
+                task_id=solution.task_id,
+                task_order_index=task.order_index,
+                ege_number=task.ege_number,
+                topic_id=topic.id,
+                topic_title=topic.title,
+                text=help_request.message or "Ученик попросил помощь у преподавателя",
+                updated_at=help_request.updated_at,
+                is_read=is_read,
+            )
+        )
+    notifications.sort(key=lambda item: item.updated_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return notifications
+
+
+@router.post("/help-notifications/read")
+async def mark_help_notification_read(
+    body: AdminHelpNotificationReadIn,
+    current_admin: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.source not in {"comment_reaction", "direct_request"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid notification source")
+
+    existing_result = await db.execute(
+        select(AdminHelpNotificationRead).where(
+            AdminHelpNotificationRead.user_id == current_admin.id,
+            AdminHelpNotificationRead.source == body.source,
+            AdminHelpNotificationRead.source_id == body.source_id,
+        )
+    )
+    if existing_result.scalar_one_or_none() is None:
+        db.add(AdminHelpNotificationRead(user_id=current_admin.id, source=body.source, source_id=body.source_id))
+        await db.commit()
+    return {"ok": True}
 
 
 @router.get("/topics", response_model=list[TopicOut])
@@ -859,6 +938,42 @@ async def _get_student_task_solution_or_404(
     return user, task, solution
 
 
+async def _get_exam_attempt_solution_for_task(
+    user_id: int,
+    task_id: int,
+    db: AsyncSession,
+) -> dict:
+    """Return code/file saved inside exam attempt JSON for older variant flows."""
+    task = await db.get(Task, task_id)
+    if task is None:
+        return {}
+    exam_result = await db.execute(select(Exam).where(Exam.topic_id == task.topic_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam is None:
+        return {}
+
+    attempts_result = await db.execute(
+        select(ExamAttempt)
+        .where(ExamAttempt.user_id == user_id, ExamAttempt.exam_id == exam.id)
+        .order_by(ExamAttempt.finished_at.is_(None).desc(), ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+    )
+    task_id_str = str(task_id)
+    for attempt in attempts_result.scalars().all():
+        results = attempt.results_json or {}
+        draft_codes = results.get("draft_codes", {}) or {}
+        if draft_codes.get(task_id_str):
+            return {"code": draft_codes.get(task_id_str)}
+
+        for task_result in results.get("task_results", []) or []:
+            if task_result.get("task_id") != task_id:
+                continue
+            return {
+                "code": task_result.get("code_solution"),
+                "file_url": task_result.get("file_solution_url"),
+            }
+    return {}
+
+
 @router.get("/students/{user_id}/tasks/{task_id}/solution-review", response_model=StudentTaskSolutionReviewOut)
 async def get_student_task_solution_review(
     user_id: int,
@@ -884,13 +999,16 @@ async def get_student_task_solution_review(
         )
         reaction_by_comment_id = {comment_id: reaction for comment_id, reaction in reactions_result.all()}
     comments = [_comment_out(comment, reaction_by_comment_id.get(comment.id)) for comment in raw_comments]
+    exam_solution = await _get_exam_attempt_solution_for_task(user_id, task_id, db)
     return StudentTaskSolutionReviewOut(
         student_id=user_id,
         task_id=task_id,
         task_title=task.title,
+        task_content_html=task.content_html,
+        task_description=task.description,
         ege_number=task.ege_number,
-        code=solution.code,
-        file_url=solution.file_url,
+        code=solution.code or exam_solution.get("code"),
+        file_url=solution.file_url or exam_solution.get("file_url"),
         image_url=solution.image_url,
         updated_at=solution.updated_at,
         comments=comments,
@@ -910,6 +1028,10 @@ async def create_student_task_solution_comment(
 ):
     """Attach an admin comment to a selected code range in a student's task solution."""
     _, _, solution = await _get_student_task_solution_or_404(user_id, task_id, db)
+    if not solution.code:
+        exam_solution = await _get_exam_attempt_solution_for_task(user_id, task_id, db)
+        if exam_solution.get("code"):
+            solution.code = exam_solution["code"]
     comment = UserTaskSolutionComment(
         solution_id=solution.id,
         from_offset=body.from_offset,
@@ -921,6 +1043,15 @@ async def create_student_task_solution_comment(
         text=body.text.strip(),
     )
     db.add(comment)
+    active_requests_result = await db.execute(
+        select(UserTaskSolutionHelpRequest).where(
+            UserTaskSolutionHelpRequest.solution_id == solution.id,
+            UserTaskSolutionHelpRequest.is_resolved.is_(False),
+        )
+    )
+    for help_request in active_requests_result.scalars().all():
+        help_request.is_resolved = True
+        help_request.resolved_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(comment)
     await solution_comment_ws_manager.broadcast(
@@ -1114,8 +1245,32 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
     )
     all_progress = progress_result.scalars().all()
 
-    # Unique user ids who have any interaction
-    all_user_ids = list({p.user_id for p in all_progress})
+    solutions_result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.task_id.in_(task_ids))
+    )
+    all_solutions = [
+        solution
+        for solution in solutions_result.scalars().all()
+        if solution.code or solution.file_url or solution.image_url
+    ]
+
+    exam_res2 = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    topic_exam = exam_res2.scalar_one_or_none()
+    all_attempts: list[ExamAttempt] = []
+    if topic_exam:
+        attempts_res = await db.execute(
+            select(ExamAttempt)
+            .where(ExamAttempt.exam_id == topic_exam.id)
+            .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+        )
+        all_attempts = list(attempts_res.scalars().all())
+
+    # Unique user ids who have any interaction: progress, exam draft/result, or attached solution.
+    all_user_ids = list(
+        {p.user_id for p in all_progress}
+        | {att.user_id for att in all_attempts}
+        | {solution.user_id for solution in all_solutions}
+    )
 
     # Apply group filter if requested
     if group_id is not None:
@@ -1147,23 +1302,20 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
     for p in all_progress:
         progress_by_user.setdefault(p.user_id, {})[p.task_id] = p.status.value
 
-    # Latest finished exam attempt per user (for AI analysis + student answers + timing)
+    # Latest finished exam attempt per user (for AI analysis + submitted answers + timing).
+    # Active attempts are overlaid below so teachers see saved answers immediately.
     attempt_by_user: dict[int, int] = {}
     answers_by_user: dict[int, dict[int, any]] = {}
     timing_by_user: dict[int, dict] = {}
-    exam_res2 = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
-    topic_exam = exam_res2.scalar_one_or_none()
     if topic_exam and user_ids:
-        attempts_res = await db.execute(
-            select(ExamAttempt)
-            .where(
-                ExamAttempt.exam_id == topic_exam.id,
-                ExamAttempt.user_id.in_(user_ids),
-                ExamAttempt.finished_at.is_not(None),
-            )
-            .order_by(ExamAttempt.finished_at.desc())
+        relevant_attempts = [att for att in all_attempts if att.user_id in user_ids]
+
+        finished_attempts = sorted(
+            [att for att in relevant_attempts if att.finished_at is not None],
+            key=lambda att: att.finished_at or att.started_at,
+            reverse=True,
         )
-        for att in attempts_res.scalars().all():
+        for att in finished_attempts:
             if att.user_id not in attempt_by_user:
                 attempt_by_user[att.user_id] = att.id
                 # Extract user answers + solutions from results_json
@@ -1198,6 +1350,77 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
                     "finished_at": eff_finished,
                     "duration_minutes": duration,
                 }
+
+        active_attempts = sorted(
+            [att for att in relevant_attempts if att.finished_at is None],
+            key=lambda att: att.started_at,
+            reverse=True,
+        )
+        for att in active_attempts:
+            results = att.results_json or {}
+            drafts = results.get("draft_answers", {}) or {}
+            draft_codes = results.get("draft_codes", {}) or {}
+            scored = results.get("scored_answers", {}) or {}
+            user_answers = answers_by_user.setdefault(att.user_id, {})
+            user_results = progress_by_user.setdefault(att.user_id, {})
+
+            for task_id_str, answer in drafts.items():
+                try:
+                    task_id = int(task_id_str)
+                except (TypeError, ValueError):
+                    continue
+                if task_id not in task_ids:
+                    continue
+
+                score_info = scored.get(task_id_str) or scored.get(str(task_id)) or {}
+                entry = user_answers.setdefault(task_id, {})
+                entry["user_answer"] = answer
+                entry["is_correct"] = score_info.get("is_correct")
+                entry["points"] = score_info.get("points", entry.get("points", 0))
+                task = next((t for t in tasks if t.id == task_id), None)
+                entry["max_points"] = 2 if (task and task.ege_number and task.ege_number >= 26) else 1
+
+                if score_info.get("is_correct") is True:
+                    user_results[task_id] = "solved"
+                elif score_info.get("is_correct") is False:
+                    user_results[task_id] = "failed"
+                else:
+                    user_results.setdefault(task_id, "draft")
+
+            for task_id_str, code in draft_codes.items():
+                if not code:
+                    continue
+                try:
+                    task_id = int(task_id_str)
+                except (TypeError, ValueError):
+                    continue
+                if task_id not in task_ids:
+                    continue
+                entry = user_answers.setdefault(task_id, {})
+                if "user_answer" not in entry:
+                    entry["user_answer"] = None
+                entry["code_solution"] = code
+                user_results.setdefault(task_id, "draft")
+
+            timing_by_user[att.user_id] = {
+                "started_at": att.started_at,
+                "finished_at": None,
+                "duration_minutes": None,
+            }
+
+    for solution in all_solutions:
+        if solution.user_id not in user_ids:
+            continue
+        entry = answers_by_user.setdefault(solution.user_id, {}).setdefault(solution.task_id, {})
+        if "user_answer" not in entry:
+            entry["user_answer"] = None
+        if solution.code:
+            entry["code_solution"] = solution.code
+        if solution.file_url:
+            entry["file_solution_url"] = solution.file_url
+        if solution.image_url:
+            entry["image_solution_url"] = solution.image_url
+        progress_by_user.setdefault(solution.user_id, {}).setdefault(solution.task_id, "draft")
 
     student_rows = []
     for uid in user_ids:
