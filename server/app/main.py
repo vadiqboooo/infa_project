@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
             task_solution_comment_read,
             task_solution_comment_reaction,
             task_solution_help_request,
+            task_solution_version,
         )  # noqa: ensure models are registered
         async with engine.begin() as conn:
             await conn.run_sync(
@@ -69,6 +70,11 @@ async def lifespan(app: FastAPI):
             )
             await conn.run_sync(
                 lambda sync_conn: task_solution_help_request.UserTaskSolutionHelpRequest.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
+                lambda sync_conn: task_solution_version.UserTaskSolutionVersion.__table__.create(
                     sync_conn, checkfirst=True
                 )
             )

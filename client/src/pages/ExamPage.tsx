@@ -48,6 +48,7 @@ export default function ExamPage() {
     const [codeSolutions, setCodeSolutions] = useState<Record<number, string>>({});
     const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
+    const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
     const [localCode, setLocalCode] = useState("");
     const [viewingCode, setViewingCode] = useState<string | null>(null);
 
@@ -65,6 +66,10 @@ export default function ExamPage() {
     const isMock = String(currentTopic?.category) === "mock";
     const isControl = String(currentTopic?.category) === "control";
     const showTimer = isMock || isControl;
+    const closeSolutionPanel = () => {
+        if (solutionPanelBeforeCloseRef.current?.() === false) return;
+        setSolutionPanelTaskId(null);
+    };
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
@@ -1272,15 +1277,15 @@ export default function ExamPage() {
             {/* Solution drawer panel */}
             {solutionPanelTaskId !== null && (
                 <div className="fixed inset-0 z-50 flex">
-                    <div className="flex-1 bg-black/20" onClick={() => setSolutionPanelTaskId(null)} />
-                    <div className="w-full md:w-[620px] bg-[#f8fbf8] h-full shadow-2xl flex flex-col border-l border-gray-200 p-4 overflow-y-auto">
+                    <div className="flex-1 bg-black/20" onClick={closeSolutionPanel} />
+                    <div className="w-full md:w-[620px] bg-[#f8fbf8] h-full shadow-2xl flex flex-col border-l border-[#d8eadb] p-3 sm:p-4 overflow-hidden">
                         <div className="mb-3 flex items-center justify-between shrink-0">
                             <div>
                                 <div className="text-sm font-black text-[#18251d]">Прикрепить решение</div>
                                 <div className="text-[11px] text-[#7a877c]">Сохранится для этой задачи и комментариев преподавателя</div>
                             </div>
                             <button
-                                onClick={() => setSolutionPanelTaskId(null)}
+                                onClick={closeSolutionPanel}
                                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
                             >
                                 <X size={18} />
@@ -1288,6 +1293,10 @@ export default function ExamPage() {
                         </div>
                         <TaskSolutionPanel
                             taskId={solutionPanelTaskId}
+                            onClose={() => setSolutionPanelTaskId(null)}
+                            registerBeforeClose={(handler) => {
+                                solutionPanelBeforeCloseRef.current = handler;
+                            }}
                             onChanged={() => {
                                 queryClient.invalidateQueries({ queryKey: ["task", solutionPanelTaskId] });
                                 queryClient.invalidateQueries({ queryKey: ["solution-comment-notifications"] });

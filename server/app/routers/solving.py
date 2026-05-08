@@ -23,6 +23,7 @@ from app.models.task_solution_comment import UserTaskSolutionComment
 from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
 from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
+from app.models.task_solution_version import UserTaskSolutionVersion
 from app.models.topic import Topic
 from app.models.user import User
 from app.realtime import solution_comment_ws_manager
@@ -50,6 +51,15 @@ class TaskSolutionCommentOut(BaseModel):
     reaction: str | None = None
 
 
+class TaskSolutionVersionOut(BaseModel):
+    id: int
+    code: str | None = None
+    file_url: str | None = None
+    image_url: str | None = None
+    change_type: str
+    created_at: datetime | None = None
+
+
 class TaskSolutionOut(BaseModel):
     task_id: int
     code: str | None = None
@@ -57,6 +67,7 @@ class TaskSolutionOut(BaseModel):
     image_url: str | None = None
     updated_at: datetime | None = None
     comments: list[TaskSolutionCommentOut] = []
+    versions: list[TaskSolutionVersionOut] = []
 
 
 class SolutionCommentNotificationOut(BaseModel):
@@ -298,6 +309,7 @@ def _solution_out(
     solution: UserTaskSolution | None,
     comments: list[UserTaskSolutionComment] | None = None,
     reactions_by_comment_id: dict[int, str] | None = None,
+    versions: list[UserTaskSolutionVersion] | None = None,
 ) -> TaskSolutionOut:
     if solution is None:
         return TaskSolutionOut(task_id=task_id)
@@ -323,6 +335,62 @@ def _solution_out(
             )
             for comment in (comments or [])
         ],
+        versions=[
+            TaskSolutionVersionOut(
+                id=version.id,
+                code=version.code,
+                file_url=version.file_url,
+                image_url=version.image_url,
+                change_type=version.change_type,
+                created_at=version.created_at,
+            )
+            for version in (versions or [])
+        ],
+    )
+
+
+async def _solution_comments_and_reactions(
+    db: AsyncSession,
+    solution: UserTaskSolution,
+    user_id: int,
+) -> tuple[list[UserTaskSolutionComment], dict[int, str]]:
+    comments_result = await db.execute(
+        select(UserTaskSolutionComment)
+        .where(UserTaskSolutionComment.solution_id == solution.id)
+        .order_by(UserTaskSolutionComment.from_line, UserTaskSolutionComment.from_col, UserTaskSolutionComment.id)
+    )
+    comments = list(comments_result.scalars().all())
+    comment_ids = [comment.id for comment in comments]
+    if not comment_ids:
+        return comments, {}
+
+    reactions_result = await db.execute(
+        select(UserTaskSolutionCommentReaction.comment_id, UserTaskSolutionCommentReaction.reaction).where(
+            UserTaskSolutionCommentReaction.user_id == user_id,
+            UserTaskSolutionCommentReaction.comment_id.in_(comment_ids),
+        )
+    )
+    return comments, {comment_id: reaction for comment_id, reaction in reactions_result.all()}
+
+
+async def _solution_versions(db: AsyncSession, solution: UserTaskSolution) -> list[UserTaskSolutionVersion]:
+    versions_result = await db.execute(
+        select(UserTaskSolutionVersion)
+        .where(UserTaskSolutionVersion.solution_id == solution.id)
+        .order_by(UserTaskSolutionVersion.created_at.desc(), UserTaskSolutionVersion.id.desc())
+    )
+    return list(versions_result.scalars().all())
+
+
+def _add_solution_version(db: AsyncSession, solution: UserTaskSolution, change_type: str) -> None:
+    db.add(
+        UserTaskSolutionVersion(
+            solution_id=solution.id,
+            code=solution.code,
+            file_url=solution.file_url,
+            image_url=solution.image_url,
+            change_type=change_type,
+        )
     )
 
 
@@ -445,22 +513,10 @@ async def get_own_task_solution(task_id: int, user: User = Depends(get_current_u
     solution = result.scalar_one_or_none()
     comments: list[UserTaskSolutionComment] = []
     reactions_by_comment_id: dict[int, str] = {}
+    versions: list[UserTaskSolutionVersion] = []
     if solution is not None:
-        comments_result = await db.execute(
-            select(UserTaskSolutionComment)
-            .where(UserTaskSolutionComment.solution_id == solution.id)
-            .order_by(UserTaskSolutionComment.from_line, UserTaskSolutionComment.from_col, UserTaskSolutionComment.id)
-        )
-        comments = list(comments_result.scalars().all())
-        comment_ids = [comment.id for comment in comments]
-        if comment_ids:
-            reactions_result = await db.execute(
-                select(UserTaskSolutionCommentReaction.comment_id, UserTaskSolutionCommentReaction.reaction).where(
-                    UserTaskSolutionCommentReaction.user_id == user.id,
-                    UserTaskSolutionCommentReaction.comment_id.in_(comment_ids),
-                )
-            )
-            reactions_by_comment_id = {comment_id: reaction for comment_id, reaction in reactions_result.all()}
+        comments, reactions_by_comment_id = await _solution_comments_and_reactions(db, solution, user.id)
+        versions = await _solution_versions(db, solution)
     exam_solution = await _get_exam_attempt_solution_for_task(db, user.id, task_id)
     if solution is None and exam_solution:
         return TaskSolutionOut(
@@ -474,7 +530,7 @@ async def get_own_task_solution(task_id: int, user: User = Depends(get_current_u
             solution.code = exam_solution["code"]
         if not solution.file_url and exam_solution.get("file_url"):
             solution.file_url = exam_solution["file_url"]
-    return _solution_out(task_id, solution, comments, reactions_by_comment_id)
+    return _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)
 
 
 @router.post("/solution-comments/{comment_id}/reaction")
@@ -576,10 +632,16 @@ async def task_solution_comments_ws(
 @router.put("/{task_id}/solution", response_model=TaskSolutionOut)
 async def save_own_task_solution(task_id: int, body: TaskSolutionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     solution = await _get_or_create_solution(db, user.id, task_id)
+    previous_code = solution.code
     solution.code = body.code
+    await db.flush()
+    if previous_code != solution.code:
+        _add_solution_version(db, solution, "code")
     await db.commit()
     await db.refresh(solution)
-    return _solution_out(task_id, solution)
+    comments, reactions_by_comment_id = await _solution_comments_and_reactions(db, solution, user.id)
+    versions = await _solution_versions(db, solution)
+    return _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)
 
 
 ALLOWED_SOLUTION_FILE_EXTENSIONS = {".py", ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".ods", ".zip"}
@@ -616,9 +678,13 @@ async def upload_own_task_solution_file(
         solution.image_url = url
     else:
         solution.file_url = url
+    await db.flush()
+    _add_solution_version(db, solution, kind)
     await db.commit()
     await db.refresh(solution)
-    return _solution_out(task_id, solution)
+    comments, reactions_by_comment_id = await _solution_comments_and_reactions(db, solution, user.id)
+    versions = await _solution_versions(db, solution)
+    return _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)
 
 
 @router.post("/{task_id}/check", response_model=CheckResult)

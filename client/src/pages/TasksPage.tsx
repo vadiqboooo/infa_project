@@ -91,6 +91,7 @@ export default function TasksPage() {
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
+    const attachSolutionBeforeCloseRef = useRef<(() => boolean) | null>(null);
 
     const { data: allTopics, isLoading: navLoading } = useNavigation();
 
@@ -197,6 +198,11 @@ export default function TasksPage() {
     const refreshCurrentTask = () => {
         if (!currentTaskNav?.id) return;
         queryClient.invalidateQueries({ queryKey: ["task", currentTaskNav.id] });
+    };
+
+    const closeAttachSolution = () => {
+        if (attachSolutionBeforeCloseRef.current?.() === false) return;
+        setAttachSolutionOpen(false);
     };
 
     useEffect(() => {
@@ -783,20 +789,27 @@ export default function TasksPage() {
                     </div>
                 )}
                 {attachSolutionOpen && task && (
-                    <div className="w-[580px] max-w-[58vw] shrink-0 h-full overflow-y-auto border-l border-gray-200 bg-[#f8fbf8] p-4">
+                    <div className="w-full md:w-[580px] md:max-w-[58vw] shrink-0 h-full overflow-hidden border-l border-[#d8eadb] bg-[#f8fbf8] p-3 sm:p-4 flex flex-col">
                         <div className="mb-3 flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-black text-[#18251d]">Прикрепить решение</div>
-                                <div className="text-[11px] text-[#7a877c]">Сохранится для этой задачи</div>
+                                <div className="text-[11px] text-[#7a877c]">Сохранится для этой задачи и комментариев преподавателя</div>
                             </div>
                             <button
-                                onClick={() => setAttachSolutionOpen(false)}
+                                onClick={closeAttachSolution}
                                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
                             >
                                 <X size={18} />
                             </button>
                         </div>
-                        <TaskSolutionPanel taskId={task.id} onChanged={refreshCurrentTask} />
+                        <TaskSolutionPanel
+                            taskId={task.id}
+                            onChanged={refreshCurrentTask}
+                            onClose={() => setAttachSolutionOpen(false)}
+                            registerBeforeClose={(handler) => {
+                                attachSolutionBeforeCloseRef.current = handler;
+                            }}
+                        />
                     </div>
                 )}
             </div>

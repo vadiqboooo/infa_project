@@ -28,6 +28,12 @@ class UserTaskSolution(Base):
         back_populates="solution",
         cascade="all, delete-orphan",
     )
+    versions = relationship(
+        "UserTaskSolutionVersion",
+        back_populates="solution",
+        cascade="all, delete-orphan",
+        order_by="UserTaskSolutionVersion.created_at.desc()",
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "task_id", name="uq_user_task_solution"),
