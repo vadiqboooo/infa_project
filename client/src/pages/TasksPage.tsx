@@ -9,9 +9,9 @@ import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import ExamIntro from "../components/ExamIntro";
 import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
-import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip } from "lucide-react";
+import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock } from "lucide-react";
 import { clsx } from "clsx";
-import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer } from "../hooks/useApi";
+import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer, useCurrentPreparationPlan } from "../hooks/useApi";
 import type { AnswerVal, TaskNav, TopicNav, ExamResult } from "../api/types";
 import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
@@ -45,10 +45,10 @@ function CategoryTab({
       className={clsx(
         "flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold whitespace-nowrap transition-all duration-200 border shrink-0",
         isActive
-          ? "border-[#4e8c5a] bg-[#4e8c5a] text-white shadow-[0_8px_20px_rgba(78,140,90,0.22)]"
+          ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-100 shadow-[0_8px_20px_rgba(16,185,129,0.16)]"
           : disabled
-            ? "border-transparent bg-gray-100 text-gray-300 cursor-not-allowed"
-            : "border-[#dfe8df] bg-white/80 text-[#667568] hover:border-[#b9d2bd] hover:text-[#25352b]",
+            ? "border-transparent bg-white/[0.04] text-slate-700 cursor-not-allowed"
+            : "border-white/10 bg-white/[0.05] text-slate-400 hover:border-white/20 hover:text-white",
       )}
     >
       {label}
@@ -56,7 +56,7 @@ function CategoryTab({
         <span
           className={clsx(
             "text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center tabular-nums",
-            isActive ? "bg-white/20 text-white" : "bg-[#eef3ee] text-[#667568]",
+            isActive ? "bg-white/20 text-white" : "bg-white/10 text-slate-300",
           )}
         >
           {counts.left}
@@ -92,8 +92,11 @@ export default function TasksPage() {
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
     const attachSolutionBeforeCloseRef = useRef<(() => boolean) | null>(null);
+    const appliedTaskDeepLinkRef = useRef<string | null>(null);
+    const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
 
     const { data: allTopics, isLoading: navLoading } = useNavigation();
+    const { data: currentPlan } = useCurrentPreparationPlan();
 
     const categoryFilter = useMemo(() => {
         if (location.pathname.startsWith('/homework')) return 'homework';
@@ -101,7 +104,9 @@ export default function TasksPage() {
         return 'tutorial';
     }, [location.pathname]);
 
-    const backPath = categoryFilter === 'homework' ? '/homework' : categoryFilter === 'variants' ? '/exams' : '/tasks';
+    const backPath = new URLSearchParams(location.search).get("from") === "home"
+        ? "/"
+        : categoryFilter === 'homework' ? '/homework' : categoryFilter === 'variants' ? '/exams' : '/tasks';
 
     const currentTopic = useMemo(() => {
         return allTopics?.find(t => String(t.id) === id);
@@ -156,13 +161,31 @@ export default function TasksPage() {
     const currentTaskNav = tasks[taskIndex] ?? null;
 
     useEffect(() => {
-        const taskParam = new URLSearchParams(location.search).get("task");
-        if (!taskParam || tasks.length === 0) return;
-        const nextIndex = tasks.findIndex((item) => item.id === Number(taskParam));
-        if (nextIndex >= 0 && nextIndex !== taskIndex) {
-            setTaskIndex(nextIndex);
+        if (tasks.length === 0 || !tasks[taskIndex]?.is_locked) return;
+        const firstOpenIndex = tasks.findIndex((item) => !item.is_locked);
+        if (firstOpenIndex >= 0) {
+            setTaskIndex(firstOpenIndex);
         }
-    }, [location.search, taskIndex, tasks]);
+    }, [taskIndex, tasks]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const taskParam = params.get("task");
+        if (!taskParam || tasks.length === 0) return;
+        if (appliedTaskDeepLinkRef.current === taskParam) return;
+        const nextIndex = tasks.findIndex((item) => item.id === Number(taskParam));
+        if (nextIndex >= 0 && !tasks[nextIndex]?.is_locked) {
+            appliedTaskDeepLinkRef.current = taskParam;
+            if (params.get("solution") === "1") {
+                setPendingSolutionTaskId(Number(taskParam));
+            }
+            setTaskIndex((currentIndex) => nextIndex !== currentIndex ? nextIndex : currentIndex);
+            params.delete("task");
+            params.delete("solution");
+            const nextSearch = params.toString();
+            navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+        }
+    }, [location.pathname, location.search, navigate, tasks]);
 
     const isVariant = currentTopic?.category === "variants";
     const { data: examInfo } = useExamByTopic(isVariant ? currentTopic?.id ?? null : null);
@@ -171,8 +194,14 @@ export default function TasksPage() {
     const saveExamDraftAnswer = useSaveExamDraftAnswer(examInfo?.active_attempt?.id ?? 0);
     const hasFinishedAttempt = examInfo?.finished_attempt != null;
 
-    const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
-    const check = useCheckAnswer(currentTaskNav?.id ?? 0);
+    const openTaskId = currentTaskNav && !currentTaskNav.is_locked ? currentTaskNav.id : null;
+    const { data: task, isLoading: taskLoading } = useTask(openTaskId);
+    const isPlanTask = Boolean(
+        currentPlan?.today_ege_numbers?.some((egeNumber) =>
+            egeNumber === task?.ege_number || egeNumber === currentTopic?.ege_number,
+        ),
+    );
+    const check = useCheckAnswer(openTaskId ?? 0);
 
     const reviewExamAttempt = viewingFinishedExam ? (examResult ?? examInfo?.finished_attempt ?? null) : null;
     const reviewExamAnswers = useMemo<Record<number, AnswerVal>>(() => {
@@ -187,22 +216,45 @@ export default function TasksPage() {
     }, [reviewExamAttempt]);
 
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        if (params.get("solution") !== "1" || !task) return;
-        const taskParam = params.get("task");
-        if (taskParam && Number(taskParam) !== task.id) return;
+        if (!pendingSolutionTaskId || !task || task.id !== pendingSolutionTaskId) return;
         setMentorOpen(false);
         setAttachSolutionOpen(true);
-    }, [location.search, task]);
+        setPendingSolutionTaskId(null);
+    }, [pendingSolutionTaskId, task]);
 
     const refreshCurrentTask = () => {
         if (!currentTaskNav?.id) return;
         queryClient.invalidateQueries({ queryKey: ["task", currentTaskNav.id] });
     };
 
+    const clearSolutionDeepLink = () => {
+        const params = new URLSearchParams(location.search);
+        if (!params.has("solution") && !params.has("task")) return;
+        params.delete("task");
+        params.delete("solution");
+        const nextSearch = params.toString();
+        navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+    };
+
+    const closeAttachSolutionNow = () => {
+        setAttachSolutionOpen(false);
+        clearSolutionDeepLink();
+    };
+
     const closeAttachSolution = () => {
         if (attachSolutionBeforeCloseRef.current?.() === false) return;
+        closeAttachSolutionNow();
+    };
+
+    const selectTask = (index: number) => {
+        if (tasks[index]?.is_locked) return;
+        const currentTaskParam = new URLSearchParams(location.search).get("task");
+        if (currentTaskParam) {
+            appliedTaskDeepLinkRef.current = currentTaskParam;
+        }
         setAttachSolutionOpen(false);
+        clearSolutionDeepLink();
+        setTaskIndex(index);
     };
 
     useEffect(() => {
@@ -294,6 +346,57 @@ export default function TasksPage() {
         );
     };
 
+    useEffect(() => {
+        const isEditableTarget = (target: EventTarget | null) => {
+            if (!(target instanceof HTMLElement)) return false;
+            const tag = target.tagName.toLowerCase();
+            return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+        };
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (attachSolutionOpen || mentorOpen || solutionOpen || viewingFinishedExam || taskLoading) return;
+            if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+
+            if (event.key === "Enter") {
+                if (!task || check.isPending) return;
+                event.preventDefault();
+                if (isVariant && examInfo?.active_attempt) {
+                    handleExamAnswerChange(task.id, examAnswers[task.id] ?? 0);
+                } else {
+                    void handleCheck();
+                }
+                return;
+            }
+
+            if (isEditableTarget(event.target)) return;
+
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                selectTask(Math.max(0, taskIndex - 1));
+            } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                selectTask(Math.min(tasks.length - 1, taskIndex + 1));
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [
+        attachSolutionOpen,
+        mentorOpen,
+        solutionOpen,
+        viewingFinishedExam,
+        taskLoading,
+        task,
+        check.isPending,
+        isVariant,
+        examInfo?.active_attempt,
+        examAnswers,
+        taskIndex,
+        tasks.length,
+        handleExamAnswerChange,
+    ]);
+
     const handleStartExam = async () => {
         if (!examInfo) return;
         try {
@@ -321,7 +424,7 @@ export default function TasksPage() {
     };
 
     if (navLoading && !allTopics) {
-        return <div className="flex items-center justify-center h-screen text-gray-400">Загрузка...</div>;
+        return <div className="flex h-screen items-center justify-center bg-[#030A12] text-slate-500">Загрузка...</div>;
     }
 
     if (!currentTopic) return null;
@@ -330,21 +433,21 @@ export default function TasksPage() {
         const taskResults = result.task_results || result.results?.task_results || [];
         
         return (
-            <div className="mt-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-[#0A1522] shadow-[0_18px_42px_rgba(0,0,0,0.25)]">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
+                        <tr className="border-b border-white/10 bg-white/[0.04] text-[10px] font-bold uppercase tracking-wider text-slate-500">
                             <th className="px-6 py-4 w-20 text-center">№ ЕГЭ</th>
                             <th className="px-6 py-4">Ваш ответ</th>
                             <th className="px-6 py-4">Верный ответ</th>
                             <th className="px-6 py-4 w-24 text-center">Баллы</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-white/10">
                         {taskResults.map((res: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                            <tr key={idx} className="transition-colors hover:bg-white/[0.04]">
                                 <td className="px-6 py-4 text-center">
-                                    <span className="text-sm font-bold text-gray-400">{res.ege_number || idx + 1}</span>
+                                    <span className="text-sm font-bold text-slate-500">{res.ege_number || idx + 1}</span>
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className={clsx(
@@ -355,14 +458,14 @@ export default function TasksPage() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className="text-sm font-medium text-gray-900">
+                                    <span className="text-sm font-medium text-slate-100">
                                         {res.correct_answer?.val !== undefined ? String(res.correct_answer.val) : "—"}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <span className={clsx(
                                         "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
-                                        res.points > 0 ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-400"
+                                        res.points > 0 ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-slate-400"
                                     )}>
                                         {res.points}
                                     </span>
@@ -376,13 +479,13 @@ export default function TasksPage() {
     };
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-[#F8F7F4]">
+        <div className="flex h-full flex-col overflow-hidden bg-[#030A12]">
             {/* Header */}
-            <div className="min-h-14 flex items-center px-4 md:px-6 bg-white/92 backdrop-blur-xl shrink-0 border-b border-[#e4e9e4] shadow-[0_1px_0_rgba(255,255,255,0.7)] relative z-10">
+            <div className="relative z-10 flex min-h-14 shrink-0 items-center border-b border-white/10 bg-[#07111D]/92 px-4 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl md:px-6">
                 <div className="flex items-center gap-2 md:gap-3 w-full min-w-0">
                     <button
                         onClick={() => navigate(backPath)}
-                        className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-semibold text-[#526052] hover:bg-[#f1f5f1] hover:text-[#25352b] transition-colors shrink-0"
+                        className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
                     >
                         <ArrowLeft size={16} />
                         <span className="hidden sm:inline">Назад</span>
@@ -430,7 +533,7 @@ export default function TasksPage() {
                                 </button>
                             </>
                         ) : null}
-                        <span className="hidden sm:flex items-center gap-1 text-xs bg-[#f0e9ff] text-violet-700 px-2.5 py-1 rounded-full font-bold border border-violet-100">
+                        <span className="hidden items-center gap-1 rounded-full border border-violet-300/15 bg-violet-400/10 px-2.5 py-1 text-xs font-bold text-violet-200 sm:flex">
                             <Code2 size={11} />
                             Python
                         </span>
@@ -441,33 +544,36 @@ export default function TasksPage() {
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
                 <div
-                    className="flex-1 overflow-y-auto p-4 pt-0 md:p-8 md:pt-0 bg-[radial-gradient(circle_at_50%_0%,rgba(78,140,90,0.11),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.42),rgba(248,247,244,0))]"
+                    className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.10),transparent_34%),linear-gradient(180deg,rgba(3,10,18,0),rgba(3,10,18,0.96))] p-4 pt-0 md:p-8 md:pt-0"
                     style={{ minWidth: 0 }}
                 >
                     {!isVariant || !examInfo || (examInfo.active_attempt && !examResult) || viewingFinishedExam ? (
                         <>
                             {/* Task Navigation Row */}
-                            <div className="-mx-4 md:-mx-8 mb-5 md:mb-6 overflow-x-auto border-b border-[#e0e7e0] bg-white/82 px-4 py-3 md:px-8 backdrop-blur-xl shadow-[0_18px_44px_rgba(78,140,90,0.10)] scrollbar-hide">
+                            <div className="-mx-4 mb-5 overflow-x-auto border-b border-white/10 bg-[#07111D]/72 px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.18)] backdrop-blur-xl scrollbar-hide md:-mx-8 md:mb-6 md:px-8">
                                 <div className="flex gap-1.5 md:gap-2 min-w-max">
                                 {tasks.map((t, idx) => (
                                     <button
                                         key={t.id}
-                                        onClick={() => setTaskIndex(idx)}
+                                        disabled={t.is_locked}
+                                        onClick={() => selectTask(idx)}
                                         className={clsx(
                                             'w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex flex-col items-center justify-center relative border',
-                                            idx === taskIndex
-                                                ? 'bg-[#4e8c5a] border-[#4e8c5a] text-white shadow-[0_0_0_4px_rgba(78,140,90,0.16),0_0_26px_rgba(78,140,90,0.58),0_12px_24px_rgba(78,140,90,0.25)]'
+                                            t.is_locked
+                                                ? 'cursor-not-allowed border-white/5 bg-white/[0.025] text-slate-700'
+                                                : idx === taskIndex
+                                                ? 'bg-emerald-400/18 border-emerald-300/45 text-emerald-100 shadow-[0_0_0_4px_rgba(16,185,129,0.10),0_0_26px_rgba(16,185,129,0.32),0_12px_24px_rgba(0,0,0,0.22)]'
                                                 : t.status === 'solved'
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                    ? 'bg-emerald-400/10 text-emerald-200 border-emerald-300/20'
                                                     : t.status === 'failed'
-                                                        ? 'bg-red-50 text-red-700 border-red-200'
-                                                        : 'bg-white border-[#dfe8df] text-[#526052] hover:border-[#b9d2bd] hover:text-[#3F8C62] hover:-translate-y-0.5'
+                                                        ? 'bg-red-400/10 text-red-200 border-red-300/20'
+                                                        : 'bg-white/[0.04] border-white/10 text-slate-400 hover:border-white/20 hover:text-white hover:-translate-y-0.5'
                                         )}
                                     >
-                                        <span>{idx + 1}</span>
+                                        {t.is_locked ? <Lock size={14} /> : <span>{idx + 1}</span>}
                                         {/* Indicator for solution existence from nav data */}
                                         {t.has_solution && (
-                                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white border-2 border-white shadow-sm">
+                                            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#07111D] bg-amber-400 text-white shadow-sm">
                                                 <BookOpen size={8} />
                                             </div>
                                         )}
@@ -479,8 +585,8 @@ export default function TasksPage() {
                             {/* Content */}
                             <div className="flex flex-col lg:flex-row gap-6 items-start">
                                 {/* Left: Task Card */}
-                                <div className="flex-1 w-full overflow-hidden rounded-[22px] border border-[#dfe8df] bg-gradient-to-b from-white via-white to-[#f8fbf8] p-4 md:p-6 min-h-[300px] shadow-[0_20px_60px_rgba(15,23,20,0.08)] relative">
-                                    <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#4e8c5a] via-[#62aa78] to-transparent" />
+                                <div className="relative min-h-[300px] w-full flex-1 overflow-hidden rounded-[22px] border border-white/10 bg-[#0A1522] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] md:p-6">
+                                    <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-green-500 to-transparent" />
                                     {taskLoading ? (
                                         <Skeleton />
                                     ) : task ? (
@@ -488,12 +594,12 @@ export default function TasksPage() {
                                             <div className="flex items-center gap-2 mb-5 flex-wrap">
                                                 <span className={clsx(
                                                     'px-2.5 py-1 rounded-full text-xs font-bold border',
-                                                    task.difficulty === 'easy' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                                    task.difficulty === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-red-50 text-red-700 border-red-100'
+                                                    task.difficulty === 'easy' ? 'bg-emerald-400/12 text-emerald-200 border-emerald-300/20' :
+                                                    task.difficulty === 'medium' ? 'bg-amber-400/12 text-amber-200 border-amber-300/20' : 'bg-red-400/12 text-red-200 border-red-300/20'
                                                 )}>
                                                     {task.difficulty === 'easy' ? 'Лёгкая' : task.difficulty === 'medium' ? 'Средняя' : 'Сложная'}
                                                 </span>
-                                                <span className="text-xs font-medium text-[#8a948b] hidden sm:inline">
+                                                <span className="hidden text-xs font-medium text-slate-500 sm:inline">
                                                     {(() => {
                                                         if (Array.isArray(task.sub_tasks) && task.sub_tasks.length > 0) {
                                                             const nums = [task.ege_number, ...task.sub_tasks.map((s: any) => s?.number)].filter((n): n is number => typeof n === 'number');
@@ -513,7 +619,7 @@ export default function TasksPage() {
                                                                 "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
                                                                 mentorOpen
                                                                     ? "bg-violet-600 text-white border-violet-600 shadow-sm"
-                                                                    : "text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100"
+                                                                    : "text-violet-200 bg-violet-400/10 border-violet-300/20 hover:bg-violet-400/15"
                                                             )}
                                                         >
                                                             <HelpCircle size={13} />
@@ -530,10 +636,10 @@ export default function TasksPage() {
                                                                 attachSolutionOpen
                                                                     ? "bg-[#4e8c5a] text-white border-[#4e8c5a] shadow-sm"
                                                                     : task.solution_comments_count
-                                                                        ? "text-amber-700 bg-amber-50 border-amber-200 shadow-[0_8px_18px_rgba(245,158,11,0.14)] hover:bg-amber-100"
+                                                                        ? "text-amber-200 bg-amber-400/10 border-amber-300/20 shadow-[0_8px_18px_rgba(245,158,11,0.10)] hover:bg-amber-400/15"
                                                                         : task.has_own_solution
-                                                                            ? "text-[#1f6f46] bg-emerald-100 border-emerald-300 shadow-[0_8px_18px_rgba(63,140,98,0.14)] hover:bg-emerald-200"
-                                                                            : "text-[#3F8C62] bg-[#3F8C62]/5 border-[#3F8C62]/20 hover:bg-[#3F8C62]/10"
+                                                                            ? "text-emerald-200 bg-emerald-400/12 border-emerald-300/25 shadow-[0_8px_18px_rgba(16,185,129,0.10)] hover:bg-emerald-400/18"
+                                                                            : "text-emerald-200 bg-emerald-400/10 border-emerald-300/20 hover:bg-emerald-400/15"
                                                             )}
                                                         >
                                                             {task.solution_comments_count ? <MessageSquare size={13} /> : <Paperclip size={13} />}
@@ -548,7 +654,7 @@ export default function TasksPage() {
                                                                 </span>
                                                             )}
                                                             {task.solution_comments_count ? (
-                                                                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-white ring-2 ring-white">
+                                                                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-white ring-2 ring-[#0A1522]">
                                                                     {task.solution_comments_count}
                                                                 </span>
                                                             ) : null}
@@ -556,7 +662,7 @@ export default function TasksPage() {
                                                     {task.solution_steps && task.solution_steps.length > 0 && (
                                                         <button
                                                             onClick={() => setSolutionOpen(true)}
-                                                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[#3F8C62] bg-[#3F8C62]/5 border border-[#3F8C62]/20 hover:bg-[#3F8C62]/10 hover:border-[#3F8C62]/40 transition-all group/sol"
+                                                            className="group/sol flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1.5 text-emerald-200 transition-all hover:border-emerald-300/35 hover:bg-emerald-400/15"
                                                             title="Пошаговое решение"
                                                         >
                                                             <BookOpen size={13} className="group-hover/sol:scale-110 transition-transform" />
@@ -565,7 +671,28 @@ export default function TasksPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="prose prose-slate max-w-none text-[#18251d] leading-relaxed">
+                                            {isPlanTask && currentPlan?.plan && (
+                                                <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4e8c5a] text-white">
+                                                            <ClipboardList size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-black">Это задание стоит решить по плану сегодня</div>
+                                                            <div className="mt-1 text-xs font-semibold text-slate-400">
+                                                                {currentPlan.current_block_title || currentPlan.plan.title}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <Link
+                                                        to="/"
+                                                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-300/20 bg-white/[0.06] px-3 py-1.5 text-xs font-black text-emerald-200 shadow-sm hover:bg-white/[0.10]"
+                                                    >
+                                                        План подготовки
+                                                    </Link>
+                                                </div>
+                                            )}
+                                            <div className="prose prose-invert max-w-none leading-relaxed text-slate-200">
                                                 <TaskView
                                                     content={task.content_html}
                                                     files={task.media_resources?.files}
@@ -573,10 +700,10 @@ export default function TasksPage() {
                                             </div>
 
                                             {/* Answer section — bottom of task card */}
-                                            <div className="mt-7 rounded-[18px] border border-[#e0e8e0] bg-[#f8fbf8] p-4 max-w-full md:max-w-[56%]">
+                                            <div className="mt-7 max-w-full rounded-[18px] border border-white/10 bg-white/[0.04] p-4 md:max-w-[56%]">
                                                 <div className="flex items-start gap-3">
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="text-[11px] font-extrabold text-[#8a948b] mb-1.5 uppercase tracking-wide">
+                                                        <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
                                                             {task.sub_tasks && task.sub_tasks.length > 0
                                                                 ? `Ответ${task.ege_number ? ` к заданию ${task.ege_number}` : ''}`
                                                                 : 'Ваш ответ'}
@@ -631,16 +758,16 @@ export default function TasksPage() {
                                                             const key = `${task.id}:${sIdx}`;
                                                             const subOk = subResults?.[sIdx + 1];
                                                             return (
-                                                                <div key={sIdx} className="border-t border-[#e0e8e0] pt-5">
-                                                                    <div className="prose prose-slate prose-sm max-w-none text-gray-800 leading-relaxed mb-3">
+                                                                <div key={sIdx} className="border-t border-white/10 pt-5">
+                                                                    <div className="prose prose-invert prose-sm mb-3 max-w-none leading-relaxed text-slate-200">
                                                                         {sub.number != null && (
-                                                                            <div className="text-xs font-bold text-[#8a948b] uppercase tracking-wider mb-2">
+                                                                            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
                                                                                 Задание {sub.number}
                                                                             </div>
                                                                         )}
                                                                         <TaskView content={sub.content_html} />
                                                                     </div>
-                                                                    <div className="text-[11px] font-extrabold text-[#8a948b] mb-1.5 uppercase tracking-wide">
+                                                                    <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
                                                                         Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
                                                                     </div>
                                                                     <AnswerInput
@@ -678,26 +805,36 @@ export default function TasksPage() {
                                                 )}
 
                                                 {checkResult === 'correct' && (
-                                                    <div className="mt-3 p-2.5 bg-emerald-50 rounded-xl text-emerald-700 text-sm font-medium flex items-center gap-2 border border-emerald-100">
-                                                        <div className="w-5 h-5 bg-emerald-200 rounded-full flex items-center justify-center text-xs">✓</div>
+                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
+                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>
                                                         Правильный ответ!
                                                     </div>
                                                 )}
                                                 {checkResult === 'wrong' && (
-                                                    <div className="mt-3 p-2.5 bg-red-50 rounded-xl text-red-600 text-sm font-medium flex items-center gap-2 border border-red-100">
-                                                        <div className="w-5 h-5 bg-red-200 rounded-full flex items-center justify-center text-xs">✕</div>
+                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-300/20 bg-red-400/10 p-2.5 text-sm font-medium text-red-200">
+                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-xs">✕</div>
                                                         Неверно. Попробуйте ещё раз.
                                                     </div>
                                                 )}
                                                 {task.status === 'solved' && checkResult !== 'correct' && (
-                                                    <div className="mt-2 text-emerald-600 text-sm font-medium flex items-center gap-1.5">
-                                                        <div className="w-4 h-4 bg-emerald-100 rounded-full flex items-center justify-center text-[10px]">✓</div>
+                                                    <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-emerald-200">
+                                                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-[10px]">✓</div>
                                                         Вы уже решили эту задачу
                                                     </div>
                                                 )}
                                             </div>
                                         </>
-                                    ) : null}
+                                    ) : (
+                                        <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+                                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] text-slate-400 ring-1 ring-white/10">
+                                                <Lock size={24} />
+                                            </div>
+                                            <h2 className="text-lg font-black text-white">Нужна подписка</h2>
+                                            <p className="mt-2 max-w-sm text-sm text-slate-400">
+                                                Это задание закрыто. Без подписки доступны только первые два пробных задания летнего курса.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </>
@@ -706,29 +843,29 @@ export default function TasksPage() {
                     {/* Final Result Screen */}
                     {examResult && !viewingFinishedExam && (
                         <div className="max-w-4xl mx-auto mt-6 animate-in zoom-in duration-300">
-                             <div className="bg-white border border-gray-200 rounded-3xl p-10 text-center shadow-xl mb-6">
-                                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                             <div className="mb-6 rounded-3xl border border-white/10 bg-[#0A1522] p-10 text-center shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+                                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-200">
                                     <Trophy size={40} />
                                 </div>
-                                <h2 className="text-2xl font-bold text-gray-900 mb-2">Экзамен завершен!</h2>
+                                <h2 className="mb-2 text-2xl font-bold text-white">Экзамен завершен!</h2>
                                 <div className="flex items-center justify-center gap-8 mb-8">
                                     <div className="text-center">
                                         <div className="text-4xl font-black text-[#3F8C62]">{examResult.score.toFixed(0)}</div>
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase">Тестовый балл</div>
+                                        <div className="text-[10px] font-bold uppercase text-slate-500">Тестовый балл</div>
                                     </div>
-                                    <div className="w-px h-10 bg-gray-100" />
+                                    <div className="h-10 w-px bg-white/10" />
                                     <div className="text-center">
-                                        <div className="text-4xl font-black text-gray-900">{examResult.primary_score}</div>
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase">Первичный балл</div>
+                                        <div className="text-4xl font-black text-white">{examResult.primary_score}</div>
+                                        <div className="text-[10px] font-bold uppercase text-slate-500">Первичный балл</div>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 justify-center">
-                                    <button onClick={() => setViewingFinishedExam(true)} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all">Просмотреть задания</button>
+                                    <button onClick={() => setViewingFinishedExam(true)} className="rounded-xl bg-white/[0.06] px-6 py-3 font-bold text-slate-200 transition-all hover:bg-white/[0.10]">Просмотреть задания</button>
                                     <button onClick={() => navigate(backPath)} className="px-6 py-3 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all">К списку вариантов</button>
                                 </div>
                             </div>
                             
-                            <h3 className="text-lg font-bold text-gray-900 mb-4 px-2">Детализация по задачам</h3>
+                            <h3 className="mb-4 px-2 text-lg font-bold text-white">Детализация по задачам</h3>
                             {renderResultsTable(examResult)}
                         </div>
                     )}
@@ -738,30 +875,30 @@ export default function TasksPage() {
                         <div className="max-w-4xl mx-auto mt-10">
                             {hasFinishedAttempt ? (
                                 <div className="animate-in fade-in duration-500">
-                                    <div className="bg-white border border-gray-200 rounded-3xl p-10 text-center shadow-xl mb-8">
-                                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <div className="mb-8 rounded-3xl border border-white/10 bg-[#0A1522] p-10 text-center shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+                                        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-200">
                                             <CheckCircle2 size={40} />
                                         </div>
-                                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Результаты за {new Date(examInfo.finished_attempt.finished_at).toLocaleDateString()}</h2>
+                                        <h2 className="mb-2 text-2xl font-bold text-white">Результаты за {new Date(examInfo.finished_attempt.finished_at).toLocaleDateString()}</h2>
                                         <div className="flex items-center justify-center gap-8 mb-6">
                                             <div className="text-center">
                                                 <div className="text-5xl font-black text-[#3F8C62]">{examInfo.finished_attempt.score.toFixed(0)}</div>
-                                                <div className="text-xs font-bold text-gray-400 uppercase">баллов</div>
+                                                <div className="text-xs font-bold uppercase text-slate-500">баллов</div>
                                             </div>
-                                            <div className="w-px h-12 bg-gray-100" />
+                                            <div className="h-12 w-px bg-white/10" />
                                             <div className="text-center">
-                                                <div className="text-5xl font-black text-gray-900">{examInfo.finished_attempt.primary_score}</div>
-                                                <div className="text-xs font-bold text-gray-400 uppercase">первичных</div>
+                                                <div className="text-5xl font-black text-white">{examInfo.finished_attempt.primary_score}</div>
+                                                <div className="text-xs font-bold uppercase text-slate-500">первичных</div>
                                             </div>
                                         </div>
-                                        <p className="text-gray-500 mb-8 max-w-sm mx-auto">Вы уже прошли этот вариант. Можете просмотреть свои ответы и детальный разбор каждой задачи.</p>
+                                        <p className="mx-auto mb-8 max-w-sm text-slate-400">Вы уже прошли этот вариант. Можете просмотреть свои ответы и детальный разбор каждой задачи.</p>
                                         <div className="flex gap-3 justify-center">
-                                            <button onClick={() => setViewingFinishedExam(true)} className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all">Разбор варианта</button>
+                                            <button onClick={() => setViewingFinishedExam(true)} className="rounded-xl bg-white/[0.06] px-6 py-3 font-bold text-slate-200 transition-all hover:bg-white/[0.10]">Разбор варианта</button>
                                             <button onClick={() => navigate(backPath)} className="px-6 py-3 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all">К списку вариантов</button>
                                         </div>
                                     </div>
 
-                                    <h3 className="text-lg font-bold text-gray-900 mb-4 px-2">Результаты попытки</h3>
+                                    <h3 className="mb-4 px-2 text-lg font-bold text-white">Результаты попытки</h3>
                                     {renderResultsTable(examInfo.finished_attempt)}
                                 </div>
                             ) : (
@@ -780,7 +917,7 @@ export default function TasksPage() {
 
                 {/* Mentor side panel */}
                 {mentorOpen && task && (
-                    <div className="w-[440px] shrink-0 h-full overflow-hidden border-l border-gray-200 flex flex-col">
+                    <div className="flex h-full w-[440px] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#07111D]">
                         <MentorPanel
                             key={task.id}
                             taskId={task.id}
@@ -789,15 +926,15 @@ export default function TasksPage() {
                     </div>
                 )}
                 {attachSolutionOpen && task && (
-                    <div className="w-full md:w-[580px] md:max-w-[58vw] shrink-0 h-full overflow-hidden border-l border-[#d8eadb] bg-[#f8fbf8] p-3 sm:p-4 flex flex-col">
+                    <div className="flex h-full w-full shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#07111D] p-3 sm:p-4 md:w-[580px] md:max-w-[58vw]">
                         <div className="mb-3 flex items-center justify-between">
                             <div>
-                                <div className="text-sm font-black text-[#18251d]">Прикрепить решение</div>
-                                <div className="text-[11px] text-[#7a877c]">Сохранится для этой задачи и комментариев преподавателя</div>
+                                <div className="text-sm font-black text-white">Прикрепить решение</div>
+                                <div className="text-[11px] text-slate-500">Сохранится для этой задачи и комментариев преподавателя</div>
                             </div>
                             <button
                                 onClick={closeAttachSolution}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white transition-colors"
+                                className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white"
                             >
                                 <X size={18} />
                             </button>
@@ -805,7 +942,7 @@ export default function TasksPage() {
                         <TaskSolutionPanel
                             taskId={task.id}
                             onChanged={refreshCurrentTask}
-                            onClose={() => setAttachSolutionOpen(false)}
+                            onClose={closeAttachSolutionNow}
                             registerBeforeClose={(handler) => {
                                 attachSolutionBeforeCloseRef.current = handler;
                             }}

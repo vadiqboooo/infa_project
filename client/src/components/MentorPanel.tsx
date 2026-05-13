@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
-import { githubLight } from "@uiw/codemirror-theme-github";
+import { githubDark } from "@uiw/codemirror-theme-github";
 import { X, Send, Bot, Code2, ChevronDown, ChevronUp } from "lucide-react";
 import { clsx } from "clsx";
 import { useAIAssist } from "../hooks/useApi";
@@ -58,19 +58,19 @@ export default function MentorPanel({ taskId, onClose }: Props) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white border-l border-gray-200">
+        <div className="flex h-full flex-col border-l border-white/10 bg-[#07111D]">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-400/12 text-violet-200">
                         <Bot size={15} />
                     </div>
                     <div>
-                        <div className="text-sm font-bold text-gray-800 leading-none">ИИ-наставник</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">Python · ЕГЭ Информатика</div>
+                        <div className="text-sm font-bold leading-none text-white">ИИ-наставник</div>
+                        <div className="mt-0.5 text-[10px] text-slate-500">Python · ЕГЭ Информатика</div>
                     </div>
                 </div>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+                <button onClick={onClose} className="text-slate-500 transition-colors hover:text-white">
                     <X size={18} />
                 </button>
             </div>
@@ -81,10 +81,10 @@ export default function MentorPanel({ taskId, onClose }: Props) {
                     <div key={i} className={clsx("flex flex-col", msg.role === "user" ? "items-end" : "items-start")}>
                         {msg.role === "ai" && (
                             <div className="flex items-start gap-2 max-w-[90%]">
-                                <div className="w-6 h-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-400/12 text-violet-200">
                                     <Bot size={12} />
                                 </div>
-                                <div className="bg-gray-100 text-gray-800 rounded-2xl rounded-tl-sm px-3 py-2 text-sm leading-relaxed">
+                                <div className="rounded-2xl rounded-tl-sm bg-white/[0.06] px-3 py-2 text-sm leading-relaxed text-slate-200 ring-1 ring-white/10">
                                     {msg.text}
                                 </div>
                             </div>
@@ -100,7 +100,7 @@ export default function MentorPanel({ taskId, onClose }: Props) {
                                     </div>
                                 )}
                                 {msg.text && (
-                                    <div className="bg-[#3F8C62] text-white rounded-2xl rounded-tr-sm px-3 py-2 text-sm leading-relaxed">
+                                    <div className="rounded-2xl rounded-tr-sm bg-emerald-500 px-3 py-2 text-sm leading-relaxed text-white">
                                         {msg.text}
                                     </div>
                                 )}
@@ -110,14 +110,14 @@ export default function MentorPanel({ taskId, onClose }: Props) {
                 ))}
                 {assist.isPending && (
                     <div className="flex items-start gap-2">
-                        <div className="w-6 h-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-400/12 text-violet-200">
                             <Bot size={12} />
                         </div>
-                        <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
+                        <div className="rounded-2xl rounded-tl-sm bg-white/[0.06] px-3 py-2 ring-1 ring-white/10">
                             <div className="flex gap-1 items-center h-5">
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:0ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:150ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-500 [animation-delay:300ms]" />
                             </div>
                         </div>
                     </div>
@@ -126,10 +126,10 @@ export default function MentorPanel({ taskId, onClose }: Props) {
             </div>
 
             {/* Code editor */}
-            <div className="border-t border-gray-100 shrink-0">
+            <div className="shrink-0 border-t border-white/10">
                 <button
                     onClick={() => setCodeOpen(o => !o)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-white"
                 >
                     <span className="flex items-center gap-1.5">
                         <Code2 size={12} />
@@ -141,12 +141,12 @@ export default function MentorPanel({ taskId, onClose }: Props) {
 
                 {codeOpen && (
                     <div className="px-4 pb-3">
-                        <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0A1522]">
                             <CodeMirror
                                 value={code}
                                 onChange={setCode}
                                 extensions={[python()]}
-                                theme={githubLight}
+                                theme={githubDark}
                                 basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
                                 style={{ fontSize: "12px", maxHeight: "180px", overflowY: "auto" }}
                                 placeholder="# Вставь свой код сюда..."
@@ -165,12 +165,12 @@ export default function MentorPanel({ taskId, onClose }: Props) {
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleSend()}
                         placeholder="Задай вопрос или отправь код..."
-                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 transition-all"
+                        className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white transition-all placeholder:text-slate-600 focus:border-violet-300/40 focus:outline-none focus:ring-1 focus:ring-violet-300/20"
                     />
                     <button
                         onClick={handleSend}
                         disabled={(!query.trim() && !code.trim()) || assist.isPending}
-                        className="w-9 h-9 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-colors shrink-0"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
                     >
                         <Send size={14} />
                     </button>

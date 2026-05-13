@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.access import can_access_task, can_access_topic, get_content_access, require_task_access
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.task import Task
 from app.models.topic import Topic
@@ -67,6 +68,8 @@ async def get_navigation(
     db: AsyncSession = Depends(get_db),
 ):
     """Return sidebar navigation tree: topics → tasks with user progress."""
+    access = await get_content_access(user, db)
+
     # Load topics with tasks
     result = await db.execute(
         select(Topic).options(selectinload(Topic.tasks)).order_by(Topic.order_index)
@@ -202,6 +205,8 @@ async def get_navigation(
                 ege_number_max=_compute_ege_max(t),
                 status=progress_map.get(t.id, "not_started"),
                 has_solution=bool(t.solution_steps and len(t.solution_steps) > 0),
+                is_locked=not can_access_task(t.id, access),
+                is_trial=t.id in access.trial_task_ids,
             )
             for t in topic.tasks
         ]
@@ -209,6 +214,7 @@ async def get_navigation(
         exam = all_exams.get(topic.id)
         latest_attempt = latest_attempts.get(topic.id, {})
         active = active_scores.get(topic.id, {})
+        topic_locked = not can_access_topic(topic, access)
 
         attempt_id = latest_attempt.get("attempt_id")
         nav.append(TopicNav(
@@ -235,6 +241,8 @@ async def get_navigation(
             image_size=topic.image_size,
             character_url=topic.character_url,
             background_url=topic.background_url,
+            is_locked=topic_locked,
+            lock_reason="subscription_required" if topic_locked else None,
         ))
     if seen_changed:
         await db.commit()
@@ -297,6 +305,7 @@ async def get_task(
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+    access = await require_task_access(task_id, user, db)
 
     solution_result = await db.execute(
         select(UserTaskSolution).where(
@@ -330,6 +339,7 @@ async def get_task(
         sub_tasks=task.sub_tasks,
         has_own_solution=bool(solution and (solution.code or solution.file_url or solution.image_url)),
         solution_comments_count=comments_count,
+        is_trial=task_id in access.trial_task_ids,
     )
 
 

@@ -32,6 +32,7 @@ class TaskOut(BaseModel):
     sub_tasks: list[SubTaskOut] | None = None
     has_own_solution: bool = False
     solution_comments_count: int = 0
+    is_trial: bool = False
 
     model_config = {"from_attributes": True}
 

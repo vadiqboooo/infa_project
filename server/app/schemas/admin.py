@@ -106,6 +106,21 @@ class StudentExamScore(BaseModel):
     max_score: int
 
 
+class StudentWeeklyEgeStat(BaseModel):
+    ege_number: int | None
+    total: int
+    correct: int
+    incorrect: int
+    accuracy: int
+
+
+class StudentWeeklyStats(BaseModel):
+    total: int = 0
+    correct: int = 0
+    incorrect: int = 0
+    ege_numbers: list[StudentWeeklyEgeStat] = Field(default_factory=list)
+
+
 class StudentOut(BaseModel):
     id: int
     name: str
@@ -113,9 +128,12 @@ class StudentOut(BaseModel):
     photo_url: str | None
     role: str
     login: str | None = None
+    subscription_plan: str = "none"
+    subscription_expires_at: datetime | None = None
     last_active_at: datetime
     total_solved: int
     total_tasks: int
+    weekly_stats: StudentWeeklyStats = Field(default_factory=StudentWeeklyStats)
     exam_scores: list[StudentExamScore]
     topic_progress: list[StudentTopicProgress]
     group_ids: list[int] = []
@@ -123,6 +141,15 @@ class StudentOut(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: str
+
+
+class StudentUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    role: str | None = None
+    subscription_plan: str | None = None
+    subscription_expires_at: datetime | None = None
 
 
 # ── Student detail (per-task breakdown) ───────────────
@@ -140,10 +167,14 @@ class StudentTaskResult(BaseModel):
 class TaskSolutionCommentIn(BaseModel):
     from_offset: int | None = Field(default=None, ge=0)
     to_offset: int | None = Field(default=None, ge=0)
-    from_line: int = Field(ge=1)
-    from_col: int = Field(ge=1)
-    to_line: int = Field(ge=1)
-    to_col: int = Field(ge=1)
+    from_line: int = Field(default=1, ge=1)
+    from_col: int = Field(default=1, ge=1)
+    to_line: int = Field(default=1, ge=1)
+    to_col: int = Field(default=1, ge=1)
+    target_type: str = "code"
+    image_x: float | None = Field(default=None, ge=0, le=100)
+    image_y: float | None = Field(default=None, ge=0, le=100)
+    image_drawing: list[dict[str, Any]] | None = None
     text: str = Field(min_length=1)
 
 
@@ -155,6 +186,10 @@ class TaskSolutionCommentOut(BaseModel):
     from_col: int
     to_line: int
     to_col: int
+    target_type: str | None = None
+    image_x: float | None = None
+    image_y: float | None = None
+    image_drawing: list[dict[str, Any]] | None = None
     text: str
     author_name: str | None = None
     reaction: str | None = None
@@ -169,6 +204,9 @@ class StudentTaskSolutionReviewOut(BaseModel):
     task_content_html: str | None = None
     task_description: str | None = None
     ege_number: int | None = None
+    answer_type: str | None = None
+    user_answer: Any | None = None
+    correct_answer: Any | None = None
     code: str | None = None
     file_url: str | None = None
     image_url: str | None = None
@@ -183,21 +221,6 @@ class StudentTopicDetail(BaseModel):
     attempt_id: int | None = None  # latest finished exam attempt (for AI analysis)
     has_analysis: bool = False     # whether analysis is already saved in DB
     tasks: list[StudentTaskResult]
-
-
-class StudentWeeklyEgeStat(BaseModel):
-    ege_number: int | None
-    total: int
-    correct: int
-    incorrect: int
-    accuracy: int
-
-
-class StudentWeeklyStats(BaseModel):
-    total: int = 0
-    correct: int = 0
-    incorrect: int = 0
-    ege_numbers: list[StudentWeeklyEgeStat] = Field(default_factory=list)
 
 
 class StudentDetailOut(BaseModel):
@@ -268,6 +291,7 @@ class PasswordStudentCreate(BaseModel):
 
 class SetStudentCredentials(BaseModel):
     login: str
+    password: str | None = None
 
 
 class PasswordStudentCredential(BaseModel):

@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { TopicCard } from '../components/TopicCard';
-import { useNavigation } from '../hooks/useApi';
+import { useCurrentPreparationPlan, useNavigation } from '../hooks/useApi';
 import { TopicCategory, type TopicNav } from '../api/types';
 import { api } from '../api/client';
 
 export function TasksListPage() {
   const { data: allTopics, isLoading } = useNavigation();
+  const { data: currentPlan } = useCurrentPreparationPlan();
   const queryClient = useQueryClient();
   const [newTaskNotices, setNewTaskNotices] = useState<Record<number, number>>({});
 
@@ -37,6 +38,8 @@ export function TasksListPage() {
         const explicitEnd = tut?.ege_number_end ?? hw?.ege_number_end ?? null;
         // Otherwise compute composite range from tasks' sub_tasks
         const allTasks = [...tutTopics, ...hwTopics].flatMap(t => t.tasks);
+        const isLocked = allTasks.length > 0 && allTasks.every(t => t.is_locked);
+        const isTrial = allTasks.some(t => t.is_trial);
         const taskMax = allTasks.reduce<number | null>((acc, t) => {
           const m = (t as any).ege_number_max as number | null | undefined;
           if (typeof m === 'number' && (acc == null || m > acc)) return m;
@@ -74,6 +77,8 @@ export function TasksListPage() {
           image,
           backgroundUrl: bgSrc?.background_url ?? undefined,
           characterUrl: charSrc?.character_url ?? undefined,
+          isLocked,
+          isTrial,
           newTasksCount: tutTopics.reduce((sum, topic) => sum + (topic.new_tasks_count ?? 0), 0)
             + hwTopics.reduce((sum, topic) => sum + (topic.new_tasks_count ?? 0), 0),
         };
@@ -146,11 +151,11 @@ export function TasksListPage() {
   }, []);
 
   return (
-    <div className="min-h-full space-y-6 p-4 md:p-8 animate-in fade-in duration-500 bg-[radial-gradient(circle_at_50%_0%,rgba(78,140,90,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.34),rgba(248,247,244,0))]">
+    <div className="min-h-full space-y-6 bg-[#030A12] p-4 animate-in fade-in duration-500 md:p-8">
       {isLoading ? (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 max-w-[1400px] mx-auto">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-72 rounded-[18px] border border-[#dfe8df] bg-white/70 animate-pulse" />
+            <div key={i} className="h-[194px] animate-pulse rounded-[18px] border border-white/10 bg-white/[0.04]" />
           ))}
         </div>
       ) : taskGroups.length > 0 ? (
@@ -166,17 +171,20 @@ export function TasksListPage() {
               image={g.image}
               backgroundUrl={g.backgroundUrl}
               characterUrl={g.characterUrl}
+              locked={g.isLocked}
+              trial={g.isTrial}
               shuttleKey={shuttle?.ege === g.egeNum ? shuttle.key : null}
               newTasksCount={newTaskNotices[g.egeNum] ?? 0}
+              planCurrent={currentPlan?.today_ege_numbers?.includes(g.egeNum) ?? false}
             />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-dashed border-gray-200 text-gray-400 max-w-[1400px] mx-auto">
-          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-            <BookOpen size={32} className="opacity-20" />
+        <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.03] py-24 text-slate-400">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.05]">
+            <BookOpen size={32} className="opacity-30" />
           </div>
-          <p className="font-bold text-lg text-gray-900">Заданий пока нет</p>
+          <p className="text-lg font-bold text-white">Заданий пока нет</p>
           <p className="text-sm">Темы появятся, когда учитель их добавит</p>
         </div>
       )}

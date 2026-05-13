@@ -32,7 +32,7 @@ export function BottomNav() {
 
     return (
         <>
-            <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 md:hidden">
+            <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#07111D]/95 backdrop-blur md:hidden">
                 <div className="flex items-stretch h-16">
                     {navLinks.map((link) => {
                         const active = isActive(link.path);
@@ -42,7 +42,7 @@ export function BottomNav() {
                                 to={link.path}
                                 className={clsx(
                                     'flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors',
-                                    active ? 'text-[#3F8C62]' : 'text-gray-400'
+                                    active ? 'text-[#8AF0B8]' : 'text-slate-500'
                                 )}
                             >
                                 <span className="relative">
@@ -50,7 +50,7 @@ export function BottomNav() {
                                 </span>
                                 <span>{link.label}</span>
                                 {active && (
-                                    <span className="absolute bottom-0 w-6 h-0.5 bg-[#3F8C62] rounded-full" />
+                                    <span className="absolute bottom-0 w-6 h-0.5 bg-[#21B66F] rounded-full" />
                                 )}
                             </Link>
                         );
@@ -60,9 +60,9 @@ export function BottomNav() {
                         <NotificationsHoverCard
                             side="top"
                             align="end"
-                            triggerClassName="h-8 w-8 bg-transparent text-gray-400 hover:bg-[#3F8C62]/10"
+                            triggerClassName="h-8 w-8 bg-transparent text-slate-500 hover:bg-white/5 hover:text-white"
                         />
-                        <span className="text-[10px] font-medium text-gray-400">Увед.</span>
+                        <span className="text-[10px] font-medium text-slate-500">Увед.</span>
                     </div>
 
                     {/* Profile button */}
@@ -70,7 +70,7 @@ export function BottomNav() {
                         onClick={() => setShowProfile(true)}
                         className={clsx(
                             'flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors',
-                            showProfile ? 'text-[#3F8C62]' : 'text-gray-400'
+                            showProfile ? 'text-[#8AF0B8]' : 'text-slate-500'
                         )}
                     >
                         {user?.photo_url ? (

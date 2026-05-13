@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Search, ChevronDown, ChevronUp, Shield, User as UserIcon,
   Plus, Pencil, Trash2, X, Check, Users, Printer, KeyRound, RefreshCw,
+  Eye, Save,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { StudentOut, GroupOut, PasswordStudentCredential } from '../../api/types';
@@ -53,7 +54,6 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [groupFilter, setGroupFilter] = useState<number | null>(savedState.groupFilter ?? null);
 
-  // Group management state
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('#3F8C62');
@@ -87,6 +87,16 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
   const [setCredsResult, setSetCredsResult] = useState<PasswordStudentCredential | null>(null);
   const [settingCreds, setSettingCreds] = useState(false);
   const [setCredsError, setSetCredsError] = useState('');
+  const [editingStudent, setEditingStudent] = useState<StudentOut | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editRole, setEditRole] = useState('student');
+  const [editSubscriptionPlan, setEditSubscriptionPlan] = useState<'none' | 'summer' | 'year'>('none');
+  const [editLogin, setEditLogin] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [savingStudent, setSavingStudent] = useState(false);
+  const [deletingStudentId, setDeletingStudentId] = useState<number | null>(null);
 
   const filtered = students.filter((s) => {
     const matchesSearch =
@@ -107,6 +117,16 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
 
   const getProgressPercent = (solved: number, total: number) =>
     total === 0 ? 0 : Math.round((solved / total) * 100);
+
+  const isOnline = (dateStr: string) => Date.now() - new Date(dateStr).getTime() < 300000;
+
+  const getNameParts = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    return {
+      firstName: parts[0] ?? '',
+      lastName: parts.slice(1).join(' '),
+    };
+  };
 
   const formatLastActive = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -236,8 +256,6 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       if (!res.ok) return;
       const updated: PasswordStudentCredential = await res.json();
       setCredentials((prev) => prev.map((c) => c.id === studentId ? updated : c));
-      setResetModal(null);
-      setResetPassword('');
     } finally {
       setResettingId(null);
     }
@@ -283,12 +301,93 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
     }
   };
 
+  const openEditStudent = (student: StudentOut) => {
+    const { firstName, lastName } = getNameParts(student.name);
+    setEditingStudent(student);
+    setEditFirstName(firstName);
+    setEditLastName(lastName);
+    setEditUsername(student.username || '');
+    setEditRole(student.role);
+    setEditSubscriptionPlan(student.subscription_plan === 'summer' || student.subscription_plan === 'year' ? student.subscription_plan : 'none');
+    setEditLogin(student.login || '');
+    setEditPassword('');
+  };
+
+  const handleUpdateStudent = async () => {
+    if (!editingStudent || !editFirstName.trim()) return;
+    setSavingStudent(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/students/${editingStudent.id}`, {
+        method: 'PUT',
+        headers: authHeaders(apiKey),
+        body: JSON.stringify({
+          first_name: editFirstName.trim(),
+          last_name: editLastName.trim(),
+          username: editUsername.trim(),
+          role: editRole,
+          subscription_plan: editSubscriptionPlan,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Ошибка сохранения' }));
+        alert(err.detail || 'Ошибка сохранения');
+        return;
+      }
+      const nextLogin = editLogin.trim();
+      const nextPassword = editPassword.trim();
+      const loginChanged = nextLogin !== (editingStudent.login || '');
+      if (loginChanged || nextPassword) {
+        if (!nextLogin) {
+          alert('Укажите логин, чтобы сохранить пароль');
+          return;
+        }
+        const credsRes = await fetch(`${API_BASE}/admin/students/${editingStudent.id}/credentials`, {
+          method: 'PUT',
+          headers: authHeaders(apiKey),
+          body: JSON.stringify({
+            login: nextLogin,
+            password: nextPassword || undefined,
+          }),
+        });
+        if (!credsRes.ok) {
+          const err = await credsRes.json().catch(() => ({ detail: 'Ошибка сохранения логина или пароля' }));
+          alert(err.detail || 'Ошибка сохранения логина или пароля');
+          return;
+        }
+      }
+
+      setEditingStudent(null);
+      onRefresh?.();
+    } finally {
+      setSavingStudent(false);
+    }
+  };
+
+  const handleDeleteStudent = async (student: StudentOut) => {
+    if (!confirm(`Удалить ученика «${student.name}» вместе с прогрессом и статистикой?`)) return;
+    setDeletingStudentId(student.id);
+    try {
+      const res = await fetch(`${API_BASE}/admin/students/${student.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(apiKey),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Ошибка удаления' }));
+        alert(err.detail || 'Ошибка удаления');
+        return;
+      }
+      onRefresh?.();
+    } finally {
+      setDeletingStudentId(null);
+    }
+  };
+
   const GROUP_COLORS = ['#3F8C62', '#6366f1', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6'];
 
   return (
     <div className="space-y-4">
       {/* ── Groups Panel ─────────────────────────────────────────── */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+      <div className="hidden">
         <button
           onClick={() => setShowGroupPanel(!showGroupPanel)}
           className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -459,7 +558,149 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       </div>
 
       {/* ── Table ─────────────────────────────────────────────────── */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+      <div className="rounded-2xl bg-gradient-to-br from-violet-100 via-sky-100 to-emerald-50 p-3 shadow-sm">
+        <div className="hidden lg:grid grid-cols-[minmax(260px,1.45fr)_minmax(140px,0.8fr)_minmax(190px,1fr)_minmax(150px,0.8fr)_minmax(130px,0.7fr)_170px] gap-4 px-4 pb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">
+          <span>Имя Фамилия</span>
+          <span>Подписка</span>
+          <span>Прогресс</span>
+          <span>На этой неделе</span>
+          <span>Статус</span>
+          <span className="text-right">Управление</span>
+        </div>
+        <div className="space-y-2">
+          {sorted.map((student) => {
+            const pct = getProgressPercent(student.total_solved, student.total_tasks);
+            const isExpanded = expandedId === student.id;
+            const studentGroupIds = student.group_ids ?? [];
+            const primaryGroup = groups.find(g => studentGroupIds.includes(g.id));
+            const isAssignOpen = openAssignFor === student.id;
+            const online = isOnline(student.last_active_at);
+            const weekly = student.weekly_stats ?? { total: 0, correct: 0, incorrect: 0, ege_numbers: [] };
+
+            return (
+              <div key={student.id} className="rounded-xl bg-white/90 border border-white/80 shadow-sm overflow-visible">
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,1.45fr)_minmax(140px,0.8fr)_minmax(190px,1fr)_minmax(150px,0.8fr)_minmax(130px,0.7fr)_170px] gap-4 items-center px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative shrink-0">
+                      {student.photo_url ? (
+                        <img src={student.photo_url} alt="" className="w-11 h-11 rounded-full object-cover border border-white shadow-sm" />
+                      ) : (
+                        <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold uppercase">
+                          {student.name.charAt(0)}
+                        </div>
+                      )}
+                      <div className={clsx('absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white', online ? 'bg-emerald-500' : 'bg-gray-300')} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-gray-900 truncate">{student.name}</div>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
+                        <span className={clsx('w-1.5 h-1.5 rounded-full', online ? 'bg-emerald-500' : 'bg-gray-300')} />
+                        <span>{online ? 'Online' : 'Offline'}</span>
+                        <span className="text-gray-300">•</span>
+                        <span>@{student.username || 'id' + student.id}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <div className="mb-1 text-[10px] font-black uppercase text-gray-400">
+                      {student.subscription_plan === 'year' ? 'Годовой курс' : student.subscription_plan === 'summer' ? 'Летний курс' : 'Нет подписки'}
+                    </div>
+                    <button onClick={() => setOpenAssignFor(isAssignOpen ? null : student.id)} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:border-[#3F8C62]/40 hover:bg-emerald-50">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: primaryGroup?.color ?? '#CBD5E1' }} />
+                      {primaryGroup?.name ?? 'Без группы'}
+                      <ChevronDown size={13} className="text-gray-400" />
+                    </button>
+                    {isAssignOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setOpenAssignFor(null)} />
+                        <div className="absolute left-0 top-full mt-2 z-20 bg-white rounded-xl border border-gray-200 shadow-xl p-2 min-w-[190px]">
+                          <p className="text-[10px] font-black text-gray-400 uppercase px-2 pb-1.5">Группа / подписка</p>
+                          {groups.map((g) => {
+                            const inGroup = studentGroupIds.includes(g.id);
+                            return (
+                              <button key={g.id} onClick={() => toggleStudentGroup(student.id, g.id, inGroup)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                                <div className="w-4 h-4 rounded flex items-center justify-center border-2" style={{ backgroundColor: inGroup ? g.color : 'transparent', borderColor: g.color }}>
+                                  {inGroup && <Check size={10} className="text-white" />}
+                                </div>
+                                <span className="text-xs font-semibold text-gray-700">{g.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-gray-900">{student.total_solved}/{student.total_tasks}</span>
+                      <span className="text-xs font-bold text-[#3F8C62]">{pct}%</span>
+                    </div>
+                    <div className="mt-2 h-2 w-full max-w-[220px] bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#3F8C62] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-black text-gray-900">{weekly.total}</div>
+                    <div className="text-[11px] text-gray-500">{weekly.correct} верно, {weekly.incorrect} ошибок</div>
+                  </div>
+
+                  <div>
+                    <div className={clsx('inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold', online ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+                      {online ? 'Online' : 'Offline'}
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-400">{formatLastActive(student.last_active_at)}</div>
+                  </div>
+
+                  <div className="flex items-center justify-start lg:justify-end gap-1.5">
+                    <button onClick={() => onViewStudent?.(student.id)} title="Полная статистика" className="p-2 rounded-lg text-gray-500 hover:bg-emerald-50 hover:text-[#3F8C62] transition-all">
+                      <Eye size={16} />
+                    </button>
+                    <button onClick={() => openEditStudent(student)} title="Редактировать" className="p-2 rounded-lg text-gray-500 hover:bg-sky-50 hover:text-sky-600 transition-all">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => setExpandedId(isExpanded ? null : student.id)} title="Прогресс по темам" className={clsx('p-2 rounded-lg transition-all', isExpanded ? 'bg-emerald-100 text-emerald-700' : 'text-gray-500 hover:bg-gray-100')}>
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    <button onClick={() => handleDeleteStudent(student)} disabled={deletingStudentId === student.id} title="Удалить ученика" className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {student.topic_progress.map((tp, i) => (
+                        <div key={i} className="bg-white p-3 rounded-xl border border-gray-100 flex items-center justify-between shadow-sm">
+                          <span className="text-xs font-semibold text-gray-700 truncate mr-2">{tp.topic_name}</span>
+                          <span className="text-[10px] font-bold px-2 py-1 bg-gray-50 text-gray-500 rounded-md">
+                            {tp.solved}/{tp.total}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {sorted.length === 0 && (
+          <div className="text-center py-20 text-gray-400 bg-white/80 rounded-xl">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <UserIcon size={32} className="opacity-20" />
+            </div>
+            <p className="font-bold text-gray-900">Ученики не найдены</p>
+            <p className="text-sm">Попробуйте изменить параметры поиска</p>
+          </div>
+        )}
+      </div>
+
+      <div className="hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
@@ -685,6 +926,104 @@ export function StudentsTable({ students, groups, apiKey, onRefresh, onViewStude
       </div>
 
       {/* ── Set Credentials Modal ────────────────────────────────── */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Редактировать ученика</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{editingStudent.name}</p>
+              </div>
+              <button onClick={() => setEditingStudent(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Имя</label>
+                  <input
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Фамилия</label>
+                  <input
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Username</label>
+                <input
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  placeholder="username"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Логин</label>
+                  <input
+                    value={editLogin}
+                    onChange={(e) => setEditLogin(e.target.value)}
+                    placeholder="ivanov_i"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Пароль</label>
+                  <input
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="Оставьте пустым без смены"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Роль</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all bg-white"
+                >
+                  <option value="student">Ученик</option>
+                  <option value="admin">Админ</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Подписка</label>
+                <select
+                  value={editSubscriptionPlan}
+                  onChange={(e) => setEditSubscriptionPlan(e.target.value === 'summer' || e.target.value === 'year' ? e.target.value : 'none')}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] transition-all bg-white"
+                >
+                  <option value="none">Нет подписки</option>
+                  <option value="summer">Летний курс</option>
+                  <option value="year">Годовой курс</option>
+                </select>
+              </div>
+              <button
+                onClick={handleUpdateStudent}
+                disabled={savingStudent || !editFirstName.trim()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save size={16} />
+                {savingStudent ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {setCredsFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 mx-4">

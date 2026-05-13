@@ -49,6 +49,8 @@ export default function ExamPage() {
     const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
     const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
+    const appliedTaskDeepLinkRef = useRef<string | null>(null);
+    const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
     const [localCode, setLocalCode] = useState("");
     const [viewingCode, setViewingCode] = useState<string | null>(null);
 
@@ -66,9 +68,18 @@ export default function ExamPage() {
     const isMock = String(currentTopic?.category) === "mock";
     const isControl = String(currentTopic?.category) === "control";
     const showTimer = isMock || isControl;
+    const clearSolutionDeepLink = () => {
+        const params = new URLSearchParams(location.search);
+        if (!params.has("solution") && !params.has("task")) return;
+        params.delete("task");
+        params.delete("solution");
+        const nextSearch = params.toString();
+        navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+    };
     const closeSolutionPanel = () => {
         if (solutionPanelBeforeCloseRef.current?.() === false) return;
         setSolutionPanelTaskId(null);
+        clearSolutionDeepLink();
     };
     const currentTaskNav = tasks[taskIndex] ?? null;
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
@@ -85,23 +96,30 @@ export default function ExamPage() {
     useEffect(() => {
         if (tasks.length === 0) return;
         const params = new URLSearchParams(location.search);
-        const taskId = Number(params.get("task"));
+        const taskParam = params.get("task");
+        if (!taskParam || appliedTaskDeepLinkRef.current === taskParam) return;
+        const taskId = Number(taskParam);
         if (!Number.isFinite(taskId) || taskId <= 0) return;
 
         const nextIndex = tasks.findIndex((item) => item.id === taskId);
-        if (nextIndex >= 0 && nextIndex !== taskIndex) {
-            setTaskIndex(nextIndex);
+        if (nextIndex >= 0) {
+            appliedTaskDeepLinkRef.current = taskParam;
+            if (params.get("solution") === "1") {
+                setPendingSolutionTaskId(taskId);
+            }
+            setTaskIndex((currentIndex) => nextIndex !== currentIndex ? nextIndex : currentIndex);
+            params.delete("task");
+            params.delete("solution");
+            const nextSearch = params.toString();
+            navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
         }
-    }, [location.search, tasks, taskIndex]);
+    }, [location.pathname, location.search, navigate, tasks]);
 
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        if (params.get("solution") !== "1") return;
-
-        const taskId = Number(params.get("task"));
-        if (!Number.isFinite(taskId) || taskId <= 0) return;
-        setSolutionPanelTaskId(taskId);
-    }, [location.search]);
+        if (!pendingSolutionTaskId) return;
+        setSolutionPanelTaskId(pendingSolutionTaskId);
+        setPendingSolutionTaskId(null);
+    }, [pendingSolutionTaskId]);
 
     useEffect(() => {
         if (!finishedAttemptId) return;
@@ -188,6 +206,16 @@ export default function ExamPage() {
         return map[p];
     }, [currentPrimaryScore]);
 
+    const selectExamTask = (index: number) => {
+        const currentTaskParam = new URLSearchParams(location.search).get("task");
+        if (currentTaskParam) {
+            appliedTaskDeepLinkRef.current = currentTaskParam;
+        }
+        clearSolutionDeepLink();
+        setSolutionPanelTaskId(null);
+        setTaskIndex(Math.max(0, Math.min(tasks.length - 1, index)));
+    };
+
     // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
     useEffect(() => {
         if (!examInfo || isMock) return;
@@ -230,6 +258,49 @@ export default function ExamPage() {
             }
         }
     };
+
+    useEffect(() => {
+        const isEditableTarget = (target: EventTarget | null) => {
+            if (!(target instanceof HTMLElement)) return false;
+            const tag = target.tagName.toLowerCase();
+            return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+        };
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (solutionPanelTaskId !== null || reviewTaskId !== null || viewingCode !== null || taskLoading || isSubmitting) return;
+            if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+
+            if (event.key === "Enter") {
+                if (!task) return;
+                event.preventDefault();
+                handleSaveAnswer();
+                return;
+            }
+
+            if (isEditableTarget(event.target)) return;
+
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                selectExamTask(taskIndex - 1);
+            } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                selectExamTask(taskIndex + 1);
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [
+        solutionPanelTaskId,
+        reviewTaskId,
+        viewingCode,
+        taskLoading,
+        isSubmitting,
+        task,
+        taskIndex,
+        handleSaveAnswer,
+        selectExamTask,
+    ]);
 
     // Restore draft answers from backend when re-entering an active exam
     const draftsRestoredRef = useRef(false);
@@ -1237,7 +1308,14 @@ export default function ExamPage() {
         <div className="h-screen flex flex-col overflow-hidden bg-[#F8F7F4]">
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
-                <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                <div className="flex h-full items-center gap-3 md:gap-4 min-w-0">
+                    <button
+                        onClick={() => navigate('/exams')}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                        title="К выбору варианта"
+                    >
+                        <ArrowLeft size={18} />
+                    </button>
                     {showTimer ? (
                         <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
                             <Clock size={16} />
@@ -1246,18 +1324,18 @@ export default function ExamPage() {
                             </span>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+                        <div className="flex h-full items-center gap-1.5 md:gap-2 shrink-0">
                             <span className="text-xl font-black text-[#3F8C62] leading-none">{currentTestScore}</span>
-                            <span className="text-sm text-gray-400 font-bold">/100</span>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">баллов</span>
-                            <span className="text-[10px] font-bold text-gray-300 ml-2">·</span>
+                            <span className="text-sm font-bold leading-none text-gray-400">/100</span>
+                            <span className="ml-1 text-[10px] font-bold uppercase tracking-wider leading-none text-gray-400">баллов</span>
+                            <span className="ml-1 text-[10px] font-bold leading-none text-gray-300">·</span>
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                                 Первичный {currentPrimaryScore}/29
                             </span>
                         </div>
                     )}
-                    <div className="w-px h-5 bg-gray-200 mx-1 md:mx-2 shrink-0" />
-                    <h1 className="font-bold text-gray-900 truncate text-sm md:text-base">
+                    <div className="h-6 w-px shrink-0 bg-gray-200" />
+                    <h1 className="truncate text-base font-black leading-none text-gray-950">
                         {currentTopic.title}
                     </h1>
                 </div>
@@ -1293,7 +1371,10 @@ export default function ExamPage() {
                         </div>
                         <TaskSolutionPanel
                             taskId={solutionPanelTaskId}
-                            onClose={() => setSolutionPanelTaskId(null)}
+                            onClose={() => {
+                                setSolutionPanelTaskId(null);
+                                clearSolutionDeepLink();
+                            }}
                             registerBeforeClose={(handler) => {
                                 solutionPanelBeforeCloseRef.current = handler;
                             }}
@@ -1436,7 +1517,7 @@ export default function ExamPage() {
                             return (
                                 <button
                                     key={t.id}
-                                    onClick={() => setTaskIndex(idx)}
+                                    onClick={() => selectExamTask(idx)}
                                     className={clsx('w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border-2', btnClass)}
                                 >
                                     {idx + 1}
@@ -1595,14 +1676,14 @@ export default function ExamPage() {
 
                                     <div className="flex gap-2 pt-2">
                                         <button
-                                            onClick={() => setTaskIndex(prev => Math.max(0, prev - 1))}
+                                            onClick={() => selectExamTask(taskIndex - 1)}
                                             disabled={taskIndex === 0}
                                             className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
                                         >
                                             Назад
                                         </button>
                                         <button
-                                            onClick={() => setTaskIndex(prev => Math.min(tasks.length - 1, prev + 1))}
+                                            onClick={() => selectExamTask(taskIndex + 1)}
                                             disabled={taskIndex === tasks.length - 1}
                                             className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
                                         >

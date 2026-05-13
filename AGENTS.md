@@ -1,13 +1,13 @@
 <claude-mem-context>
 # Memory Context
 
-# [infa_project] recent context, 2026-05-03 10:58pm GMT+8
+# [infa_project] recent context, 2026-05-09 2:13am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 39 obs (13 451t read) | 1 048 727t work | 99% savings
+Stats: 43 obs (14 813t read) | 1 096 244t work | 99% savings
 
 ### Apr 30, 2026
 1 9:06p 🔵 TasksListPage.tsx — existing task card grid implementation
@@ -15,7 +15,6 @@ Stats: 39 obs (13 451t read) | 1 048 727t work | 99% savings
 3 9:09p 🔵 TopicCard Component Current Implementation Mapped
 4 9:10p 🟣 TopicCard Redesigned to Unified White Card with Per-Task Color Accents
 5 " 🔵 TasksListPage Serves Both /tasks and /homework Routes
-S2 Change topic image attachment UI in admin panel to match new card design (Apr 30, 9:11 PM)
 6 9:36p 🔵 Topic Image System Spans 11 Files Across Client and Server
 7 9:37p 🔵 Admin TopicDetail Image Management System Mapped
 S3 Simplify topic image management UI in admin panel — replaced position/size controls with live card preview (Apr 30, 9:37 PM)
@@ -48,10 +47,10 @@ S10 Redesign Разбор/Домашка tab switching on topic task page — re
 43 8:03p 🟣 tutCounts and hwCounts Memos Added to Feed CategoryTab Progress Data
 44 " ✅ Old Header Pill Tabs Removed from TasksPage — Replaced by CategoryTab System
 45 " 🟣 CategoryTab Components Rendered in TasksPage Body — Tab Switching Fully Shipped
+S11 Final tab placement iteration: CategoryTabs moved to header-only, topic title replaced with document.title (May 1, 8:04 PM)
 46 8:05p 🟣 TasksPage Sets Browser Tab Title to Current Topic Name
 47 " ✅ CategoryTabs Moved to Header Bar — Topic Title h1 Removed from Header
 48 8:06p ✅ CategoryTabs Removed from Body — Final Placement: Header Only
-S11 Final tab placement iteration: CategoryTabs moved to header-only, topic title replaced with document.title (May 1, 8:07 PM)
 ### May 3, 2026
 49 5:49p 🔵 infa_project: Educational Platform for Russian EGE Informatics Exam
 50 5:56p 🔵 Design Disharmony Between LandingPage and Platform TopicCard
@@ -61,6 +60,20 @@ S11 Final tab placement iteration: CategoryTabs moved to header-only, topic titl
 54 " 🟣 TopicCard + TasksListPage Design Harmony — Build Verified Successfully
 55 5:57p 🔵 TasksPage and TaskView Use Legacy CSS Variable Design System
 56 5:58p 🟣 TasksPage Task Solving UI Redesigned to Match Green Brand Identity
+### May 8, 2026
+57 9:30p 🔵 Navigation Lock Bug When Opening Topic/Variant from Notification
+58 9:31p 🔵 TasksPage Deep-Link State Machine Analysis for Navigation Lock Bug
+59 9:37p 🔵 Task switching and deep link management code paths identified
+60 " 🔴 Fix task switching broken after closing solution panel
+S12 Fix bug preventing task switching after closing solution panel in TasksPage component (May 8, 9:38 PM)
+**Investigated**: Located and examined the `clearSolutionDeepLink()`, `selectTask()`, and `appliedTaskDeepLinkRef` functions in client/src/pages/TasksPage.tsx that manage task navigation and deep linking when opening solutions from notifications
 
-Access 1049k tokens of past work via get_observations([IDs]) or mem-search skill.
+**Learned**: The bug was caused by `selectTask()` calling `clearSolutionDeepLink()` which deleted BOTH the "solution" AND "task" URL parameters. This created an intermediate navigation state without task context, breaking synchronization with the `appliedTaskDeepLinkRef` React ref and the deep link effect hook that tracks which task should be active
+
+**Completed**: Two code modifications applied to TasksPage.tsx: (1) Modified `clearSolutionDeepLink()` to only delete the "solution" parameter while preserving the "task" parameter in the URL; (2) Removed the `clearSolutionDeepLink()` call from `selectTask()` to avoid the intermediate state. The solution now allows navigation to set a single new URL with the next task ID, which naturally clears solution context while maintaining task context
+
+**Next Steps**: Testing the fix to verify task switching works after closing solution panels. May need to verify behavior across tutorial, homework, and exam variant categories
+
+
+Access 1096k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

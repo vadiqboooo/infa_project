@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import admin, auth, content, exams, solving, stats
+from app.routers import admin, auth, content, exams, preparation, solving, stats
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,7 @@ app.include_router(content.router)
 app.include_router(solving.router)
 app.include_router(exams.router)
 app.include_router(stats.router)
+app.include_router(preparation.router)
 app.include_router(admin.router, prefix="/admin")
 
 # Serve uploaded files (exam solutions)

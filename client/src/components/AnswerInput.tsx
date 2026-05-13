@@ -74,8 +74,8 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
 
     // Tailwind classes for per-cell feedback color
     const cellCls = (ok: boolean | undefined) =>
-        ok === true ? "!border-emerald-500 !bg-emerald-50 !text-emerald-700" :
-        ok === false ? "!border-red-400 !bg-red-50 !text-red-700" : "";
+        ok === true ? "!border-emerald-400 !bg-emerald-400/10 !text-emerald-200" :
+        ok === false ? "!border-red-400 !bg-red-400/10 !text-red-200" : "";
 
     if (type === "text") {
         return (

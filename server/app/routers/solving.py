@@ -1,7 +1,9 @@
 """Solving router — answer checking & AI-assisted hints."""
 
+import mimetypes
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect, status
@@ -10,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.access import require_task_access
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user, get_db
@@ -45,6 +48,10 @@ class TaskSolutionCommentOut(BaseModel):
     from_col: int
     to_line: int
     to_col: int
+    target_type: str | None = None
+    image_x: float | None = None
+    image_y: float | None = None
+    image_drawing: list[dict[str, Any]] | None = None
     text: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -328,6 +335,10 @@ def _solution_out(
                 from_col=comment.from_col,
                 to_line=comment.to_line,
                 to_col=comment.to_col,
+                target_type=comment.target_type or "code",
+                image_x=comment.image_x,
+                image_y=comment.image_y,
+                image_drawing=comment.image_drawing,
                 text=comment.text,
                 created_at=comment.created_at,
                 updated_at=comment.updated_at,
@@ -507,6 +518,7 @@ async def mark_solution_comment_notifications_read(
 
 @router.get("/{task_id}/solution", response_model=TaskSolutionOut)
 async def get_own_task_solution(task_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await require_task_access(task_id, user, db)
     result = await db.execute(
         select(UserTaskSolution).where(UserTaskSolution.user_id == user.id, UserTaskSolution.task_id == task_id)
     )
@@ -578,6 +590,7 @@ async def request_teacher_help_for_solution(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_task_access(task_id, user, db)
     solution = await _get_or_create_solution(db, user.id, task_id)
     await db.flush()
 
@@ -631,6 +644,7 @@ async def task_solution_comments_ws(
 
 @router.put("/{task_id}/solution", response_model=TaskSolutionOut)
 async def save_own_task_solution(task_id: int, body: TaskSolutionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await require_task_access(task_id, user, db)
     solution = await _get_or_create_solution(db, user.id, task_id)
     previous_code = solution.code
     solution.code = body.code
@@ -649,6 +663,18 @@ ALLOWED_SOLUTION_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 MAX_SOLUTION_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
+def _solution_upload_suffix(file: UploadFile, kind: str) -> str:
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix:
+        return suffix
+    guessed = mimetypes.guess_extension(file.content_type or "")
+    if guessed == ".jpe":
+        return ".jpg"
+    if kind == "image" and file.content_type == "image/png":
+        return ".png"
+    return guessed or ""
+
+
 @router.post("/{task_id}/solution/upload/{kind}", response_model=TaskSolutionOut)
 async def upload_own_task_solution_file(
     task_id: int,
@@ -657,9 +683,10 @@ async def upload_own_task_solution_file(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_task_access(task_id, user, db)
     if kind not in {"file", "image"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload kind")
-    suffix = Path(file.filename or "").suffix.lower()
+    suffix = _solution_upload_suffix(file, kind)
     allowed = ALLOWED_SOLUTION_IMAGE_EXTENSIONS if kind == "image" else ALLOWED_SOLUTION_FILE_EXTENSIONS
     if suffix not in allowed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
@@ -705,6 +732,7 @@ async def check_answer(
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    await require_task_access(task_id, user, db)
 
     sub_results: list[bool] | None = None
     has_subs = bool(task.sub_tasks)
@@ -832,6 +860,7 @@ async def ai_assist(
     task = task_result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    await require_task_access(task_id, user, db)
 
     # Get recent error history
     logs_result = await db.execute(

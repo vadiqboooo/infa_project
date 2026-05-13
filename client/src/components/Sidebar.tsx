@@ -33,15 +33,15 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="flex flex-col h-screen w-60 bg-white border-r border-gray-200 shrink-0">
+      <div className="flex flex-col h-screen w-60 shrink-0 border-r border-white/10 bg-[#07111D] text-slate-200 shadow-[10px_0_40px_rgba(0,0,0,0.18)]">
         {/* Logo / Brand */}
         <div className="p-5 flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#3F8C62] rounded-xl flex items-center justify-center text-white">
+          <div className="w-9 h-9 bg-[#21B66F] rounded-xl flex items-center justify-center text-white shadow-[0_0_24px_rgba(33,182,111,0.25)]">
             <GraduationCap size={20} />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-gray-900 leading-tight">Информатика</span>
-            <span className="text-[11px] text-gray-400 leading-tight">Подготовка к ЕГЭ</span>
+            <span className="text-sm font-bold text-white leading-tight">Информатика</span>
+            <span className="text-[11px] text-slate-500 leading-tight">Подготовка к ЕГЭ</span>
           </div>
         </div>
 
@@ -55,8 +55,8 @@ export function Sidebar() {
                 className={clsx(
                   'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors',
                   active
-                    ? 'bg-[#3F8C62] text-white font-medium'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#113E2D] text-[#8AF0B8] font-medium shadow-[0_8px_24px_rgba(33,182,111,0.12)]'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 )}
               >
                 <link.icon size={18} />
@@ -68,14 +68,14 @@ export function Sidebar() {
           {/* Admin link */}
           {isAdmin && (
             <>
-              <div className="h-px bg-gray-100 my-2 mx-2" />
+              <div className="h-px bg-white/10 my-2 mx-2" />
               <Link
                 to="/admin"
                 className={clsx(
                   'flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-colors',
                   location.pathname.startsWith('/admin')
-                    ? 'bg-[#3F8C62] text-white font-medium'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#113E2D] text-[#8AF0B8] font-medium'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 )}
               >
                 <ShieldCheck size={18} />
@@ -94,7 +94,7 @@ export function Sidebar() {
                 'flex min-w-0 flex-1 items-center gap-3 px-3 py-3 rounded-2xl transition-colors cursor-pointer group',
                 showProfile
                   ? 'bg-[#3F8C62]/10 ring-1 ring-[#3F8C62]/20'
-                  : 'bg-gray-50 hover:bg-gray-100'
+                  : 'bg-white/[0.04] hover:bg-white/[0.07]'
               )}
             >
               <div className="relative shrink-0">
@@ -105,32 +105,32 @@ export function Sidebar() {
                     {user?.first_name?.charAt(0) || 'U'}
                   </div>
                 )}
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-white" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-[#07111D]" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>
-                <p className="text-[11px] text-[#3F8C62] truncate leading-tight">Онлайн</p>
+                <p className="text-sm font-medium text-white truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>
+                <p className="text-[11px] text-emerald-300 truncate leading-tight">Онлайн</p>
               </div>
               <Settings
                 size={16}
                 className={clsx(
                   'transition-colors shrink-0',
                   showProfile
-                    ? 'text-[#3F8C62]'
-                    : 'text-gray-300 group-hover:text-gray-500'
+                    ? 'text-emerald-300'
+                    : 'text-slate-600 group-hover:text-slate-300'
                 )}
               />
             </div>
             <NotificationsHoverCard
               side="right"
               align="end"
-              triggerClassName="h-auto w-12 shrink-0 bg-gray-50"
+              triggerClassName="h-auto w-12 shrink-0 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
             />
           </div>
 
           <button
             onClick={logout}
-            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm text-slate-500 hover:bg-red-500/10 hover:text-red-300 transition-colors"
           >
             <LogOut size={18} />
             <span>Выйти</span>

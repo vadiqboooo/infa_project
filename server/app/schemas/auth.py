@@ -1,5 +1,7 @@
 """Schemas for Telegram authentication and login/password authentication."""
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -34,6 +36,8 @@ class UserSchema(BaseModel):
     last_name_real: str | None = None
     photo_url: str | None = None
     role: str
+    subscription_plan: str = "none"
+    subscription_expires_at: datetime | None = None
     login: str | None = None
 
     class Config:

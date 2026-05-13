@@ -14,12 +14,12 @@ input[type=number] {
 .input {
     background: transparent;
     border: none;
-    border-bottom: 2px solid #243228;
+    border-bottom: 2px solid rgba(148, 163, 184, 0.45);
     border-radius: 0;
     outline: none;
     transition: all 0.2s ease;
     padding: var(--sp-2) 0;
-    color: #16231a;
+    color: #f8fafc;
     font-weight: 700;
 }
 
@@ -33,7 +33,7 @@ input[type=number] {
     display: flex;
     align-items: flex-end;
     padding-bottom: var(--sp-2);
-    color: #4e8c5a;
+    color: #86efac;
     font-weight: bold;
     opacity: 0.3;
     font-size: 1.2rem;
@@ -83,7 +83,7 @@ input[type=number] {
 .table-input {
     background: transparent;
     border: none;
-    border-bottom: 2px solid #243228 !important;
+    border-bottom: 2px solid rgba(148, 163, 184, 0.45) !important;
     border-radius: 0 !important;
     outline: none;
     transition: all 0.2s ease;
@@ -116,7 +116,7 @@ input[type=number] {
 .task-27-label {
     font-size: 10px;
     font-weight: 800;
-    color: #526052;
+    color: #94a3b8;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 2px;

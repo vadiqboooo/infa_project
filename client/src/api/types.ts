@@ -40,6 +40,8 @@ export interface TaskNav {
     ege_number_max: number | null;
     status: ProgressStatus;
     has_solution: boolean;
+    is_locked?: boolean;
+    is_trial?: boolean;
 }
 
 export type TopicImagePosition = 'cover' | 'left' | 'right' | 'background';
@@ -68,6 +70,8 @@ export interface TopicNav {
     image_size?: number | null;
     character_url?: string | null;
     background_url?: string | null;
+    is_locked?: boolean;
+    lock_reason?: string | null;
 }
 
 /* ── Task ──────────────────────────────────────────── */
@@ -107,6 +111,7 @@ export interface TaskOut {
     sub_tasks?: SubTask[] | null;
     has_own_solution?: boolean;
     solution_comments_count?: number;
+    is_trial?: boolean;
 }
 
 /* ── Answers ───────────────────────────────────────── */
@@ -321,6 +326,21 @@ export interface StudentExamScore {
     max_score: number;
 }
 
+export interface StudentWeeklyEgeStat {
+    ege_number: number | null;
+    total: number;
+    correct: number;
+    incorrect: number;
+    accuracy: number;
+}
+
+export interface StudentWeeklyStats {
+    total: number;
+    correct: number;
+    incorrect: number;
+    ege_numbers: StudentWeeklyEgeStat[];
+}
+
 export interface StudentOut {
     id: number;
     name: string;
@@ -328,9 +348,12 @@ export interface StudentOut {
     photo_url: string | null;
     role: string;
     login: string | null;
+    subscription_plan?: "none" | "summer" | "year" | string;
+    subscription_expires_at?: string | null;
     last_active_at: string;
     total_solved: number;
     total_tasks: number;
+    weekly_stats?: StudentWeeklyStats;
     exam_scores: StudentExamScore[];
     topic_progress: StudentTopicProgress[];
     group_ids: number[];
@@ -355,11 +378,26 @@ export interface TaskSolutionComment {
     from_col: number;
     to_line: number;
     to_col: number;
+    target_type?: "code" | "image" | null;
+    image_x?: number | null;
+    image_y?: number | null;
+    image_drawing?: ImageDrawingStroke[] | null;
     text: string;
     author_name?: string | null;
     created_at: string;
     updated_at?: string;
     reaction?: "fixed" | "need_help" | null;
+}
+
+export interface ImageDrawingPoint {
+    x: number;
+    y: number;
+}
+
+export interface ImageDrawingStroke {
+    points: ImageDrawingPoint[];
+    color: string;
+    width: number;
 }
 
 export interface SolutionCommentNotification {
@@ -403,6 +441,9 @@ export interface StudentTaskSolutionReview {
     task_content_html?: string | null;
     task_description?: string | null;
     ege_number: number | null;
+    answer_type?: string | null;
+    user_answer?: { val: any } | null;
+    correct_answer?: { val: any } | null;
     code: string | null;
     file_url: string | null;
     image_url: string | null;
@@ -417,21 +458,6 @@ export interface StudentTopicDetail {
     attempt_id: number | null;
     has_analysis: boolean;
     tasks: StudentTaskResult[];
-}
-
-export interface StudentWeeklyEgeStat {
-    ege_number: number | null;
-    total: number;
-    correct: number;
-    incorrect: number;
-    accuracy: number;
-}
-
-export interface StudentWeeklyStats {
-    total: number;
-    correct: number;
-    incorrect: number;
-    ege_numbers: StudentWeeklyEgeStat[];
 }
 
 export interface StudentDetailOut {
@@ -491,6 +517,93 @@ export interface GroupOut {
     student_count: number;
 }
 
+export interface PreparationPlanBlock {
+    id?: number;
+    title: string;
+    order_index: number;
+    ege_numbers: number[];
+    task_ids: number[];
+    estimated_score: number;
+    required_solved_count: number;
+    min_accuracy: number;
+    requires_control_work: boolean;
+    control_topic_id: number | null;
+    includes_variant: boolean;
+}
+
+export interface PreparationPlan {
+    id: number;
+    title: string;
+    course_type?: "year" | "summer" | string;
+    target_score: number;
+    description?: string | null;
+    default_duration_days: number;
+    final_variants_count: number;
+    is_active: boolean;
+    blocks: PreparationPlanBlock[];
+}
+
+export interface PlanBlockProgress {
+    block_id: number;
+    title: string;
+    ege_numbers: number[];
+    task_ids: number[];
+    estimated_score: number;
+    solved: number;
+    failed: number;
+    total_attempted: number;
+    required_solved_count: number;
+    accuracy: number;
+    is_done: boolean;
+    requires_control_work: boolean;
+    control_topic_id: number | null;
+    includes_variant: boolean;
+    task_progress: PlanTaskProgress[];
+}
+
+export interface PlanTaskProgress {
+    task_id: number;
+    label: string;
+    ege_number: number | null;
+    ege_number_max: number | null;
+    solved: number;
+    total: number;
+    percent: number;
+}
+
+export interface PreparationTaskOption {
+    id: number;
+    topic_id: number;
+    topic_title: string;
+    topic_category: TopicCategory;
+    order_index: number;
+    ege_number: number | null;
+    ege_number_max: number | null;
+    title: string | null;
+    label: string;
+}
+
+export interface CurrentPlanRecommendation {
+    user_plan_id: number | null;
+    active_block_id: number | null;
+    plan: PreparationPlan | null;
+    started_at: string | null;
+    target_date: string | null;
+    days_left: number;
+    total_required: number;
+    total_solved: number;
+    progress_percent: number;
+    current_block: PlanBlockProgress | null;
+    block_progress: PlanBlockProgress[];
+    today_ege_numbers: number[];
+    daily_task_target: number;
+    next_action: string | null;
+    next_control_in_days: number | null;
+    final_variants_left: number;
+    subscription_plan?: "none" | "summer" | "year" | string;
+    subscription_required?: boolean;
+}
+
 /* ── Auth ──────────────────────────────────────────── */
 export interface TokenResponse {
     access_token: string;
@@ -507,6 +620,8 @@ export interface User {
     photo_url: string | null;
     role: string;
     login: string | null;
+    subscription_plan?: "none" | "summer" | "year" | string;
+    subscription_expires_at?: string | null;
 }
 
 /* ── Password auth ─────────────────────────────────── */

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.access import require_exam_access
 from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
@@ -42,6 +43,8 @@ async def get_exam_by_topic(
     db: AsyncSession = Depends(get_db),
 ):
     """Get exam for a topic (variant). Creates one if it doesn't exist."""
+    await require_exam_access(user, db)
+
     result = await db.execute(
         select(Exam).options(selectinload(Exam.tasks)).where(Exam.topic_id == topic_id)
     )
@@ -179,6 +182,7 @@ async def get_exam(
     exam = result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    await require_exam_access(user, db)
 
     # Check for active attempt
     active_attempt = await db.execute(
@@ -217,6 +221,7 @@ async def start_exam(
     exam = result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    await require_exam_access(user, db)
 
     # Return existing active attempt (idempotent)
     active = await db.execute(
@@ -267,6 +272,7 @@ async def save_draft_answer(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Active attempt not found")
+    await require_exam_access(user, db)
 
     task_id = str(body.get("task_id", ""))
     answer = body.get("answer")  # {val: ...}
@@ -351,6 +357,7 @@ async def submit_exam(
     exam = exam_result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    await require_exam_access(user, db)
 
     # Build task lookup
     task_map: dict[int, Task] = {t.id: t for t in exam.tasks}
@@ -480,6 +487,7 @@ async def upload_task_file_solution(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+    await require_exam_access(user, db)
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -522,6 +530,7 @@ async def analyze_exam_attempt(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    await require_exam_access(user, db)
 
     results_json = attempt.results_json or {}
     task_results = results_json.get("task_results", [])
@@ -633,6 +642,7 @@ async def save_task_code_solution(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
+    await require_exam_access(user, db)
 
     code = body.get("code", "")
     results = dict(attempt.results_json or {})
@@ -670,6 +680,7 @@ async def check_task_code(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
+    await require_exam_access(user, db)
 
     # Find task result
     task_result_entry = None
@@ -768,6 +779,7 @@ async def submit_for_review(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
+    await require_exam_access(user, db)
 
     results = dict(attempt.results_json or {})
     results["submitted_for_review"] = True
@@ -792,6 +804,7 @@ async def get_published_analysis(
     )
     if attempt_res.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
+    await require_exam_access(user, db)
 
     analysis_res = await db.execute(
         select(ExamAnalysis).where(

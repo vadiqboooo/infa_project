@@ -17,6 +17,8 @@ import type {
     SolutionStep,
     SolutionCommentNotification,
     AdminHelpNotification,
+    CurrentPlanRecommendation,
+    PreparationPlan,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -188,6 +190,49 @@ export function useMarkAdminHelpNotificationRead() {
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
+        },
+    });
+}
+
+export function usePreparationPlans() {
+    return useQuery<PreparationPlan[]>({
+        queryKey: ["preparation-plans"],
+        queryFn: () => api<PreparationPlan[]>("/preparation-plans"),
+    });
+}
+
+export function useCurrentPreparationPlan() {
+    return useQuery<CurrentPlanRecommendation>({
+        queryKey: ["preparation-plans", "current"],
+        queryFn: () => api<CurrentPlanRecommendation>("/preparation-plans/current"),
+    });
+}
+
+export function useSelectPreparationPlan() {
+    const qc = useQueryClient();
+    return useMutation<CurrentPlanRecommendation, Error, { plan_id: number; duration_days?: number }>({
+        mutationFn: (body) =>
+            api<CurrentPlanRecommendation>("/preparation-plans/select", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["preparation-plans", "current"] });
+            qc.invalidateQueries({ queryKey: ["navigation"] });
+        },
+    });
+}
+
+export function useUpdatePreparationPlanActiveBlock() {
+    const qc = useQueryClient();
+    return useMutation<CurrentPlanRecommendation, Error, { block_id: number }>({
+        mutationFn: (body) =>
+            api<CurrentPlanRecommendation>("/preparation-plans/current/active-block", {
+                method: "PUT",
+                body: JSON.stringify(body),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["preparation-plans", "current"] });
         },
     });
 }

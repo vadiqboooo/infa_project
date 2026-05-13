@@ -12,12 +12,13 @@ from pathlib import Path
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.admin_help_notification_read import AdminHelpNotificationRead
+from app.models.ai_chat_log import AIChatLog
 from app.models.exam import Exam, exam_tasks
 from app.models.task import AnswerType, Task
 from app.models.topic import Topic
@@ -28,8 +29,10 @@ from app.models.exam_analysis import ExamAnalysis
 from app.models.group import Group, user_groups
 from app.models.task_solution import UserTaskSolution
 from app.models.task_solution_comment import UserTaskSolutionComment
+from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
 from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
+from app.models.topic_seen import UserTopicSeen
 from app.realtime import solution_comment_ws_manager
 from app.schemas.admin import (
     ImportVariantIn,
@@ -42,6 +45,7 @@ from app.schemas.admin import (
     StudentTopicProgress,
     StudentExamScore,
     UserRoleUpdate,
+    StudentUpdate,
     StudentDetailOut,
     StudentTopicDetail,
     StudentTaskResult,
@@ -448,6 +452,60 @@ async def delete_topic_image(topic_id: int, db: AsyncSession = Depends(get_db)):
 
 # ── Students ──────────────────────────────────────────────────
 
+async def get_student_weekly_stats(user_id: int, db: AsyncSession) -> StudentWeeklyStats:
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    progress_result = await db.execute(
+        select(UserProgress, Task.ege_number)
+        .join(Task, Task.id == UserProgress.task_id)
+        .where(
+            UserProgress.user_id == user_id,
+            UserProgress.last_attempt_at.is_not(None),
+            UserProgress.status.in_([ProgressStatus.solved, ProgressStatus.failed]),
+        )
+    )
+
+    weekly_total = 0
+    weekly_correct = 0
+    weekly_incorrect = 0
+    weekly_by_ege: dict[int | None, dict[str, int]] = {}
+    for progress, ege_number in progress_result.all():
+        last_attempt = progress.last_attempt_at
+        if last_attempt is None:
+            continue
+        if last_attempt.tzinfo is None:
+            last_attempt = last_attempt.replace(tzinfo=timezone.utc)
+        if last_attempt < week_ago:
+            continue
+
+        bucket = weekly_by_ege.setdefault(ege_number, {"total": 0, "correct": 0, "incorrect": 0})
+        bucket["total"] += 1
+        weekly_total += 1
+        if progress.status == ProgressStatus.solved:
+            bucket["correct"] += 1
+            weekly_correct += 1
+        else:
+            bucket["incorrect"] += 1
+            weekly_incorrect += 1
+
+    weekly_ege_stats = [
+        StudentWeeklyEgeStat(
+            ege_number=ege_number,
+            total=values["total"],
+            correct=values["correct"],
+            incorrect=values["incorrect"],
+            accuracy=round(values["correct"] / values["total"] * 100) if values["total"] else 0,
+        )
+        for ege_number, values in weekly_by_ege.items()
+    ]
+    weekly_ege_stats.sort(key=lambda item: (item.ege_number is None, item.ege_number or 999))
+    return StudentWeeklyStats(
+        total=weekly_total,
+        correct=weekly_correct,
+        incorrect=weekly_incorrect,
+        ege_numbers=weekly_ege_stats,
+    )
+
+
 async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
     """Helper to get full student info for one user."""
     result = await db.execute(select(User).where(User.id == user_id))
@@ -516,6 +574,7 @@ async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
         select(user_groups.c.group_id).where(user_groups.c.user_id == user.id)
     )
     group_ids = [row[0] for row in groups_res.all()]
+    weekly_stats = await get_student_weekly_stats(user.id, db)
 
     return StudentOut(
         id=user.id,
@@ -524,9 +583,12 @@ async def get_student_detail(user_id: int, db: AsyncSession) -> StudentOut:
         photo_url=user.photo_url,
         role=user.role,
         login=user.login,
+        subscription_plan=user.subscription_plan,
+        subscription_expires_at=user.subscription_expires_at,
         last_active_at=user.last_active_at,
         total_solved=total_solved,
         total_tasks=total_tasks,
+        weekly_stats=weekly_stats,
         exam_scores=exam_scores,
         topic_progress=topic_progress,
         group_ids=group_ids,
@@ -639,10 +701,15 @@ async def set_student_credentials(user_id: int, body: SetStudentCredentials, db:
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Логин уже занят")
 
-    password = _generate_password()
+    password = body.password.strip() if body.password else None
     user.login = login
-    user.password_hash = _hash_password(password)
-    user.plain_password = password
+    if password:
+        user.password_hash = _hash_password(password)
+        user.plain_password = password
+    elif not user.password_hash:
+        password = _generate_password()
+        user.password_hash = _hash_password(password)
+        user.plain_password = password
     await db.commit()
 
     name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
@@ -654,7 +721,7 @@ async def set_student_credentials(user_id: int, body: SetStudentCredentials, db:
         id=user.id,
         name=name,
         login=login,
-        plain_password=password,
+        plain_password=password or user.plain_password or "",
         group_ids=group_ids,
     )
 
@@ -702,6 +769,62 @@ async def update_user_role(
     await db.commit()
     
     return await get_student_detail(user_id, db)
+
+
+@router.put("/students/{user_id}", response_model=StudentOut)
+async def update_student(user_id: int, body: StudentUpdate, db: AsyncSession = Depends(get_db)):
+    """Update editable student profile fields."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if body.first_name is not None:
+        user.first_name_real = body.first_name.strip() or None
+    if body.last_name is not None:
+        user.last_name_real = body.last_name.strip() or None
+    if body.username is not None:
+        username = body.username.strip().lstrip("@")
+        user.username = username or None
+    if body.role is not None:
+        if body.role not in ["student", "admin"]:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        user.role = body.role
+    if body.subscription_plan is not None:
+        if body.subscription_plan not in {"none", "summer", "year"}:
+            raise HTTPException(status_code=400, detail="Invalid subscription plan")
+        user.subscription_plan = body.subscription_plan
+    if body.subscription_expires_at is not None or body.subscription_plan == "none":
+        user.subscription_expires_at = body.subscription_expires_at
+
+    await db.commit()
+    return await get_student_detail(user_id, db)
+
+
+@router.delete("/students/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student(user_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete a student and their progress/statistics records."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    attempts_result = await db.execute(select(ExamAttempt.id).where(ExamAttempt.user_id == user_id))
+    attempt_ids = [row[0] for row in attempts_result.all()]
+    if attempt_ids:
+        await db.execute(delete(ExamAnalysis).where(ExamAnalysis.attempt_id.in_(attempt_ids)))
+    await db.execute(delete(ExamAttempt).where(ExamAttempt.user_id == user_id))
+    await db.execute(delete(UserProgress).where(UserProgress.user_id == user_id))
+    await db.execute(delete(AIChatLog).where(AIChatLog.user_id == user_id))
+    await db.execute(delete(AdminHelpNotificationRead).where(AdminHelpNotificationRead.user_id == user_id))
+    await db.execute(delete(UserTaskSolutionCommentRead).where(UserTaskSolutionCommentRead.user_id == user_id))
+    await db.execute(delete(UserTaskSolutionCommentReaction).where(UserTaskSolutionCommentReaction.user_id == user_id))
+    await db.execute(delete(UserTopicSeen).where(UserTopicSeen.user_id == user_id))
+    await db.execute(delete(user_groups).where(user_groups.c.user_id == user_id))
+    await db.execute(update(UserTaskSolutionComment).where(UserTaskSolutionComment.author_id == user_id).values(author_id=None))
+    await db.execute(delete(UserTaskSolution).where(UserTaskSolution.user_id == user_id))
+    await db.delete(user)
+    await db.commit()
 
 
 @router.get("/students/{user_id}", response_model=StudentDetailOut)
@@ -889,6 +1012,10 @@ def _comment_out(comment: UserTaskSolutionComment, reaction: str | None = None) 
         from_col=comment.from_col,
         to_line=comment.to_line,
         to_col=comment.to_col,
+        target_type=comment.target_type or "code",
+        image_x=comment.image_x,
+        image_y=comment.image_y,
+        image_drawing=comment.image_drawing,
         text=comment.text,
         author_name=None,
         reaction=reaction,
@@ -906,6 +1033,10 @@ def _comment_payload(comment: UserTaskSolutionComment) -> dict:
         "from_col": comment.from_col,
         "to_line": comment.to_line,
         "to_col": comment.to_col,
+        "target_type": comment.target_type or "code",
+        "image_x": comment.image_x,
+        "image_y": comment.image_y,
+        "image_drawing": comment.image_drawing,
         "text": comment.text,
         "author_name": None,
         "created_at": comment.created_at.isoformat() if comment.created_at else None,
@@ -961,8 +1092,14 @@ async def _get_exam_attempt_solution_for_task(
     for attempt in attempts_result.scalars().all():
         results = attempt.results_json or {}
         draft_codes = results.get("draft_codes", {}) or {}
+        draft_answers = results.get("draft_answers", {}) or {}
+        scored_answers = results.get("scored_answers", {}) or {}
         if draft_codes.get(task_id_str):
-            return {"code": draft_codes.get(task_id_str)}
+            return {
+                "code": draft_codes.get(task_id_str),
+                "user_answer": draft_answers.get(task_id_str),
+                "score": scored_answers.get(task_id_str),
+            }
 
         for task_result in results.get("task_results", []) or []:
             if task_result.get("task_id") != task_id:
@@ -970,6 +1107,13 @@ async def _get_exam_attempt_solution_for_task(
             return {
                 "code": task_result.get("code_solution"),
                 "file_url": task_result.get("file_solution_url"),
+                "user_answer": task_result.get("user_answer"),
+                "correct_answer": task_result.get("correct_answer"),
+            }
+        if draft_answers.get(task_id_str):
+            return {
+                "user_answer": draft_answers.get(task_id_str),
+                "score": scored_answers.get(task_id_str),
             }
     return {}
 
@@ -1007,6 +1151,9 @@ async def get_student_task_solution_review(
         task_content_html=task.content_html,
         task_description=task.description,
         ege_number=task.ege_number,
+        answer_type=task.answer_type.value if hasattr(task.answer_type, "value") else str(task.answer_type),
+        user_answer=exam_solution.get("user_answer"),
+        correct_answer=exam_solution.get("correct_answer") or task.correct_answer,
         code=solution.code or exam_solution.get("code"),
         file_url=solution.file_url or exam_solution.get("file_url"),
         image_url=solution.image_url,
@@ -1028,7 +1175,10 @@ async def create_student_task_solution_comment(
 ):
     """Attach an admin comment to a selected code range in a student's task solution."""
     _, _, solution = await _get_student_task_solution_or_404(user_id, task_id, db)
-    if not solution.code:
+    target_type = "image" if body.target_type == "image" else "code"
+    if target_type == "image" and (body.image_x is None or body.image_y is None) and not body.image_drawing:
+        raise HTTPException(status_code=400, detail="Image comment requires image point or drawing")
+    if target_type == "code" and not solution.code:
         exam_solution = await _get_exam_attempt_solution_for_task(user_id, task_id, db)
         if exam_solution.get("code"):
             solution.code = exam_solution["code"]
@@ -1040,6 +1190,10 @@ async def create_student_task_solution_comment(
         from_col=body.from_col,
         to_line=body.to_line,
         to_col=body.to_col,
+        target_type=target_type,
+        image_x=body.image_x if target_type == "image" else None,
+        image_y=body.image_y if target_type == "image" else None,
+        image_drawing=body.image_drawing if target_type == "image" else None,
         text=body.text.strip(),
     )
     db.add(comment)

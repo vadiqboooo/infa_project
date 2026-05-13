@@ -10,6 +10,8 @@ class TaskNav(BaseModel):
     ege_number_max: int | None = None  # max sub-task number when composite (e.g. 21 for 19-21)
     status: str = "not_started"  # not_started / solved / failed
     has_solution: bool = False
+    is_locked: bool = False
+    is_trial: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -38,5 +40,7 @@ class TopicNav(BaseModel):
     image_size: int | None = None
     character_url: str | None = None
     background_url: str | None = None
+    is_locked: bool = False
+    lock_reason: str | None = None
 
     model_config = {"from_attributes": True}
