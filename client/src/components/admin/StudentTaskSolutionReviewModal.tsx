@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubLight } from "@uiw/codemirror-theme-github";
-import type { EditorView } from "@codemirror/view";
+import { EditorView, type EditorView as EditorViewType } from "@codemirror/view";
 import { BookOpen, Code2, ExternalLink, Loader2, PenLine, RotateCcw, Save, Trash2, X } from "lucide-react";
 import type { ImageDrawingStroke, StudentTaskSolutionReview, TaskSolutionComment } from "../../api/types";
 import { commentRangeToOffsets, createCodeCommentExtensions } from "../codeCommentExtensions";
@@ -97,7 +97,7 @@ export function StudentTaskSolutionReviewModal({
   const [imageDraftStrokes, setImageDraftStrokes] = useState<ImageDrawingStroke[]>([]);
   const [isDrawingImage, setIsDrawingImage] = useState(false);
   const [error, setError] = useState("");
-  const editorRef = useRef<EditorView | null>(null);
+  const editorRef = useRef<EditorViewType | null>(null);
   const imageBoardRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -241,9 +241,9 @@ export function StudentTaskSolutionReviewModal({
 
   return (
     <div className="fixed inset-0 z-[80] flex bg-black/30 backdrop-blur-sm">
-      <div className="flex-1" onClick={onClose} />
-      <div className="flex h-full w-[min(1560px,calc(100vw-20px))] flex-col border-l border-[#dfe8df] bg-[#f7faf7] shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
-        <div className="flex shrink-0 items-center justify-between border-b border-[#dfe8df] px-6 py-5">
+      <div className="hidden flex-1 sm:block" onClick={onClose} />
+      <div className="flex h-[100dvh] w-full flex-col border-l border-[#dfe8df] bg-[#f7faf7] shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:w-[min(1560px,calc(100vw-20px))]">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#dfe8df] px-4 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
             <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[#3F8C62]">Code Review</div>
             <div className="mt-1 truncate text-sm font-semibold text-[#18251d]">
@@ -260,8 +260,8 @@ export function StudentTaskSolutionReviewModal({
             <Loader2 size={28} className="animate-spin" />
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px]">
-            <div className="min-h-0 min-w-0 overflow-hidden p-5">
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-h-0 min-w-0 overflow-y-auto p-3 sm:p-5">
               <div className="mb-4 space-y-3">
                 {(review?.task_content_html || review?.task_description || review?.task_title) && (
                   <div className="rounded-[22px] border border-[#dfe8df] bg-white px-4 py-4 shadow-[0_10px_28px_rgba(15,23,20,0.05)]">
@@ -387,7 +387,7 @@ export function StudentTaskSolutionReviewModal({
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8df] bg-white px-3 py-1.5 text-xs font-semibold text-[#18251d]">
                   <Code2 size={13} />
                   Code
@@ -408,11 +408,11 @@ export function StudentTaskSolutionReviewModal({
               </div>
 
               {code.trim() ? (
-                <div className="h-full min-h-[760px] overflow-hidden rounded-[26px] border border-[#dfe8df] bg-white shadow-[0_12px_36px_rgba(15,23,20,0.06)]">
+                <div className="h-[58dvh] min-h-[360px] overflow-hidden rounded-[20px] border border-[#dfe8df] bg-white shadow-[0_12px_36px_rgba(15,23,20,0.06)] sm:rounded-[26px] lg:h-[calc(100dvh-260px)] lg:min-h-[520px]">
                   <CodeMirror
                     value={code}
                     editable={false}
-                    extensions={[python(), ...commentExtensions]}
+                    extensions={[python(), EditorView.lineWrapping, ...commentExtensions]}
                     theme={githubLight}
                     basicSetup={{
                       lineNumbers: true,
@@ -420,7 +420,8 @@ export function StudentTaskSolutionReviewModal({
                       highlightActiveLine: false,
                       highlightActiveLineGutter: false,
                     }}
-                    minHeight="760px"
+                    height="100%"
+                    maxHeight="100%"
                     onCreateEditor={(view) => {
                       editorRef.current = view;
                     }}
@@ -433,14 +434,14 @@ export function StudentTaskSolutionReviewModal({
                   />
                 </div>
               ) : (
-                <div className="flex h-full min-h-[760px] items-center justify-center rounded-[26px] border border-dashed border-[#dfe8df] bg-white px-6 text-center text-sm text-gray-400">
+                <div className="flex h-[58dvh] min-h-[360px] items-center justify-center rounded-[20px] border border-dashed border-[#dfe8df] bg-white px-6 text-center text-sm text-gray-400 sm:rounded-[26px] lg:h-[calc(100dvh-260px)] lg:min-h-[520px]">
                   У этой задачи пока нет сохраненного кода.
                 </div>
               )}
             </div>
 
-            <aside className="flex min-h-0 flex-col border-l border-[#dfe8df] bg-white">
-              <div className="border-b border-[#edf3ed] px-5 py-5">
+            <aside className="flex min-h-0 max-h-[42dvh] flex-col border-t border-[#dfe8df] bg-white lg:max-h-none lg:border-l lg:border-t-0">
+              <div className="border-b border-[#edf3ed] px-4 py-4 sm:px-5 sm:py-5">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-400">Комментарий</div>
                 <div className="mt-3 rounded-2xl border border-[#dfe8df] bg-[#f8fbf8] px-3 py-2 text-xs text-[#3F8C62]">
                   {selectedImagePoint
@@ -467,7 +468,7 @@ export function StudentTaskSolutionReviewModal({
                 {error && <div className="mt-2 text-xs font-semibold text-red-400">{error}</div>}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
                 <div className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-gray-400">
                   Комментарии {review?.comments.length ? `(${review.comments.length})` : ""}
                 </div>
