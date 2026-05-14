@@ -10,8 +10,27 @@ import './LandingPage.css';
 const IC = { size: 26, color: 'rgba(255,255,255,0.85)', strokeWidth: 1.8 } as const;
 const IC_SM = { size: 22, color: '#62aa78', strokeWidth: 1.8 } as const;
 
+type SummerSubject = 'informatics' | 'math' | 'physics' | 'russian' | 'english' | 'social';
+type AuthTab = 'login' | 'register';
+
+const SUMMER_SUBJECTS: { value: SummerSubject; label: string }[] = [
+  { value: 'informatics', label: 'Информатика' },
+  { value: 'math', label: 'Математика' },
+  { value: 'physics', label: 'Физика' },
+  { value: 'russian', label: 'Русский язык' },
+  { value: 'english', label: 'Английский' },
+  { value: 'social', label: 'Обществознание' },
+];
+
 export default function LandingPage() {
   const [showModal, setShowModal] = useState(false);
+  const [modalTab, setModalTab] = useState<AuthTab>('login');
+  const [summerSubject, setSummerSubject] = useState<SummerSubject>('informatics');
+  const [leadContact, setLeadContact] = useState('');
+  const [leadStatus, setLeadStatus] = useState('');
+  const [leadError, setLeadError] = useState('');
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [summerBannerOpen, setSummerBannerOpen] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heroContentRef = useRef<HTMLDivElement>(null);
 
@@ -93,6 +112,40 @@ export default function LandingPage() {
   }, []);
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  const openAuth = (tab: AuthTab = 'login') => {
+    setModalTab(tab);
+    setShowModal(true);
+  };
+  const submitLead = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!leadContact.trim()) {
+      setLeadError('Укажите email или Telegram');
+      return;
+    }
+    setLeadLoading(true);
+    setLeadError('');
+    setLeadStatus('');
+    try {
+      const res = await fetch('/api/course-leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: summerSubject,
+          contact: leadContact.trim(),
+          note: summerSubject === 'math' ? 'Уведомить о старте курса' : 'Заявка на новый предмет',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || 'Не удалось отправить заявку');
+      setLeadStatus(data?.message || 'Заявка принята');
+      setLeadContact('');
+    } catch (err: any) {
+      setLeadError(err.message || 'Не удалось отправить заявку');
+    } finally {
+      setLeadLoading(false);
+    }
+  };
+  const selectedSubjectLabel = SUMMER_SUBJECTS.find(item => item.value === summerSubject)?.label ?? 'предмет';
 
   return (
     <div className="lp">
@@ -107,7 +160,7 @@ export default function LandingPage() {
           <a href="#features" onClick={e => { e.preventDefault(); scrollTo('features'); }}>Возможности</a>
           <a href="#ai"       onClick={e => { e.preventDefault(); scrollTo('ai'); }}>ИИ-ассистент</a>
         </div>
-        <button className="lp-nav-cta" onClick={() => setShowModal(true)}>Войти</button>
+        <button className="lp-nav-cta" onClick={() => openAuth('login')}>Войти</button>
       </nav>
 
       {/* HERO */}
@@ -124,7 +177,7 @@ export default function LandingPage() {
             Персональный план обучения, ИИ-ассистент который разберёт каждую ошибку, и опытный преподаватель — всё в одном месте.
           </p>
           <div className="lp-hero-btns">
-            <button className="lp-btn-primary" onClick={() => setShowModal(true)}>Войти в платформу →</button>
+            <button className="lp-btn-primary" onClick={() => openAuth('login')}>Войти в платформу →</button>
             <button className="lp-btn-secondary" onClick={() => scrollTo('how')}>Как это работает</button>
           </div>
         </div>
@@ -148,6 +201,74 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {summerBannerOpen ? (
+        <aside className="lp-summer-banner" aria-label="Летний курс">
+          <button
+            type="button"
+            className="lp-summer-close"
+            onClick={() => setSummerBannerOpen(false)}
+            aria-label="Скрыть баннер летнего курса"
+          >
+            ×
+          </button>
+          <div className="lp-summer-copy">
+            <div className="lp-summer-kicker">Летний курс</div>
+            <h2>Начни подготовку заранее</h2>
+            <p>Выбери предмет, а мы подскажем следующий шаг.</p>
+          </div>
+
+          <div className="lp-summer-form">
+            <label className="lp-summer-label" htmlFor="summer-subject">Предмет</label>
+            <select
+              id="summer-subject"
+              value={summerSubject}
+              onChange={(event) => {
+                setSummerSubject(event.target.value as SummerSubject);
+                setLeadStatus('');
+                setLeadError('');
+              }}
+            >
+              {SUMMER_SUBJECTS.map(subject => (
+                <option key={subject.value} value={subject.value}>{subject.label}</option>
+              ))}
+            </select>
+
+            {summerSubject === 'informatics' ? (
+              <div className="lp-summer-actions">
+                <button type="button" className="lp-summer-primary" onClick={() => openAuth('register')}>
+                  Зарегистрироваться
+                </button>
+                <button type="button" className="lp-summer-secondary" onClick={() => openAuth('login')}>
+                  Войти
+                </button>
+              </div>
+            ) : (
+              <form className="lp-summer-lead" onSubmit={submitLead}>
+                <input
+                  value={leadContact}
+                  onChange={(event) => setLeadContact(event.target.value)}
+                  placeholder={summerSubject === 'math' ? 'Email или Telegram' : `Контакт для заявки на ${selectedSubjectLabel.toLowerCase()}`}
+                />
+                <button type="submit" disabled={leadLoading}>
+                  {leadLoading ? 'Отправляем...' : summerSubject === 'math' ? 'Уведомить' : 'Оставить заявку'}
+                </button>
+              </form>
+            )}
+
+            {leadStatus && <div className="lp-summer-status is-success">{leadStatus}</div>}
+            {leadError && <div className="lp-summer-status is-error">{leadError}</div>}
+          </div>
+        </aside>
+      ) : (
+        <button
+          type="button"
+          className="lp-summer-reopen"
+          onClick={() => setSummerBannerOpen(true)}
+        >
+          Летний курс
+        </button>
+      )}
 
       {/* HOW IT WORKS */}
       <section id="how" className="lp-section lp-how">
@@ -263,12 +384,12 @@ export default function LandingPage() {
         <div className="lp-cta-inner lp-reveal">
           <h2 className="lp-cta-h2">Начни готовиться<br/>к ЕГЭ <em>прямо сейчас</em></h2>
           <p className="lp-cta-sub">Тысячи учеников уже на пути к высокому баллу.</p>
-          <button className="lp-btn-primary" onClick={() => setShowModal(true)}>Войти / Зарегистрироваться →</button>
+          <button className="lp-btn-primary" onClick={() => openAuth('register')}>Войти / Зарегистрироваться →</button>
           <div className="lp-cta-note">Авторизация через Telegram · Безопасно и быстро</div>
         </div>
       </section>
 
-      {showModal && <LoginModal onClose={() => setShowModal(false)} />}
+      {showModal && <LoginModal initialTab={modalTab} onClose={() => setShowModal(false)} />}
 
       {/* FOOTER */}
       <footer className="lp-footer">

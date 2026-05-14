@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import admin, auth, content, exams, preparation, solving, stats
+from app.routers import admin, auth, billing, content, course_leads, exams, preparation, solving, stats
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
         from app.models import exam_analysis  # noqa: ensure model is registered
         from app.models import group as group_module  # noqa: ensure models are registered
         from app.models import topic_seen  # noqa: ensure model is registered
+        from app.models import course_lead, payment  # noqa: ensure models are registered
         from app.models import (
             admin_help_notification_read,
             task_solution,
@@ -83,6 +84,12 @@ async def lifespan(app: FastAPI):
                     sync_conn, checkfirst=True
                 )
             )
+            await conn.run_sync(
+                lambda sync_conn: course_lead.CourseLead.__table__.create(sync_conn, checkfirst=True)
+            )
+            await conn.run_sync(
+                lambda sync_conn: payment.Payment.__table__.create(sync_conn, checkfirst=True)
+            )
         logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)
@@ -106,6 +113,8 @@ app.add_middleware(
 
 # Register routers
 app.include_router(auth.router)
+app.include_router(billing.router)
+app.include_router(course_leads.router)
 app.include_router(content.router)
 app.include_router(solving.router)
 app.include_router(exams.router)

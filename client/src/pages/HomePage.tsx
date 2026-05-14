@@ -1,11 +1,14 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   useCurrentPreparationPlan,
+  useCreateCheckout,
   useNavigation,
+  usePaymentStatus,
   usePreparationPlans,
   useSelectPreparationPlan,
+  useSyncLatestPayment,
   useUpdatePreparationPlanActiveBlock,
   useUserStats,
   useWeeklyActivity,
@@ -44,6 +47,7 @@ type PlanTaskProgress = {
 };
 
 const EGE_2026_DATE = new Date(2026, 5, 18);
+const PREPARATION_ACTIVE_BLOCK_STORAGE_PREFIX = 'preparation-plan-active-block';
 
 type PlanBlockProgressItem = NonNullable<ReturnType<typeof useCurrentPreparationPlan>['data']>['block_progress'][number];
 
@@ -61,6 +65,7 @@ type PlanBlockTracker = {
 };
 
 export function HomePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: userStats } = useUserStats();
   const { data: weeklyData } = useWeeklyActivity();
   const { data: navigation } = useNavigation();
@@ -68,8 +73,14 @@ export function HomePage() {
   const { data: currentPlan } = useCurrentPreparationPlan();
   const selectPlan = useSelectPreparationPlan();
   const updateActiveBlock = useUpdatePreparationPlanActiveBlock();
+  const paymentIdFromUrl = Number(searchParams.get('payment_id'));
+  const paymentId = Number.isFinite(paymentIdFromUrl) && paymentIdFromUrl > 0 ? paymentIdFromUrl : null;
+  const { data: paymentStatus } = usePaymentStatus(paymentId);
+  const shouldSyncLatestPayment = currentPlan?.subscription_plan === 'none' || currentPlan?.subscription_required;
+  useSyncLatestPayment(!!currentPlan && shouldSyncLatestPayment);
   const [selectedPlanId, setSelectedPlanId] = React.useState<number | ''>('');
   const [durationDays, setDurationDays] = React.useState(14);
+  const [localActiveBlockId, setLocalActiveBlockId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (!selectedPlanId && plans?.length) {
@@ -77,6 +88,13 @@ export function HomePage() {
       setDurationDays(plans[0].default_duration_days);
     }
   }, [plans, selectedPlanId]);
+
+  React.useEffect(() => {
+    if (currentPlan?.plan) {
+      setSelectedPlanId(currentPlan.plan.id);
+      setDurationDays(currentPlan.plan.default_duration_days);
+    }
+  }, [currentPlan?.plan?.id]);
 
   const stats = userStats || {
     total_solved: 0,
@@ -108,6 +126,38 @@ export function HomePage() {
     () => buildPlanBlockTrackers(currentPlan?.block_progress ?? [], navigation ?? [], currentPlan?.current_block?.block_id),
     [currentPlan, navigation],
   );
+  const activeBlockStorageKey = React.useMemo(() => {
+    const planKey = currentPlan?.user_plan_id ?? currentPlan?.plan?.id;
+    return planKey ? `${PREPARATION_ACTIVE_BLOCK_STORAGE_PREFIX}:${planKey}` : null;
+  }, [currentPlan?.plan?.id, currentPlan?.user_plan_id]);
+  const effectiveActiveBlockId = currentPlan?.active_block_id ?? localActiveBlockId;
+
+  React.useEffect(() => {
+    if (!activeBlockStorageKey) {
+      setLocalActiveBlockId(null);
+      return;
+    }
+
+    const serverBlockId = currentPlan?.active_block_id;
+    if (serverBlockId != null) {
+      setLocalActiveBlockId(serverBlockId);
+      localStorage.setItem(activeBlockStorageKey, String(serverBlockId));
+      return;
+    }
+
+    const savedBlockId = Number(localStorage.getItem(activeBlockStorageKey));
+    const hasSavedBlock = Number.isFinite(savedBlockId)
+      && planBlockTrackers.some((block) => block.blockId === savedBlockId);
+    setLocalActiveBlockId(hasSavedBlock ? savedBlockId : null);
+  }, [activeBlockStorageKey, currentPlan?.active_block_id, planBlockTrackers]);
+
+  React.useEffect(() => {
+    if (!paymentStatus || paymentStatus.status !== 'succeeded') return;
+    setSearchParams((params) => {
+      params.delete('payment_id');
+      return params;
+    }, { replace: true });
+  }, [paymentStatus, setSearchParams]);
 
   return (
     <div className="-m-4 min-h-screen bg-[#030A12] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-12">
@@ -156,6 +206,11 @@ export function HomePage() {
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_395px]">
           <div className="space-y-6">
+            {paymentId && paymentStatus?.status !== 'succeeded' && (
+              <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-100">
+                Проверяем оплату. Доступ откроется автоматически после подтверждения ЮKassa.
+              </div>
+            )}
             {currentPlan?.subscription_required ? (
               <SubscriptionOfferCard plans={plans ?? []} topics={navigation ?? []} />
             ) : (
@@ -166,18 +221,24 @@ export function HomePage() {
                 durationDays={durationDays}
                 planBlockTrackers={planBlockTrackers}
                 isSelecting={selectPlan.isPending}
-                activeBlockId={currentPlan?.active_block_id ?? null}
+                activeBlockId={effectiveActiveBlockId}
                 onPlanChange={(planId) => {
                   setSelectedPlanId(planId);
                   const plan = plans?.find((item) => item.id === planId);
                   if (plan) setDurationDays(plan.default_duration_days);
                 }}
                 onDurationChange={setDurationDays}
-                onSelectPlan={() => selectedPlanId && selectPlan.mutate({
-                  plan_id: Number(selectedPlanId),
-                  duration_days: durationDays,
+                onSelectPlan={(planId, days) => selectPlan.mutate({
+                  plan_id: Number(planId ?? selectedPlanId),
+                  duration_days: days ?? durationDays,
                 })}
-                onActiveBlockChange={(blockId) => updateActiveBlock.mutate({ block_id: blockId })}
+                onActiveBlockChange={(blockId) => {
+                  setLocalActiveBlockId(blockId);
+                  if (activeBlockStorageKey) {
+                    localStorage.setItem(activeBlockStorageKey, String(blockId));
+                  }
+                  updateActiveBlock.mutate({ block_id: blockId });
+                }}
               />
             )}
 
@@ -482,7 +543,7 @@ function SubscriptionOfferCard({
   const summer = plans.find((plan) => plan.course_type === 'summer');
   const yearly = plans.find((plan) => plan.course_type !== 'summer');
   const navigate = useNavigate();
-  const selectPlan = useSelectPreparationPlan();
+  const createCheckout = useCreateCheckout();
   const firstTrial = topics
     .filter((topic) => topic.category === TopicCategory.tutorial || topic.category === TopicCategory.homework)
     .flatMap((topic) => topic.tasks.map((task) => ({ topic, task })))
@@ -490,14 +551,9 @@ function SubscriptionOfferCard({
   const trialHref = firstTrial
     ? `${firstTrial.topic.category === TopicCategory.homework ? '/homework' : '/tasks'}/${firstTrial.topic.id}?from=home&task=${firstTrial.task.id}`
     : '/tasks';
-  const handleTrySummer = async () => {
-    if (summer) {
-      await selectPlan.mutateAsync({
-        plan_id: summer.id,
-        duration_days: summer.default_duration_days,
-      });
-    }
-    navigate(trialHref);
+  const handleCheckout = async (plan: 'summer' | 'year') => {
+    const checkout = await createCheckout.mutateAsync({ plan });
+    window.location.assign(checkout.confirmation_url);
   };
 
   return (
@@ -518,18 +574,29 @@ function SubscriptionOfferCard({
           description="Короткий интенсив с отдельным набором заданий."
           plan={summer}
           accent="emerald"
-          actionLabel="Попробовать"
-          onAction={handleTrySummer}
-          isBusy={selectPlan.isPending}
+          actionLabel="Оплатить 990 ₽"
+          footnote="Позже цена будет 1990 ₽"
+          onAction={() => handleCheckout('summer')}
+          isBusy={createCheckout.isPending}
         />
         <SubscriptionOption
           title="Годовой курс"
           description="Полный план подготовки и все материалы платформы."
           plan={yearly}
           accent="violet"
-          actionLabel="Оформить"
+          actionLabel="Оплатить 990 ₽/мес"
+          footnote="Позже цена будет 1490 ₽/мес"
+          onAction={() => handleCheckout('year')}
+          isBusy={createCheckout.isPending}
         />
       </div>
+      <button
+        type="button"
+        onClick={() => navigate(trialHref)}
+        className="mt-4 text-sm font-bold text-slate-400 transition hover:text-emerald-200"
+      >
+        Открыть пробные задания
+      </button>
     </Panel>
   );
 }
@@ -540,6 +607,7 @@ function SubscriptionOption({
   plan,
   accent,
   actionLabel,
+  footnote,
   onAction,
   isBusy = false,
 }: {
@@ -548,6 +616,7 @@ function SubscriptionOption({
   plan?: NonNullable<ReturnType<typeof usePreparationPlans>['data']>[number];
   accent: 'emerald' | 'violet';
   actionLabel: string;
+  footnote?: string;
   onAction?: () => void;
   isBusy?: boolean;
 }) {
@@ -576,9 +645,10 @@ function SubscriptionOption({
         </span>
       </div>
       <button type="button" disabled={isBusy} onClick={onAction} className={clsx(actionClassName, isBusy && "opacity-70")}>
-        {isBusy ? "Закрепляем план..." : actionLabel}
+        {isBusy ? "Готовим оплату..." : actionLabel}
         <ChevronRight size={16} />
       </button>
+      {footnote && <p className="mt-2 text-xs font-semibold text-slate-500">{footnote}</p>}
     </div>
   );
 }
@@ -605,10 +675,40 @@ function PreparationPlanCard({
   activeBlockId: number | null;
   onPlanChange: (planId: number) => void;
   onDurationChange: (days: number) => void;
-  onSelectPlan: () => void;
+  onSelectPlan: (planId?: number, durationDays?: number) => void;
   onActiveBlockChange: (blockId: number) => void;
 }) {
   const [activeBlockIndex, setActiveBlockIndex] = React.useState(0);
+  const [showPlanPicker, setShowPlanPicker] = React.useState(false);
+  const createCheckout = useCreateCheckout();
+  const syncLatestPayment = useSyncLatestPayment(false);
+  const summerPlan = plans.find((plan) => plan.course_type === 'summer');
+  const yearlyPlan = plans.find((plan) => plan.course_type !== 'summer');
+  const currentSubscription = currentPlan?.subscription_plan ?? 'none';
+  const applyPlan = (plan?: NonNullable<ReturnType<typeof usePreparationPlans>['data']>[number]) => {
+    if (!plan) return;
+    onPlanChange(plan.id);
+    onDurationChange(plan.default_duration_days);
+    onSelectPlan(plan.id, plan.default_duration_days);
+    setShowPlanPicker(false);
+  };
+  const handlePlanAction = async (plan?: NonNullable<ReturnType<typeof usePreparationPlans>['data']>[number]) => {
+    if (!plan) return;
+    const requiredSubscription = plan.course_type === 'summer' ? 'summer' : 'year';
+    const hasAccess = currentSubscription === 'year' || currentSubscription === requiredSubscription;
+    if (hasAccess) {
+      applyPlan(plan);
+      return;
+    }
+    const syncedPayment = await syncLatestPayment.refetch();
+    const syncedPlan = syncedPayment.data?.payment?.subscription_plan;
+    if (syncedPlan === 'year' || syncedPlan === requiredSubscription) {
+      applyPlan(plan);
+      return;
+    }
+    const checkout = await createCheckout.mutateAsync({ plan: requiredSubscription });
+    window.location.assign(checkout.confirmation_url);
+  };
 
   React.useEffect(() => {
     if (!planBlockTrackers.length) {
@@ -672,12 +772,87 @@ function PreparationPlanCard({
   return (
     <Panel className="min-h-[210px]">
       <div className="flex items-start justify-between gap-4">
-        <h2 className="text-lg font-bold text-white">План подготовки</h2>
-        <div className="text-right">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="text-lg font-bold leading-none text-white">План подготовки</h2>
+          <button
+            type="button"
+            onClick={() => setShowPlanPicker((value) => !value)}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-emerald-100"
+          >
+            {showPlanPicker ? 'Скрыть' : 'Изменить'}
+          </button>
+        </div>
+        <div className="flex shrink-0 items-baseline gap-3 pt-0.5 text-right">
           <p className="text-xs font-semibold text-slate-500">До ЕГЭ 2026</p>
-          <p className="mt-1 text-sm font-extrabold text-emerald-300">{daysUntilEge} дн.</p>
+          <p className="text-sm font-extrabold text-emerald-300">{daysUntilEge} дн.</p>
         </div>
       </div>
+
+      {showPlanPicker && (
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="text-sm font-bold text-white">
+          Изменить план
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <SubscriptionOption
+            title="Летний курс"
+            description="Короткий интенсив с отдельным набором заданий."
+            plan={summerPlan}
+            accent="emerald"
+            actionLabel={currentSubscription === 'summer' || currentSubscription === 'year' ? 'Выбрать летний' : 'Оплатить 990 ₽'}
+            footnote={currentSubscription === 'summer' || currentSubscription === 'year' ? undefined : 'Позже цена будет 1990 ₽'}
+            onAction={() => handlePlanAction(summerPlan)}
+            isBusy={isSelecting || createCheckout.isPending}
+          />
+          <SubscriptionOption
+            title="Годовой курс"
+            description="Полный план подготовки и все материалы платформы."
+            plan={yearlyPlan}
+            accent="violet"
+            actionLabel={currentSubscription === 'year' ? 'Выбрать годовой' : 'Оплатить 990 ₽/мес'}
+            footnote={currentSubscription === 'year' ? undefined : 'Позже цена будет 1490 ₽/мес'}
+            onAction={() => handlePlanAction(yearlyPlan)}
+            isBusy={isSelecting || createCheckout.isPending}
+          />
+        </div>
+        <div className="hidden">
+          <select
+            value={selectedPlanId}
+            onChange={(event) => onPlanChange(Number(event.target.value))}
+            className="h-11 flex-1 rounded-xl border border-white/10 bg-[#07111D] px-3 text-sm text-white outline-none focus:border-emerald-400"
+          >
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>
+                {plan.course_type === 'summer' ? 'Летний курс - ' : 'Годовой курс - '}
+                {plan.title}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={1}
+            value={durationDays}
+            onChange={(event) => onDurationChange(Number(event.target.value))}
+            className="h-11 rounded-xl border border-white/10 bg-[#07111D] px-3 text-sm text-white outline-none focus:border-emerald-400 md:w-28"
+            aria-label="Срок подготовки в днях"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              onSelectPlan();
+              setShowPlanPicker(false);
+            }}
+            disabled={!selectedPlanId || isSelecting}
+            className="h-11 rounded-xl bg-[#05C96A] px-5 text-sm font-bold text-white transition hover:bg-[#04B960] disabled:opacity-50"
+          >
+            {isSelecting ? 'Меняем...' : 'Применить'}
+          </button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          При смене плана текущий маршрут будет заменён новым, прогресс по уже решённым задачам сохранится.
+        </p>
+      </div>
+      )}
 
       {planBlockTrackers.length > 0 && (
         <div className="mt-5">
@@ -1087,6 +1262,3 @@ function ActivityTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-
-
-

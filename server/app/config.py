@@ -29,5 +29,11 @@ class Settings(BaseSettings):
     # ── Parser / Admin API key ────────────────────────────────
     PARSER_API_KEY: str = ""
 
+    # YooKassa test/live shop credentials
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    YOOKASSA_API_URL: str = "https://api.yookassa.ru/v3"
+    PAYMENT_RETURN_URL: str = "http://localhost:5173/home"
+
 
 settings = Settings()

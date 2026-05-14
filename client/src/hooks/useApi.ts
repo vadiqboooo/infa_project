@@ -19,6 +19,10 @@ import type {
     AdminHelpNotification,
     CurrentPlanRecommendation,
     PreparationPlan,
+    CheckoutResponse,
+    LatestPaymentSync,
+    PaymentHistoryItem,
+    PaymentStatus,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -234,6 +238,71 @@ export function useUpdatePreparationPlanActiveBlock() {
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["preparation-plans", "current"] });
         },
+    });
+}
+
+export function useCreateCheckout() {
+    return useMutation<CheckoutResponse, Error, { plan: "summer" | "year" }>({
+        mutationFn: (body) =>
+            api<CheckoutResponse>("/billing/checkout", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+    });
+}
+
+export function usePaymentStatus(paymentId: number | null) {
+    const qc = useQueryClient();
+    return useQuery<PaymentStatus>({
+        queryKey: ["billing", "payment", paymentId],
+        queryFn: async () => {
+            const status = await api<PaymentStatus>(`/billing/payments/${paymentId}`);
+            if (status.status === "succeeded") {
+                qc.invalidateQueries({ queryKey: ["preparation-plans", "current"] });
+                qc.invalidateQueries({ queryKey: ["navigation"] });
+            }
+            return status;
+        },
+        enabled: !!paymentId,
+        refetchInterval: (query) => query.state.data?.status === "succeeded" ? false : 3000,
+    });
+}
+
+export function useSyncLatestPayment(enabled: boolean = true) {
+    const qc = useQueryClient();
+    return useQuery<LatestPaymentSync>({
+        queryKey: ["billing", "latest-payment", "sync"],
+        queryFn: async () => {
+            const result = await api<LatestPaymentSync>("/billing/latest-payment/sync", {
+                method: "POST",
+                body: JSON.stringify({}),
+            });
+            if (result.payment?.status === "succeeded") {
+                qc.invalidateQueries({ queryKey: ["preparation-plans", "current"] });
+                qc.invalidateQueries({ queryKey: ["navigation"] });
+            }
+            return result;
+        },
+        enabled,
+        staleTime: 0,
+        retry: 1,
+    });
+}
+
+export function usePaymentHistory() {
+    return useQuery<PaymentHistoryItem[]>({
+        queryKey: ["billing", "payments"],
+        queryFn: () => api<PaymentHistoryItem[]>("/billing/payments"),
+    });
+}
+
+export function useChangePassword() {
+    return useMutation<void, Error, { current_password: string; new_password: string }>({
+        mutationFn: (body) =>
+            api<void>("/auth/change-password", {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
     });
 }
 

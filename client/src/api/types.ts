@@ -605,6 +605,37 @@ export interface CurrentPlanRecommendation {
 }
 
 /* ── Auth ──────────────────────────────────────────── */
+export interface CheckoutResponse {
+    payment_id: number;
+    yookassa_payment_id: string;
+    status: string;
+    confirmation_url: string;
+}
+
+export interface PaymentStatus {
+    payment_id: number;
+    status: string;
+    plan: "summer" | "year" | string;
+    subscription_plan: "none" | "summer" | "year" | string;
+    subscription_expires_at: string | null;
+}
+
+export interface LatestPaymentSync {
+    payment: PaymentStatus | null;
+}
+
+export interface PaymentHistoryItem {
+    id: number;
+    plan: "summer" | "year" | string;
+    amount_value: string;
+    currency: string;
+    status: string;
+    yookassa_payment_id: string | null;
+    confirmation_url: string | null;
+    paid_at: string | null;
+    created_at: string;
+}
+
 export interface TokenResponse {
     access_token: string;
     token_type: string;
@@ -618,10 +649,13 @@ export interface User {
     first_name_real: string | null;
     last_name_real: string | null;
     photo_url: string | null;
+    email: string | null;
     role: string;
     login: string | null;
     subscription_plan?: "none" | "summer" | "year" | string;
     subscription_expires_at?: string | null;
+    group_ids?: number[];
+    can_edit_real_name?: boolean;
 }
 
 /* ── Password auth ─────────────────────────────────── */

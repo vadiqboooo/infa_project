@@ -12,8 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.dependencies import get_current_user, get_db
+from app.models.group import user_groups
 from app.models.user import User
-from app.schemas.auth import LoginAuthData, TelegramAuthData, TokenResponse, UserSchema, UserUpdate
+from app.schemas.auth import (
+    LoginAuthData,
+    PasswordChangeIn,
+    RegisterAuthData,
+    TelegramAuthData,
+    TokenResponse,
+    UserSchema,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,9 +36,30 @@ def _verify_password(password: str, hashed: str) -> bool:
 
 
 @router.get("/me", response_model=UserSchema)
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Return currently authenticated user's profile."""
-    return user
+    return await _user_schema(user, db)
+
+
+async def _user_schema(user: User, db: AsyncSession) -> UserSchema:
+    groups_res = await db.execute(select(user_groups.c.group_id).where(user_groups.c.user_id == user.id))
+    group_ids = [row[0] for row in groups_res.all()]
+    return UserSchema(
+        id=user.id,
+        tg_id=user.tg_id,
+        username=user.username,
+        first_name=user.first_name,
+        first_name_real=user.first_name_real,
+        last_name_real=user.last_name_real,
+        photo_url=user.photo_url,
+        email=user.email,
+        role=user.role,
+        subscription_plan=user.subscription_plan,
+        subscription_expires_at=user.subscription_expires_at,
+        login=user.login,
+        group_ids=group_ids,
+        can_edit_real_name=bool(group_ids),
+    )
 
 
 @router.put("/me", response_model=UserSchema)
@@ -39,14 +69,45 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
 ):
     """Update user's personal details (real name)."""
-    if body.first_name_real is not None:
+    groups_res = await db.execute(select(user_groups.c.group_id).where(user_groups.c.user_id == user.id))
+    group_ids = [row[0] for row in groups_res.all()]
+
+    if body.first_name_real is not None and group_ids:
         user.first_name_real = body.first_name_real
-    if body.last_name_real is not None:
+    if body.last_name_real is not None and group_ids:
         user.last_name_real = body.last_name_real
+    if body.email is not None:
+        email = body.email.strip().lower()
+        if email:
+            existing = await db.execute(select(User).where(User.email == email, User.id != user.id))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already linked")
+            user.email = email
+        else:
+            user.email = None
 
     await db.commit()
     await db.refresh(user)
-    return user
+    return await _user_schema(user, db)
+
+
+@router.post("/change-password")
+async def change_password(
+    body: PasswordChangeIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.password_hash:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password auth is not enabled")
+    if not _verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters")
+
+    user.password_hash = _hash_password(body.new_password)
+    user.plain_password = None
+    await db.commit()
+    return {"ok": True}
 
 
 def _verify_telegram_hash(data: TelegramAuthData) -> bool:
@@ -117,6 +178,35 @@ async def auth_login(body: LoginAuthData, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный логин или пароль",
         )
+
+    token = _create_jwt(user.id)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def auth_register(body: RegisterAuthData, db: AsyncSession = Depends(get_db)):
+    """Register a student with login and password."""
+    login = body.login.strip()
+    password = body.password
+    if len(login) < 3:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Логин должен быть не короче 3 символов")
+    if len(password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пароль должен быть не короче 6 символов")
+
+    result = await db.execute(select(User).where(User.login == login))
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Такой логин уже занят")
+
+    user = User(
+        login=login,
+        username=login,
+        first_name=login,
+        password_hash=_hash_password(password),
+        role="student",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
 
     token = _create_jwt(user.id)
     return TokenResponse(access_token=token)

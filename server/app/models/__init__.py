@@ -14,6 +14,8 @@ from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
 from app.models.task_solution_version import UserTaskSolutionVersion
 from app.models.admin_help_notification_read import AdminHelpNotificationRead
 from app.models.preparation_plan import PreparationPlan, PreparationPlanBlock, UserPreparationPlan
+from app.models.course_lead import CourseLead
+from app.models.payment import Payment
 
 __all__ = [
     "Topic",
@@ -35,4 +37,6 @@ __all__ = [
     "PreparationPlan",
     "PreparationPlanBlock",
     "UserPreparationPlan",
+    "CourseLead",
+    "Payment",
 ]

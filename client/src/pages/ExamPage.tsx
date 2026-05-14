@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
-import { githubLight } from "@uiw/codemirror-theme-github";
+import { githubDark } from "@uiw/codemirror-theme-github";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare } from "lucide-react";
 import { clsx } from "clsx";
@@ -478,7 +478,7 @@ export default function ExamPage() {
 
     if (navLoading || examLoading) {
         return (
-            <div className="flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
+            <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
                 <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-gray-500 font-medium">Загрузка варианта...</p>
             </div>
@@ -487,7 +487,7 @@ export default function ExamPage() {
 
     if (!currentTopic || !examInfo) {
         return (
-            <div className="flex flex-col items-center justify-center h-screen bg-[#F8F7F4] p-6 text-center">
+            <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] p-6 text-center">
                 <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
                     <AlertCircle size={32} />
                 </div>
@@ -529,7 +529,7 @@ export default function ExamPage() {
         };
 
         return (
-            <div className="min-h-screen bg-[#F8F7F4]">
+            <div className="exam-dark min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
@@ -774,7 +774,7 @@ export default function ExamPage() {
                                                             value={currentCode}
                                                             onChange={val => setReviewCodeEdits(prev => ({ ...prev, [reviewTaskId]: val }))}
                                                             extensions={[python()]}
-                                                            theme={githubLight}
+                                                            theme={githubDark}
                                                             basicSetup={{ lineNumbers: true, foldGutter: false }}
                                                             style={{ fontSize: "13px" }}
                                                         />
@@ -919,7 +919,7 @@ export default function ExamPage() {
         );
 
         return (
-            <div className="min-h-screen bg-[#F8F7F4]">
+            <div className="exam-dark min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
@@ -1162,7 +1162,7 @@ export default function ExamPage() {
                                                         value={currentCode}
                                                         onChange={val => setReviewCodeEdits(prev => ({ ...prev, [reviewTaskId]: val }))}
                                                         extensions={[python()]}
-                                                        theme={githubLight}
+                                                        theme={githubDark}
                                                         basicSetup={{ lineNumbers: true, foldGutter: false }}
                                                         style={{ fontSize: "13px" }}
                                                     />
@@ -1243,14 +1243,14 @@ export default function ExamPage() {
         if (!isMock) {
             // Auto-starting via useEffect — show spinner
             return (
-                <div className="flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
+                <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
                     <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin" />
                     <p className="text-gray-500 font-medium">Загрузка варианта...</p>
                 </div>
             );
         }
         return (
-            <div className="min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
+            <div className="exam-dark min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
                 <div className="bg-white border border-gray-200 rounded-[32px] p-10 max-w-lg w-full text-center shadow-xl shadow-gray-200/50">
                     <div className="w-16 h-16 bg-[#3F8C62]/10 text-[#3F8C62] rounded-2xl flex items-center justify-center mx-auto mb-6">
                         <Clock size={32} />
@@ -1305,7 +1305,7 @@ export default function ExamPage() {
 
     // Active Exam Workspace
     return (
-        <div className="h-screen flex flex-col overflow-hidden bg-[#F8F7F4]">
+        <div className="exam-dark h-screen flex flex-col overflow-hidden bg-[#F8F7F4]">
             {/* Header */}
             <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
                 <div className="flex h-full items-center gap-3 md:gap-4 min-w-0">
@@ -1450,7 +1450,7 @@ export default function ExamPage() {
                                                 value={localCode}
                                                 onChange={(val) => setLocalCode(val)}
                                                 extensions={[python()]}
-                                                theme={githubLight}
+                                                theme={githubDark}
                                                 basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
                                                 style={{ height: "100%", fontSize: "13px" }}
                                                 placeholder="# Вставьте код здесь..."
