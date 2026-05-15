@@ -9,6 +9,7 @@ import {
     GraduationCap,
     Inbox,
     Lock,
+    Pi,
     Trophy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -42,6 +43,19 @@ const CATEGORY_STYLE = {
         subtitle: 'Тренировка полного варианта ЕГЭ',
         icon: BookMarked,
     },
+    math: {
+        background: 'linear-gradient(135deg, rgba(18,64,58,0.98) 0%, rgba(14,25,40,0.98) 58%, rgba(6,11,20,0.98) 100%)',
+        border: 'border-teal-300/15',
+        glow: 'rgba(45,212,191,0.18)',
+        progress: 'from-teal-300 to-emerald-500',
+        iconBg: 'bg-teal-300/12',
+        iconText: 'text-teal-100',
+        badge: 'bg-teal-300/10 text-teal-100 ring-teal-200/20',
+        label: 'Математика',
+        title: 'Математика',
+        subtitle: 'Профильные варианты ЕГЭ по математике',
+        icon: Pi,
+    },
     mock: {
         background: 'linear-gradient(135deg, rgba(40,23,76,0.98) 0%, rgba(14,18,35,0.98) 58%, rgba(6,11,20,0.98) 100%)',
         border: 'border-violet-400/15',
@@ -62,6 +76,7 @@ type CategoryKey = keyof typeof CATEGORY_STYLE;
 const TABS: { key: CategoryKey; label: string }[] = [
     { key: 'control', label: 'Контрольные' },
     { key: 'variants', label: 'Варианты' },
+    { key: 'math', label: 'Математика' },
     { key: 'mock', label: 'Пробники' },
 ];
 
@@ -231,10 +246,11 @@ export default function ExamsListPage() {
     const [activeTab, setActiveTab] = useState<CategoryKey>('control');
 
     const grouped = useMemo(() => {
-        if (!topics) return { control: [], variants: [], mock: [] };
+        if (!topics) return { control: [], variants: [], math: [], mock: [] };
         return {
             control: topics.filter(t => String(t.category) === 'control'),
             variants: topics.filter(t => String(t.category) === 'variants'),
+            math: topics.filter(t => String(t.category) === 'math'),
             mock: topics.filter(t => String(t.category) === 'mock'),
         };
     }, [topics]);
@@ -244,6 +260,7 @@ export default function ExamsListPage() {
     const unfinished = useMemo(() => ({
         control: grouped.control.filter(t => t.latest_score == null).length,
         variants: grouped.variants.filter(t => t.latest_score == null).length,
+        math: grouped.math.filter(t => t.latest_score == null).length,
         mock: grouped.mock.filter(t => t.latest_score == null).length,
     }), [grouped]);
 

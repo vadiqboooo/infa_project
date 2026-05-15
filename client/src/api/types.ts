@@ -30,6 +30,7 @@ export enum TopicCategory {
     homework = "homework",
     control = "control",
     variants = "variants",
+    math = "math",
     mock = "mock"
 }
 

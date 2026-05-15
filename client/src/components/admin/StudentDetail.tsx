@@ -13,13 +13,14 @@ interface Props {
     initialReviewTaskId?: number;
 }
 
-type Tab = "tutorial" | "homework" | "control" | "variants" | "mock";
+type Tab = "tutorial" | "homework" | "control" | "variants" | "math" | "mock";
 
 const TAB_OPTIONS: { key: Tab; label: string }[] = [
     { key: "tutorial", label: "Разбор" },
     { key: "homework", label: "Домашка" },
     { key: "control", label: "КР" },
     { key: "variants", label: "Варианты" },
+    { key: "math", label: "Математика" },
     { key: "mock", label: "Пробники" },
 ];
 

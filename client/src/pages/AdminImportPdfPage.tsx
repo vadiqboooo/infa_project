@@ -7,6 +7,8 @@ import {
     Paperclip, X, Scissors, MousePointerClick,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import GraphSvgEditor from '../components/admin/GraphSvgEditor';
+import GeometrySvgEditor from '../components/admin/GeometrySvgEditor';
 
 const API_BASE = '/api';
 
@@ -29,7 +31,7 @@ function apiFetch<T>(path: string, apiKey: string, options: RequestInit = {}): P
     });
 }
 
-type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
 interface TaskFile {
     url: string;
@@ -114,6 +116,7 @@ function parseAnswerInput(text: string, answerType: string): any | null {
 
 const CATEGORIES: { value: TopicCategory; label: string }[] = [
     { value: 'variants', label: 'Вариант ЕГЭ' },
+    { value: 'math', label: 'Математика' },
     { value: 'control', label: 'Контрольная работа' },
     { value: 'mock', label: 'Пробник' },
     { value: 'tutorial', label: 'Разбор заданий' },
@@ -183,6 +186,8 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const fileAttachRef = useRef<HTMLInputElement>(null);
     const [fullText, setFullText] = useState('');
     const [showFullText, setShowFullText] = useState(false);
+    const [graphEditorOpen, setGraphEditorOpen] = useState(false);
+    const [geometryEditorOpen, setGeometryEditorOpen] = useState(false);
 
     // ── Handlers ──────────────────────────────────────────────
     const handleDrop = useCallback((e: React.DragEvent) => {
@@ -205,6 +210,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
             const fd = new FormData();
             fd.append('file', pdfFile);
             fd.append('use_llm', parseMode === 'llm' ? 'true' : 'false');
+            fd.append('subject', category === 'math' && parseMode !== 'manual' ? 'math' : 'informatics');
             const res = await fetch(`${API_BASE}/admin/import-pdf/parse`, { method: 'POST', headers, body: fd });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -1056,7 +1062,25 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
 
                             {/* Text editor / preview */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5">Текст задания</label>
+                                <div className="mb-1.5 flex items-center justify-between gap-3">
+                                    <label className="block text-xs font-bold text-gray-400 uppercase">Текст задания</label>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setGeometryEditorOpen(true)}
+                                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                                        >
+                                            SVG-фигура
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setGraphEditorOpen(true)}
+                                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                                        >
+                                            SVG-график
+                                        </button>
+                                    </div>
+                                </div>
                                 {previewMode ? (
                                     <div
                                         className="w-full min-h-[300px] p-5 bg-white border border-gray-200 rounded-xl text-sm leading-relaxed shadow-sm prose prose-sm max-w-none"
@@ -1072,6 +1096,17 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                     />
                                 )}
                             </div>
+
+                            <GraphSvgEditor
+                                open={graphEditorOpen}
+                                onClose={() => setGraphEditorOpen(false)}
+                                onInsert={(svg) => updateTask(selectedIdx, { content_html: `${currentTask.content_html}\n${svg}` })}
+                            />
+                            <GeometrySvgEditor
+                                open={geometryEditorOpen}
+                                onClose={() => setGeometryEditorOpen(false)}
+                                onInsert={(svg) => updateTask(selectedIdx, { content_html: `${currentTask.content_html}\n${svg}` })}
+                            />
 
                             {/* Images */}
                             <div>

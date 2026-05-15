@@ -86,7 +86,7 @@ def can_access_task(task_id: int, access: ContentAccess) -> bool:
 def can_access_topic(topic: Topic, access: ContentAccess) -> bool:
     if access.has_subscription:
         return True
-    if topic.category in {"control", "variants", "mock"}:
+    if topic.category in {"control", "variants", "math", "mock"}:
         return False
     return any(task.id in access.trial_task_ids for task in topic.tasks)
 

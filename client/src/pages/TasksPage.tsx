@@ -9,7 +9,7 @@ import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import ExamIntro from "../components/ExamIntro";
 import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
-import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock } from "lucide-react";
+import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock, PenLine } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer, useCurrentPreparationPlan } from "../hooks/useApi";
 import type { AnswerVal, TaskNav, TopicNav, ExamResult } from "../api/types";
@@ -88,6 +88,7 @@ export default function TasksPage() {
     const [mentorOpen, setMentorOpen] = useState(false);
     const [attachSolutionOpen, setAttachSolutionOpen] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
+    const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
@@ -161,6 +162,10 @@ export default function TasksPage() {
     const currentTaskNav = tasks[taskIndex] ?? null;
 
     useEffect(() => {
+        setDrawingPanelOpen(false);
+    }, [currentTaskNav?.id]);
+
+    useEffect(() => {
         if (tasks.length === 0 || !tasks[taskIndex]?.is_locked) return;
         const firstOpenIndex = tasks.findIndex((item) => !item.is_locked);
         if (firstOpenIndex >= 0) {
@@ -188,6 +193,7 @@ export default function TasksPage() {
     }, [location.pathname, location.search, navigate, tasks]);
 
     const isVariant = currentTopic?.category === "variants";
+    const canAnnotateTask = currentTopic?.category === "math";
     const { data: examInfo } = useExamByTopic(isVariant ? currentTopic?.id ?? null : null);
     const startExam = useStartExam(examInfo?.id ?? 0);
     const submitExam = useSubmitExam(examInfo?.id ?? 0);
@@ -609,6 +615,23 @@ export default function TasksPage() {
                                                     })()}
                                                 </span>
                                                 <div className="ml-auto flex items-center gap-2">
+                                                    {canAnnotateTask && (
+                                                        drawingPanelOpen ? (
+                                                            <div
+                                                                id={`task-drawing-toolbar-${task.id}`}
+                                                                className="min-w-0 max-w-full"
+                                                            />
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setDrawingPanelOpen(true)}
+                                                                className="relative flex items-center gap-1.5 rounded-full border border-sky-300/20 bg-sky-400/10 px-3 py-1.5 text-xs font-bold text-sky-200 transition-all hover:bg-sky-400/15"
+                                                            >
+                                                                <PenLine size={13} />
+                                                                Черновик
+                                                            </button>
+                                                        )
+                                                    )}
                                                     {(!isVariant || !examInfo?.active_attempt) && (
                                                         <button
                                                             onClick={() => {
@@ -696,6 +719,13 @@ export default function TasksPage() {
                                                 <TaskView
                                                     content={task.content_html}
                                                     files={task.media_resources?.files}
+                                                    annotatable={canAnnotateTask}
+                                                    annotationKey={`task:${task.id}`}
+                                                    annotationTaskId={task.id}
+                                                    annotationPanelOpen={drawingPanelOpen}
+                                                    onAnnotationPanelOpenChange={setDrawingPanelOpen}
+                                                    showAnnotationToggle={false}
+                                                    annotationToolbarHostId={`task-drawing-toolbar-${task.id}`}
                                                 />
                                             </div>
 
@@ -765,7 +795,12 @@ export default function TasksPage() {
                                                                                 Задание {sub.number}
                                                                             </div>
                                                                         )}
-                                                                        <TaskView content={sub.content_html} />
+                                                                        <TaskView
+                                                                            content={sub.content_html}
+                                                                            annotatable={canAnnotateTask}
+                                                                            annotationKey={`task:${task.id}:sub:${sIdx}`}
+                                                                            annotationTaskId={task.id}
+                                                                        />
                                                                     </div>
                                                                     <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
                                                                         Ответ{sub.number ? ` к заданию ${sub.number}` : ''}

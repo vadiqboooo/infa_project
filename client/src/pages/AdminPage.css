@@ -85,6 +85,66 @@
     margin: 6px 0;
 }
 
+.ProseMirror .rich-editor-image-node {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+    cursor: grab;
+    vertical-align: top;
+}
+
+.ProseMirror .rich-editor-image-node.ProseMirror-selectednode {
+    outline: 2px solid #3F8C62;
+    outline-offset: 3px;
+    border-radius: 6px;
+}
+
+.ProseMirror .rich-editor-image-node img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    margin: 0;
+    user-select: none;
+}
+
+.ProseMirror .rich-editor-image-resize-handle {
+    position: absolute;
+    z-index: 2;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: #3F8C62;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+}
+
+.ProseMirror .rich-editor-image-resize-handle-nw {
+    top: -7px;
+    left: -7px;
+    cursor: nwse-resize;
+}
+
+.ProseMirror .rich-editor-image-resize-handle-ne {
+    top: -7px;
+    right: -7px;
+    cursor: nesw-resize;
+}
+
+.ProseMirror .rich-editor-image-resize-handle-sw {
+    bottom: -7px;
+    left: -7px;
+    cursor: nesw-resize;
+}
+
+.ProseMirror .rich-editor-image-resize-handle-se {
+    right: -7px;
+    bottom: -7px;
+    cursor: nwse-resize;
+}
+
 /* Table styles */
 .ProseMirror table {
     border-collapse: collapse;

@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import RichTextEditor from './RichTextEditor';
+import GraphSvgEditor from './GraphSvgEditor';
+import GeometrySvgEditor from './GeometrySvgEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
 import { githubLight } from '@uiw/codemirror-theme-github';
@@ -440,6 +442,7 @@ export function TopicDetail({
                 <option value="homework">Домашняя работа</option>
                 <option value="control">Контрольная работа</option>
                 <option value="variants">Вариант</option>
+                <option value="math">Математика</option>
                 <option value="mock">Пробник</option>
               </select>
               <button
@@ -477,6 +480,8 @@ export function TopicDetail({
                     ? 'bg-violet-100 text-violet-700'
                     : topic.category === 'control'
                     ? 'bg-sky-100 text-sky-700'
+                    : topic.category === 'math'
+                    ? 'bg-emerald-100 text-emerald-700'
                     : topic.category === 'mock'
                     ? 'bg-purple-100 text-purple-700'
                     : 'bg-orange-100 text-orange-700'
@@ -488,6 +493,8 @@ export function TopicDetail({
                   ? 'ДЗ'
                   : topic.category === 'control'
                   ? 'КР'
+                  : topic.category === 'math'
+                  ? 'Математика'
                   : topic.category === 'mock'
                   ? 'Пробник'
                   : 'Вариант'}
@@ -997,6 +1004,8 @@ function TaskEditPanel({
   const [stepCodeOpen, setStepCodeOpen] = useState<Set<number>>(new Set());
   const [generateNotice, setGenerateNotice] = useState<'success' | 'error' | null>(null);
   const [generateError, setGenerateError] = useState('');
+  const [graphEditorOpen, setGraphEditorOpen] = useState(false);
+  const [geometryEditorOpen, setGeometryEditorOpen] = useState(false);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const generateStepsMutation = useGenerateSteps();
 
@@ -1270,12 +1279,40 @@ function TaskEditPanel({
 
       {/* Content HTML — rich text editor */}
       <div className="bg-white rounded-xl border border-gray-100 p-4">
-        <span className={`${labelCls} block mb-2`}>Текст задачи</span>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className={`${labelCls} block`}>Текст задачи</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGeometryEditorOpen(true)}
+              className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+            >
+              SVG-фигура
+            </button>
+            <button
+              type="button"
+              onClick={() => setGraphEditorOpen(true)}
+              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+            >
+              SVG-график
+            </button>
+          </div>
+        </div>
         <RichTextEditor
           value={form.content_html}
           onChange={(html) => setForm((f) => ({ ...f, content_html: html }))}
           apiKey={apiKey}
           taskId={task.id}
+        />
+        <GraphSvgEditor
+          open={graphEditorOpen}
+          onClose={() => setGraphEditorOpen(false)}
+          onInsert={(svg) => setForm((f) => ({ ...f, content_html: `${f.content_html}\n${svg}` }))}
+        />
+        <GeometrySvgEditor
+          open={geometryEditorOpen}
+          onClose={() => setGeometryEditorOpen(false)}
+          onInsert={(svg) => setForm((f) => ({ ...f, content_html: `${f.content_html}\n${svg}` }))}
         />
       </div>
 

@@ -1,8 +1,11 @@
-import React, { useMemo } from "react";
-import parse from "html-react-parser";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import parse, { attributesToProps, domToReact } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { Check, Eraser, Loader2, Minus, PenLine, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { authFetch } from "../api/client";
 import type { TaskFile } from "../api/types";
 import "./TaskView.css";
 
@@ -10,9 +13,40 @@ interface Props {
     content: string;
     title?: string;
     files?: TaskFile[];
+    annotatable?: boolean;
+    annotationKey?: string;
+    annotationTaskId?: number;
+    annotationPanelOpen?: boolean;
+    onAnnotationPanelOpenChange?: (open: boolean) => void;
+    showAnnotationToggle?: boolean;
+    annotationToolbarHostId?: string;
 }
 
-const parseOptions: HTMLReactParserOptions = {};
+type AnnotationTool = "none" | "pen" | "eraser";
+
+type StrokePoint = {
+    x: number;
+    y: number;
+};
+
+type AnnotationStroke = {
+    id: string;
+    color: string;
+    width: number;
+    points: StrokePoint[];
+};
+
+type AnnotationRect = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+};
+
+const NOTE_COLORS = ["#ffffff", "#111827", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7"];
+const NOTE_WIDTHS = [2, 4, 7, 11];
 
 // Маппинг HTML-сущностей на LaTeX-команды для логических операций
 const HTML_ENTITY_TO_LATEX: Record<string, string> = {
@@ -82,13 +116,21 @@ const UNICODE_TO_LATEX: Record<string, string> = {
 
 // Известные LaTeX-команды математики
 const MATH_CMD_RE = /\\(?:l(?:or|and|not|eq|eftarrow|eftrightarrow)|r(?:ightarrow|eq)|n(?:eg|ot|eq|otin)|equiv|oplus|forall|exists|in(?:fty)?|notin|subset|supset|cup|cap|cdot|times|div|pm|geq|leq|overline|underline|hat|bar|vec|alpha|beta|gamma|delta|epsilon|lambda|mu|pi|sigma|tau|phi|omega|sum|prod|sqrt|frac)(?![a-zA-Z])/;
+const INLINE_LATEX_CMD_RE = /\\(?:frac\s*(?:\{[^{}]+\}|[^\s{}])\s*(?:\{[^{}]+\}|[^\s{}])|sqrt\s*(?:\{[^{}]+\}|[^\s{}])|(?:sin|cos|tan|tg|log|ln|pi|alpha|beta|gamma|varphi|omega|leq|geq|neq|cdot|times|infty)(?![a-zA-Z])(?:\s*[A-Za-z0-9^_{}()+\-.,]+)?)/g;
 
 // Добавляет пробел после LaTeX-команды, если следующий символ — буква/цифра
 function fixConcatenatedCommands(formula: string): string {
     return formula.replace(
-        /\\(lor|land|neg|lnot|equiv|rightarrow|leftarrow|leftrightarrow|oplus|forall|exists|leq|geq|neq|in|notin|subset|cup|cap|cdot|times|div|pm|overline|underline|hat|bar|vec)([a-zA-Z0-9])/g,
+        /\\(lor|land|neg|lnot|equiv|rightarrow|leftarrow|leftrightarrow|oplus|forall|exists|leq|geq|neq|in|notin|subset|cup|cap|cdot|times|div|pm|overline|underline|hat|bar|vec|sqrt|frac)([a-zA-Z0-9])/g,
         "\\$1 $2"
     );
+}
+
+function normalizeLatexFractions(formula: string): string {
+    return formula
+        .replace(/\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])/g, "\\frac{$1}{$2}")
+        .replace(/\\frac\s*([A-Za-z0-9])\s*\{([^{}]+)\}/g, "\\frac{$1}{$2}")
+        .replace(/\\frac\s*\{([^{}]+)\}\s*([A-Za-z0-9])/g, "\\frac{$1}{$2}");
 }
 
 // Декодируем HTML-сущности внутри формулы в LaTeX-команды
@@ -130,8 +172,42 @@ function autoWrapUndelimitedLatex(html: string): string {
     });
 }
 
+function renderBareInlineLatex(html: string): string {
+    return html.replace(/(?<=>|^)([^<]+)(?=<|$)/gm, (textNode) => {
+        if (!MATH_CMD_RE.test(textNode)) return textNode;
+        MATH_CMD_RE.lastIndex = 0;
+
+        return textNode.replace(INLINE_LATEX_CMD_RE, (formula) => {
+            const normalized = normalizeLatexFractions(
+                fixConcatenatedCommands(
+                    decodeHtmlEntitiesInFormula(formula.trim())
+                )
+            );
+            try {
+                return katex.renderToString(normalized, { throwOnError: false, displayMode: false });
+            } catch {
+                return formula;
+            }
+        });
+    });
+}
+
+function normalizeStackedFractions(html: string): string {
+    const formula = String.raw`\\\[([\s\S]*?)\\\]`;
+    const separator = String.raw`(?:<br\s*\/?>\s*)+(?:[._\-–—−]+\s*)`;
+    const pattern = new RegExp(`${formula}${separator}(?:<br\\s*\\/?>\\s*)+${formula}`, "g");
+
+    return html.replace(pattern, (_match, numerator, denominator) => {
+        const top = normalizeLatexFractions(fixConcatenatedCommands(numerator.trim()));
+        const bottom = normalizeLatexFractions(fixConcatenatedCommands(denominator.trim()));
+        return `\\[\\frac{${top}}{${bottom}}\\]`;
+    });
+}
+
 // Функция для рендеринга LaTeX-формул
 function renderLatex(text: string): string {
+    text = normalizeStackedFractions(text);
+
     // Обрабатываем display-формулы $$...$$
     text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
         try {
@@ -170,6 +246,7 @@ function renderLatex(text: string): string {
 
     // Обрабатываем текстовые узлы с LaTeX-командами без $...$ (смешанный формат)
     text = autoWrapUndelimitedLatex(text);
+    text = renderBareInlineLatex(text);
 
     return text;
 }
@@ -187,18 +264,678 @@ function normalizeEntities(html: string): string {
     return result;
 }
 
-export default function TaskView({ content, title, files }: Props) {
+function pointsToPath(points: StrokePoint[]): string {
+    if (points.length === 0) return "";
+    return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+}
+
+function isNearStroke(stroke: AnnotationStroke, point: StrokePoint, radius: number): boolean {
+    const threshold = radius + stroke.width;
+    return stroke.points.some((strokePoint) => {
+        const dx = strokePoint.x - point.x;
+        const dy = strokePoint.y - point.y;
+        return Math.hypot(dx, dy) <= threshold;
+    });
+}
+
+function renderStrokesToPngBlob(strokes: AnnotationStroke[], size: { width: number; height: number }): Promise<Blob> {
+    const width = Math.max(320, Math.ceil(size.width || 1));
+    const height = Math.max(220, Math.ceil(size.height || 1));
+    const maxSide = 2200;
+    const scale = Math.min(1, maxSide / Math.max(width, height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return Promise.reject(new Error("Canvas is not supported"));
+
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#0b1724";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
+    ctx.lineWidth = 1;
+    for (let x = 40; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    for (let y = 40; y < height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+
+    strokes.forEach((stroke) => {
+        if (stroke.points.length === 0) return;
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        stroke.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+    });
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Не удалось подготовить изображение"));
+        }, "image/png");
+    });
+}
+
+function isSvgImageSrc(src?: string): boolean {
+    if (!src) return false;
+    return src.startsWith("data:image/svg+xml") || /\.svg(?:[?#].*)?$/i.test(src);
+}
+
+function parseStyleAttribute(style?: string): React.CSSProperties {
+    if (!style) return {};
+
+    return style.split(";").reduce<React.CSSProperties>((styles, declaration) => {
+        const [rawName, ...rawValue] = declaration.split(":");
+        const value = rawValue.join(":").trim();
+        if (!rawName || !value) return styles;
+
+        const property = rawName.trim().replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+        return { ...styles, [property]: value };
+    }, {});
+}
+
+function getSvgViewBoxSize(viewBox?: string): { width: number; height: number } | null {
+    if (!viewBox) return null;
+    const parts = viewBox.trim().split(/[\s,]+/).map(Number);
+    if (parts.length < 4 || parts.some((part) => !Number.isFinite(part))) return null;
+    return { width: Math.max(1, parts[2]), height: Math.max(1, parts[3]) };
+}
+
+function InlineTaskSvg({
+    attribs,
+    children,
+}: {
+    attribs: Record<string, string>;
+    children: React.ReactNode;
+}) {
+    const props = attributesToProps(attribs) as React.SVGProps<SVGSVGElement>;
+    const viewBox = props.viewBox ?? attribs.viewbox ?? attribs.viewBox;
+    const viewBoxSize = getSvgViewBoxSize(viewBox);
+    const style = props.style && typeof props.style === "object" ? props.style : {};
+    const width = props.width ?? style.width ?? (viewBoxSize ? `${Math.min(viewBoxSize.width, 760)}px` : undefined);
+
+    return (
+        <svg
+            {...props}
+            viewBox={viewBox}
+            className={`task-inline-svg ${props.className ?? ""}`.trim()}
+            style={{
+                ...style,
+                width,
+                maxWidth: "100%",
+                height: "auto",
+            }}
+        >
+            {children}
+        </svg>
+    );
+}
+
+function toAnnotationRect(rect: DOMRect, planeRect: DOMRect): AnnotationRect {
+    const left = rect.left - planeRect.left;
+    const top = rect.top - planeRect.top;
+    return {
+        left,
+        top,
+        width: rect.width,
+        height: rect.height,
+        right: left + rect.width,
+        bottom: top + rect.height,
+    };
+}
+
+function SvgZoomImage({
+    attribs,
+    getPlaneRect,
+    onZoomChange,
+}: {
+    attribs: Record<string, string>;
+    getPlaneRect: () => DOMRect | null;
+    onZoomChange: (oldRect: AnnotationRect, newRect: AnnotationRect) => void;
+}) {
+    const imageRef = useRef<HTMLImageElement | null>(null);
+    const [zoom, setZoom] = useState(1);
+    const [baseWidth, setBaseWidth] = useState<number | null>(null);
+    const pendingZoomRectRef = useRef<AnnotationRect | null>(null);
+    const imageStyle = parseStyleAttribute(attribs.style);
+
+    const rememberBaseWidth = () => {
+        if (!imageRef.current || baseWidth) return;
+        const rect = imageRef.current.getBoundingClientRect();
+        if (rect.width > 0) setBaseWidth(rect.width);
+    };
+
+    const nextWidth = baseWidth
+        ? `${Math.round(baseWidth * zoom)}px`
+        : imageStyle.width ?? (attribs.width ? `${Number(attribs.width) || attribs.width}px` : undefined);
+
+    const measureImageRect = () => {
+        const image = imageRef.current;
+        const planeRect = getPlaneRect();
+        if (!image || !planeRect) return null;
+
+        const rect = image.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return null;
+        return toAnnotationRect(rect, planeRect);
+    };
+
+    const changeZoom = (delta: number) => {
+        const oldRect = measureImageRect();
+        const nextZoom = Math.max(0.6, Math.min(2.5, Number((zoom + delta).toFixed(2))));
+        if (nextZoom === zoom) return;
+
+        pendingZoomRectRef.current = oldRect;
+        setZoom(nextZoom);
+    };
+
+    useEffect(() => {
+        const oldRect = pendingZoomRectRef.current;
+        if (!oldRect) return;
+
+        const frameId = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const newRect = measureImageRect();
+                if (newRect) onZoomChange(oldRect, newRect);
+                pendingZoomRectRef.current = null;
+            });
+        });
+
+        return () => cancelAnimationFrame(frameId);
+    }, [zoom, onZoomChange]);
+
+    return (
+        <span className="task-svg-zoom-wrap">
+            <span className="task-svg-zoom-controls">
+                <button
+                    type="button"
+                    onClick={() => changeZoom(-0.1)}
+                    title="Уменьшить SVG"
+                >
+                    <Minus size={14} />
+                </button>
+                <span>{Math.round(zoom * 100)}%</span>
+                <button
+                    type="button"
+                    onClick={() => changeZoom(0.1)}
+                    title="Увеличить SVG"
+                >
+                    <Plus size={14} />
+                </button>
+            </span>
+            <img
+                src={attribs.src}
+                alt={attribs.alt ?? ""}
+                title={attribs.title}
+                decoding="async"
+                ref={imageRef}
+                onLoad={() => {
+                    rememberBaseWidth();
+                }}
+                style={{
+                    ...imageStyle,
+                    width: nextWidth,
+                    maxWidth: "none",
+                }}
+            />
+        </span>
+    );
+}
+
+export default function TaskView({
+    content,
+    title,
+    files,
+    annotatable = false,
+    annotationKey,
+    annotationTaskId,
+    annotationPanelOpen,
+    onAnnotationPanelOpenChange,
+    showAnnotationToggle = true,
+    annotationToolbarHostId,
+}: Props) {
+    const contentRef = useRef<HTMLDivElement | null>(null);
+    const planeRef = useRef<HTMLDivElement | null>(null);
+    const [tool, setTool] = useState<AnnotationTool>("none");
+    const [color, setColor] = useState("#ef4444");
+    const [width, setWidth] = useState(4);
+    const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
+    const [strokes, setStrokes] = useState<AnnotationStroke[]>([]);
+    const [activeStrokeId, setActiveStrokeId] = useState<string | null>(null);
+    const [activeStrokeStart, setActiveStrokeStart] = useState<StrokePoint | null>(null);
+    const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+    const [internalAnnotationPanelOpen, setInternalAnnotationPanelOpen] = useState(false);
+    const [savingDrawing, setSavingDrawing] = useState(false);
+    const [drawingSaved, setDrawingSaved] = useState(false);
+    const [drawingSaveError, setDrawingSaveError] = useState<string | null>(null);
+    const [annotationToolbarHost, setAnnotationToolbarHost] = useState<HTMLElement | null>(null);
+
+    const getPlaneRect = useCallback(() => {
+        return planeRef.current?.getBoundingClientRect() ?? null;
+    }, []);
+
+    const panelOpen = annotationPanelOpen ?? internalAnnotationPanelOpen;
+    const setPanelOpen = useCallback((open: boolean) => {
+        if (!open) setTool("none");
+        if (onAnnotationPanelOpenChange) {
+            onAnnotationPanelOpenChange(open);
+        } else {
+            setInternalAnnotationPanelOpen(open);
+        }
+    }, [onAnnotationPanelOpenChange]);
+
+    useEffect(() => {
+        if (!annotationToolbarHostId) {
+            setAnnotationToolbarHost(null);
+            return;
+        }
+        setAnnotationToolbarHost(document.getElementById(annotationToolbarHostId));
+    }, [annotationToolbarHostId, panelOpen]);
+
+    const handleSvgZoomChange = useCallback((oldRect: AnnotationRect, newRect: AnnotationRect) => {
+        const scaleX = newRect.width / oldRect.width;
+        const scaleY = newRect.height / oldRect.height;
+        const heightDelta = newRect.height - oldRect.height;
+
+        const transformPoint = (point: StrokePoint): StrokePoint => {
+            const pointInsideSvg =
+                point.x >= oldRect.left &&
+                point.x <= oldRect.right &&
+                point.y >= oldRect.top &&
+                point.y <= oldRect.bottom;
+
+            if (pointInsideSvg) {
+                return {
+                    x: newRect.left + (point.x - oldRect.left) * scaleX,
+                    y: newRect.top + (point.y - oldRect.top) * scaleY,
+                };
+            }
+
+            if (point.y > oldRect.bottom) {
+                return {
+                    x: point.x,
+                    y: point.y + heightDelta,
+                };
+            }
+
+            return point;
+        };
+
+        setStrokes((current) => current.map((stroke) => ({
+            ...stroke,
+            points: stroke.points.map(transformPoint),
+        })));
+        setActiveStrokeStart((point) => point ? transformPoint(point) : null);
+    }, []);
+
+    const parseOptions = useMemo<HTMLReactParserOptions>(() => {
+        const options: HTMLReactParserOptions = {
+            replace: (domNode) => {
+            const node = domNode as any;
+            if (node.type !== "tag") {
+                return undefined;
+            }
+
+            if (node.name === "svg") {
+                return (
+                    <InlineTaskSvg attribs={node.attribs ?? {}}>
+                        {domToReact(node.children ?? [], options)}
+                    </InlineTaskSvg>
+                );
+            }
+
+            if (!annotatable || node.name !== "img" || !isSvgImageSrc(node.attribs?.src)) {
+                return undefined;
+            }
+
+            return (
+                <SvgZoomImage
+                    attribs={node.attribs}
+                    getPlaneRect={getPlaneRect}
+                    onZoomChange={handleSvgZoomChange}
+                />
+            );
+            },
+        };
+
+        return options;
+    }, [annotatable, getPlaneRect, handleSvgZoomChange]);
+
     const parsedContent = useMemo(() => {
         const processedContent = renderLatex(normalizeEntities(content));
         return parse(processedContent, parseOptions);
-    }, [content]);
+    }, [content, parseOptions]);
+
+    const storageKey = annotationKey ? `task-annotations:${annotationKey}` : "";
+
+    useEffect(() => {
+        setAnnotationsLoaded(false);
+
+        if (!annotatable || !storageKey) {
+            setStrokes([]);
+            return;
+        }
+
+        try {
+            const raw = localStorage.getItem(storageKey);
+            setStrokes(raw ? JSON.parse(raw) : []);
+        } catch {
+            setStrokes([]);
+        }
+        setAnnotationsLoaded(true);
+    }, [annotatable, storageKey]);
+
+    useEffect(() => {
+        if (!annotatable || !storageKey || !annotationsLoaded) return;
+        localStorage.setItem(storageKey, JSON.stringify(strokes));
+    }, [annotatable, annotationsLoaded, storageKey, strokes]);
+
+    useEffect(() => {
+        if (!annotatable || !contentRef.current) return;
+
+        const element = contentRef.current;
+        const updateSize = () => {
+            setContentSize({
+                width: Math.max(1, element.scrollWidth),
+                height: Math.max(1, element.scrollHeight),
+            });
+        };
+
+        updateSize();
+        const resizeObserver = new ResizeObserver(updateSize);
+        resizeObserver.observe(element);
+        window.addEventListener("resize", updateSize);
+
+        return () => {
+            resizeObserver.disconnect();
+            window.removeEventListener("resize", updateSize);
+        };
+    }, [annotatable, content, files?.length]);
+
+    useEffect(() => {
+        if (!annotatable) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            const isEditingText = target?.closest("input, textarea, [contenteditable='true']");
+            if (isEditingText) return;
+
+            if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+                event.preventDefault();
+                setStrokes((current) => current.slice(0, -1));
+                setActiveStrokeId(null);
+                setActiveStrokeStart(null);
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [annotatable]);
+
+    const getPointerPoint = (event: React.PointerEvent<SVGSVGElement>): StrokePoint | null => {
+        const plane = planeRef.current;
+        if (!plane) return null;
+
+        const rect = plane.getBoundingClientRect();
+        return {
+            x: Math.max(0, Math.min(contentSize.width, event.clientX - rect.left)),
+            y: Math.max(0, Math.min(contentSize.height, event.clientY - rect.top)),
+        };
+    };
+
+    const eraseAtPoint = (point: StrokePoint) => {
+        setStrokes((current) => current.filter((stroke) => !isNearStroke(stroke, point, 12)));
+    };
+
+    const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+        if (tool === "none") return;
+
+        const point = getPointerPoint(event);
+        if (!point) return;
+
+        event.currentTarget.setPointerCapture(event.pointerId);
+
+        if (tool === "eraser") {
+            eraseAtPoint(point);
+            return;
+        }
+
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setActiveStrokeId(id);
+        setActiveStrokeStart(point);
+        setStrokes((current) => [...current, { id, color, width, points: [point] }]);
+    };
+
+    const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+        if (tool === "none") return;
+
+        const point = getPointerPoint(event);
+        if (!point) return;
+
+        if (tool === "eraser") {
+            if (event.buttons === 1) eraseAtPoint(point);
+            return;
+        }
+
+        if (!activeStrokeId || event.buttons !== 1) return;
+        setStrokes((current) => current.map((stroke) => (
+            stroke.id === activeStrokeId
+                ? { ...stroke, points: event.shiftKey && activeStrokeStart ? [activeStrokeStart, point] : [...stroke.points, point] }
+                : stroke
+        )));
+    };
+
+    const stopDrawing = () => {
+        setActiveStrokeId(null);
+        setActiveStrokeStart(null);
+    };
+
+    const saveDrawingSolution = async () => {
+        if (!annotationTaskId) {
+            setDrawingSaveError("Не найден id задания для сохранения");
+            return;
+        }
+        if (strokes.length === 0) {
+            setDrawingSaveError("Сначала сделайте пометки");
+            return;
+        }
+
+        setSavingDrawing(true);
+        setDrawingSaved(false);
+        setDrawingSaveError(null);
+        try {
+            const blob = await renderStrokesToPngBlob(strokes, contentSize);
+            const form = new FormData();
+            form.append("file", blob, `task-${annotationTaskId}-drawing.png`);
+            const response = await authFetch(`/api/tasks/${annotationTaskId}/solution/upload/image`, {
+                method: "POST",
+                body: form,
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ detail: "Не удалось сохранить решение" }));
+                throw new Error(error.detail || "Не удалось сохранить решение");
+            }
+            setDrawingSaved(true);
+        } catch (error) {
+            setDrawingSaveError(error instanceof Error ? error.message : "Не удалось сохранить решение");
+        } finally {
+            setSavingDrawing(false);
+        }
+    };
+
+    const body = (
+        <div ref={contentRef} className="task-body">
+            {parsedContent}
+        </div>
+    );
+
+    const annotationToolbar = panelOpen ? (
+        <div
+            className={`task-annotation-toolbar ${annotationToolbarHost ? "in-header" : ""}`}
+            aria-label="Панель заметок"
+        >
+            <button
+                type="button"
+                className={tool === "pen" ? "active" : ""}
+                onClick={() => setTool((current) => current === "pen" ? "none" : "pen")}
+                title="Карандаш"
+            >
+                <PenLine size={16} />
+            </button>
+            <button
+                type="button"
+                className={tool === "eraser" ? "active" : ""}
+                onClick={() => setTool((current) => current === "eraser" ? "none" : "eraser")}
+                title="Ластик"
+            >
+                <Eraser size={16} />
+            </button>
+            <span className="task-annotation-divider" />
+            <div className="task-annotation-swatches" aria-label="Цвет">
+                {NOTE_COLORS.map((noteColor) => (
+                    <button
+                        key={noteColor}
+                        type="button"
+                        className={color === noteColor ? "active" : ""}
+                        style={{ backgroundColor: noteColor }}
+                        onClick={() => setColor(noteColor)}
+                        title={noteColor}
+                    />
+                ))}
+            </div>
+            <div className="task-annotation-widths" aria-label="Размер">
+                {NOTE_WIDTHS.map((noteWidth) => (
+                    <button
+                        key={noteWidth}
+                        type="button"
+                        className={width === noteWidth ? "active" : ""}
+                        onClick={() => setWidth(noteWidth)}
+                        title={`${noteWidth}px`}
+                    >
+                        <span style={{ width: noteWidth * 2, height: noteWidth }} />
+                    </button>
+                ))}
+            </div>
+            <span className="task-annotation-divider" />
+            <button
+                type="button"
+                onClick={() => setStrokes((current) => current.slice(0, -1))}
+                disabled={strokes.length === 0}
+                title="Отменить"
+            >
+                <RotateCcw size={16} />
+            </button>
+            <button
+                type="button"
+                onClick={() => setStrokes([])}
+                disabled={strokes.length === 0}
+                title="Очистить"
+            >
+                <Trash2 size={16} />
+            </button>
+            <button
+                type="button"
+                onClick={saveDrawingSolution}
+                disabled={savingDrawing || strokes.length === 0 || !annotationTaskId}
+                title="Сохранить решение"
+            >
+                {savingDrawing ? (
+                    <Loader2 size={16} className="task-annotation-spin" />
+                ) : drawingSaved ? (
+                    <Check size={16} />
+                ) : (
+                    <Save size={16} />
+                )}
+            </button>
+            <button
+                type="button"
+                onClick={() => setPanelOpen(false)}
+                title="Скрыть черновик"
+            >
+                <X size={16} />
+            </button>
+            {!showAnnotationToggle && drawingSaved && (
+                <span className="task-annotation-status"><Check size={14} /> Сохранено</span>
+            )}
+            {!showAnnotationToggle && drawingSaveError && (
+                <span className="task-annotation-error">{drawingSaveError}</span>
+            )}
+        </div>
+    ) : null;
 
     return (
         <div className="task-view fade-in">
             {title && <h1 className="task-title">{title}</h1>}
-            <div className="task-body">
-                {parsedContent}
-            </div>
+            {annotatable ? (
+                <div className="task-annotator">
+                    {annotationToolbarHost && annotationToolbar ? createPortal(annotationToolbar, annotationToolbarHost) : null}
+                    {showAnnotationToggle && (
+                        <div className="task-annotation-actions">
+                            <button
+                                type="button"
+                                className={`task-annotation-toggle ${panelOpen ? "active" : ""}`}
+                                onClick={() => setPanelOpen(!panelOpen)}
+                            >
+                                <PenLine size={16} />
+                                {panelOpen ? "Скрыть черновик" : "Открыть черновик"}
+                            </button>
+                            {drawingSaved && <span className="task-annotation-status"><Check size={14} /> Сохранено</span>}
+                            {drawingSaveError && <span className="task-annotation-error">{drawingSaveError}</span>}
+                        </div>
+                    )}
+                    {!annotationToolbarHostId && !annotationToolbarHost && annotationToolbar}
+                    <div
+                        className="task-annotation-canvas"
+                        style={{
+                            width: contentSize.width ? `${contentSize.width}px` : undefined,
+                            minHeight: contentSize.height ? `${contentSize.height}px` : undefined,
+                        }}
+                    >
+                        <div
+                            ref={planeRef}
+                            className="task-annotation-plane"
+                            style={{
+                                width: contentSize.width ? `${contentSize.width}px` : "100%",
+                            }}
+                        >
+                            {body}
+                            <svg
+                                className={`task-annotation-layer ${panelOpen && tool !== "none" ? "drawing" : ""}`}
+                                width={contentSize.width || 1}
+                                height={contentSize.height || 1}
+                                viewBox={`0 0 ${contentSize.width || 1} ${contentSize.height || 1}`}
+                                onPointerDown={handlePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={stopDrawing}
+                                onPointerCancel={stopDrawing}
+                                onPointerLeave={stopDrawing}
+                            >
+                                {strokes.map((stroke) => (
+                                    <path
+                                        key={stroke.id}
+                                        d={pointsToPath(stroke.points)}
+                                        fill="none"
+                                        stroke={stroke.color}
+                                        strokeWidth={stroke.width}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                ))}
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            ) : body}
             {files && files.length > 0 && (
                 <div className="task-files">
                     <span className="task-files-label">Файлы к заданию:</span>

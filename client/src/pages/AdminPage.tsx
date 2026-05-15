@@ -100,13 +100,14 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
     });
 }
 
-type FilterCategory = 'все' | 'learning' | 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+type FilterCategory = 'все' | 'learning' | 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
 const FILTER_OPTIONS: { key: FilterCategory; label: string }[] = [
     { key: 'все', label: 'Все' },
     { key: 'learning', label: 'Разбор + ДЗ' },
     { key: 'control', label: 'Контрольная' },
     { key: 'variants', label: 'Вариант' },
+    { key: 'math', label: 'Математика' },
     { key: 'mock', label: 'Пробник' },
 ];
 
@@ -335,7 +336,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const handleImportVariant = async (
         topic_title: string,
         variant_id: number,
-        options: { category: 'tutorial' | 'homework' | 'control' | 'variants' | 'mock'; ege_number: number | null; ege_number_end: number | null }
+        options: { category: 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock'; ege_number: number | null; ege_number_end: number | null }
     ) => {
         try {
             const data = await adminFetch<{
@@ -368,6 +369,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         if (cat === 'tutorial') return 'Разбор';
         if (cat === 'homework') return 'ДЗ';
         if (cat === 'control') return 'КР';
+        if (cat === 'math') return 'Математика';
         if (cat === 'mock') return 'Пробник';
         return 'Вариант';
     };
@@ -376,6 +378,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         if (cat === 'tutorial') return 'bg-blue-100 text-blue-700';
         if (cat === 'homework') return 'bg-violet-100 text-violet-700';
         if (cat === 'control') return 'bg-sky-100 text-sky-700';
+        if (cat === 'math') return 'bg-emerald-100 text-emerald-700';
         if (cat === 'mock') return 'bg-purple-100 text-purple-700';
         return 'bg-orange-100 text-orange-700';
     };

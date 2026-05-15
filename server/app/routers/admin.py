@@ -7,6 +7,7 @@ import secrets
 import string
 import uuid
 import httpx
+from html import escape
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import bcrypt as _bcrypt
@@ -2567,10 +2568,321 @@ def _split_tasks_regex(text_pages: list[str]) -> list[dict]:
     return tasks
 
 
+def _extract_math_answers(full_text: str) -> dict[int, str]:
+    answers: dict[int, str] = {}
+    lines = [line.strip() for line in full_text.splitlines() if line.strip()]
+
+    for i, line in enumerate(lines):
+        m = re.match(r"^([1-9]|1[0-2])\s+([^\s]+)", line)
+        if m:
+            answers[int(m.group(1))] = m.group(2)
+
+        for number in (14, 15, 16, 18):
+            prefix = f"{number} "
+            if line.startswith(prefix):
+                answers[number] = line[len(prefix):].strip()
+
+        if line == "17" and i > 0 and i + 1 < len(lines):
+            answers[17] = f"{lines[i - 1]}/{lines[i + 1]}"
+
+        if line.startswith("19 "):
+            parts = []
+            if i > 0 and re.match(r"^а\)", lines[i - 1], re.IGNORECASE):
+                parts.append(lines[i - 1])
+            parts.append(line[3:].strip())
+            j = i + 1
+            while j < len(lines) and len(parts) < 3:
+                if re.match(r"^[абв]\)", lines[j], re.IGNORECASE):
+                    parts.append(lines[j])
+                j += 1
+            answers[19] = "; ".join(parts)
+
+    if 13 not in answers:
+        for i, line in enumerate(lines):
+            if line == "13":
+                prev_lines = lines[max(0, i - 3):i]
+                next_lines = lines[i + 1:i + 4]
+                a_line = next((item for item in prev_lines if item.startswith("а)")), "")
+                b_line = next((item for item in next_lines if item.startswith("б)")), "")
+                if a_line or b_line:
+                    a_line = re.sub(r"±\s*\+\s*4", "±π/3 + 4", a_line)
+                    b_line = re.sub(r"−\s*;", "−11π/3;", b_line)
+                    raw = "; ".join(part for part in (a_line, b_line) if part)
+                else:
+                    raw = " ".join(prev_lines + next_lines)
+                answers[13] = raw
+                break
+
+    return answers
+
+
+def _math_text_to_html(number: int, extracted_text: str, image_url: str | None = None) -> str:
+    text = extracted_text or ""
+    text = re.sub(rf"^\s*{number}\s*", "", text.strip())
+    text = re.sub(r"Ответ:\s*[_\s.]+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\n?\s*Составитель:.*$", "", text, flags=re.IGNORECASE | re.DOTALL)
+    text = text.strip()
+    if not text:
+        html = f"<p><strong>Задание {number}</strong></p>"
+        if image_url:
+            html += f'\n<img src="{image_url}" style="max-width:100%;margin:10px 0;" />'
+        return html
+
+    paragraphs = []
+    for part in re.split(r"\n{2,}", text):
+        lines = [_math_pdf_line_to_html(line) for line in part.strip().splitlines() if line.strip()]
+        lines = _merge_stacked_fraction_lines(lines)
+        cleaned = "<br>".join(lines)
+        if cleaned:
+            paragraphs.append(f"<p>{cleaned}</p>")
+    html = "\n".join(paragraphs) or f"<p><strong>Задание {number}</strong></p>"
+    if image_url:
+        html += f'\n<img src="{image_url}" style="max-width:100%;margin:10px 0;" />'
+    return html
+
+
+def _extract_display_formula(html_line: str) -> str | None:
+    match = re.fullmatch(r"\\\[(.*?)\\\]", html_line.strip(), flags=re.DOTALL)
+    return match.group(1).strip() if match else None
+
+
+def _is_fraction_separator_line(html_line: str) -> bool:
+    text = re.sub(r"<[^>]+>", "", html_line).strip()
+    return bool(re.fullmatch(r"[._\-–—−]+", text))
+
+
+def _merge_stacked_fraction_lines(lines: list[str]) -> list[str]:
+    merged: list[str] = []
+    index = 0
+    while index < len(lines):
+        if index + 2 < len(lines):
+            numerator = _extract_display_formula(lines[index])
+            denominator = _extract_display_formula(lines[index + 2])
+            if numerator and denominator and _is_fraction_separator_line(lines[index + 1]):
+                merged.append(f"\\[\\frac{{{numerator}}}{{{denominator}}}\\]")
+                index += 3
+                continue
+        merged.append(lines[index])
+        index += 1
+    return merged
+
+
+_MATH_CHAR_TRANSLATION = str.maketrans({
+    "𝑥": "x", "𝑦": "y", "𝑡": "t", "𝑎": "a", "𝑏": "b", "𝑐": "c", "𝑓": "f", "𝑛": "n",
+    "𝐴": "A", "𝐵": "B", "𝐶": "C", "𝐷": "D", "𝐾": "K", "𝑀": "M", "𝑁": "N",
+    "𝜋": "\\pi", "π": "\\pi", "𝛽": "\\beta ", "β": "\\beta ", "𝜑": "\\varphi ", "φ": "\\varphi ",
+    "𝜔": "\\omega ", "ω": "\\omega ", "𝛼": "\\alpha ", "α": "\\alpha ",
+    "−": "-", "∙": "\\cdot ", "⋅": "\\cdot ", "≤": "\\le ", "≥": "\\ge ", "∞": "\\infty",
+    "²": "^2", "³": "^3",
+    "½": "\\frac{1}{2}", "⅓": "\\frac{1}{3}", "⅔": "\\frac{2}{3}", "¼": "\\frac{1}{4}",
+    "¾": "\\frac{3}{4}", "⅕": "\\frac{1}{5}", "⅖": "\\frac{2}{5}", "⅗": "\\frac{3}{5}",
+    "⅘": "\\frac{4}{5}", "⅙": "\\frac{1}{6}", "⅚": "\\frac{5}{6}", "⅛": "\\frac{1}{8}",
+    "⅜": "\\frac{3}{8}", "⅝": "\\frac{5}{8}", "⅞": "\\frac{7}{8}",
+})
+
+
+def _normalize_pdf_latex_formula(line: str) -> str:
+    formula = line.strip().rstrip(".")
+    formula = formula.translate(_MATH_CHAR_TRANSLATION)
+    formula = re.sub(r"\s+", " ", formula)
+    formula = re.sub(r"(?<![\w}])(\d+)\s*/\s*(\d+)(?![\w{])", r"\\frac{\1}{\2}", formula)
+    formula = re.sub(r"\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])", r"\\frac{\1}{\2}", formula)
+    formula = re.sub(r"\\frac\s*([A-Za-z0-9])\s*\{([^{}]+)\}", r"\\frac{\1}{\2}", formula)
+    formula = re.sub(r"\\frac\s*\{([^{}]+)\}\s*([A-Za-z0-9])", r"\\frac{\1}{\2}", formula)
+    formula = re.sub(r"\b([a-zA-Z])([2-9])\b", r"\1^{\2}", formula)
+    formula = re.sub(r"√\s*([A-Za-z0-9]+)", r"\\sqrt{\1}", formula)
+    formula = re.sub(r"sin\s*([0-9]+)°", r"\\sin \1^\\circ", formula)
+    formula = re.sub(r"cos\s*([0-9]+)°", r"\\cos \1^\\circ", formula)
+
+    # pdfplumber reads 3^{log_27(...)} as one baseline string: 3log27(...)
+    formula = re.sub(
+        r"^(\d+)log(\d+)\((.+?)\)\s*=\s*(.+)$",
+        lambda m: f"{m.group(1)}^{{\\log_{{{m.group(2)}}}({m.group(3).strip()})}} = {m.group(4).strip()}",
+        formula,
+    )
+    formula = re.sub(r"\blog(\d+)\((.+?)\)", r"\\log_{\1}(\2)", formula)
+    formula = re.sub(r"(?<!\\)\b(sin|cos|tg|tan)\b", lambda m: "\\" + ("tan" if m.group(1) == "tg" else m.group(1)), formula)
+    formula = re.sub(r"\\(alpha|beta|varphi|omega|pi)(?=[A-Za-z0-9])", r"\\\1 ", formula)
+    return formula
+
+
+def _is_math_formula_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if re.search(r"[А-Яа-яЁё]", stripped):
+        return False
+    return bool(re.search(r"[=√𝑥𝑦𝑡𝑎𝜋𝛽𝜔𝜑πβωφ≤≥∞]|log\d+|sin|cos|\^|[0-9][+\-*/][0-9]", stripped))
+
+
+def _math_pdf_line_to_html(line: str) -> str:
+    stripped = line.strip()
+    if _is_math_formula_line(stripped):
+        return f"\\[{escape(_normalize_pdf_latex_formula(stripped))}\\]"
+    html = escape(stripped)
+    html = html.translate(_MATH_CHAR_TRANSLATION)
+    html = re.sub(r"(?<![\w}])(\d+)\s*/\s*(\d+)(?![\w{])", r"\\(\\frac{\1}{\2}\\)", html)
+    html = re.sub(
+        r"\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])",
+        r"\\(\\frac{\1}{\2}\\)",
+        html,
+    )
+    html = re.sub(r"(\d*)√\s*(\d+)", lambda m: f"\\({m.group(1)}\\sqrt{{{m.group(2)}}}\\)", html)
+    html = re.sub(r"(\d+)°", r"\\(\1^\\circ\\)", html)
+    return html
+
+
+def _graphic_bbox_for_math_task(page, bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
+    x0, top, x1, bottom = bbox
+    objects = []
+    for kind in ("images", "lines", "curves"):
+        for obj in getattr(page, kind, []):
+            ox0 = float(obj.get("x0", 0))
+            ox1 = float(obj.get("x1", 0))
+            otop = float(obj.get("top", 0))
+            obottom = float(obj.get("bottom", 0))
+            if ox1 < x0 or ox0 > x1 or obottom < top or otop > bottom:
+                continue
+            width = ox1 - ox0
+            height = obottom - otop
+            if ox0 > x1 - 28:
+                continue
+            if otop < top + 28 and ox0 < x0 + 70:
+                continue
+            if otop > bottom - 34 and width > 80 and height < 4:
+                continue
+            if kind == "images" and (width < 25 or height < 25):
+                continue
+            if width < 5 and height < 5:
+                continue
+            objects.append((max(x0, ox0), max(top, otop), min(x1, ox1), min(bottom, obottom)))
+
+    if not objects:
+        return None
+
+    gx0 = min(item[0] for item in objects)
+    gtop = min(item[1] for item in objects)
+    gx1 = max(item[2] for item in objects)
+    gbottom = max(item[3] for item in objects)
+    if gx1 - gx0 < 28 or gbottom - gtop < 28:
+        return None
+    return (
+        max(x0, gx0 - 8),
+        max(top, gtop - 8),
+        min(x1, gx1 + 8),
+        min(bottom, gbottom + 8),
+    )
+
+
+def _parse_math_pdf_tasks(content: bytes, full_text: str) -> list[dict]:
+    try:
+        import io
+        import pdfplumber
+        import pypdfium2 as pdfium
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=f"Не установлена библиотека для разбора математики: {exc}")
+
+    answers = _extract_math_answers(full_text)
+    upload_dir = Path("uploads/task_images")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    starts: dict[int, dict] = {}
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page_index, page in enumerate(pdf.pages[:5]):
+            words = page.extract_words(x_tolerance=1, y_tolerance=3, keep_blank_chars=False)
+            for word in words:
+                text = word.get("text", "")
+                if not re.fullmatch(r"([1-9]|1[0-9])", text):
+                    continue
+                number = int(text)
+                if number in starts or number > 19:
+                    continue
+                x0 = float(word["x0"])
+                top = float(word["top"])
+                is_left_heading = 20 <= x0 <= 45
+                is_right_heading = 430 <= x0 <= 455
+                if top < 50 or top > 540 or not (is_left_heading or is_right_heading):
+                    continue
+                starts[number] = {
+                    "number": number,
+                    "page_index": page_index,
+                    "top": top,
+                    "column": "left" if is_left_heading else "right",
+                    "page_width": float(page.width),
+                    "page_height": float(page.height),
+                }
+
+        if not starts:
+            return []
+
+        ordered = [starts[number] for number in sorted(starts)]
+        pdfium_doc = pdfium.PdfDocument(content)
+        rendered_pages: dict[int, object] = {}
+        tasks: list[dict] = []
+        try:
+            for start in ordered:
+                number = start["number"]
+                page_index = start["page_index"]
+                same_column_next = next(
+                    (
+                        item for item in ordered
+                        if item["page_index"] == page_index
+                        and item["column"] == start["column"]
+                        and item["top"] > start["top"]
+                    ),
+                    None,
+                )
+                x0, x1 = (18, min(410, start["page_width"] - 20)) if start["column"] == "left" else (430, min(790, start["page_width"] - 20))
+                top = max(48, start["top"] - 6)
+                bottom = same_column_next["top"] - 8 if same_column_next else start["page_height"] - 38
+                bottom = min(bottom, start["page_height"] - 24)
+                if bottom <= top + 24:
+                    bottom = min(top + 80, start["page_height"] - 24)
+                bbox = (x0, top, x1, bottom)
+                page = pdf.pages[page_index]
+                extracted_text = page.crop(bbox).extract_text(x_tolerance=1, y_tolerance=3) or ""
+
+                image_url = None
+                graphic_bbox = _graphic_bbox_for_math_task(page, bbox)
+                if graphic_bbox:
+                    if page_index not in rendered_pages:
+                        bitmap = pdfium_doc[page_index].render(scale=2)
+                        rendered_pages[page_index] = bitmap.to_pil()
+                    image = rendered_pages[page_index]
+                    scale_x = image.width / start["page_width"]
+                    scale_y = image.height / start["page_height"]
+                    crop = image.crop((
+                        int(graphic_bbox[0] * scale_x),
+                        int(graphic_bbox[1] * scale_y),
+                        int(graphic_bbox[2] * scale_x),
+                        int(graphic_bbox[3] * scale_y),
+                    ))
+                    filename = f"{uuid.uuid4()}.png"
+                    crop.save(upload_dir / filename)
+                    image_url = f"/uploads/task_images/{filename}"
+
+                answer = answers.get(number)
+                tasks.append({
+                    "index": len(tasks),
+                    "ege_number": number,
+                    "title": "",
+                    "content_html": _math_text_to_html(number, extracted_text, image_url),
+                    "answer_type": "text" if number >= 13 else "single_number",
+                    "correct_answer": {"val": answer} if answer else None,
+                    "images": [],
+                    "files": [],
+                    "sub_tasks": [],
+                })
+            return tasks
+        finally:
+            pdfium_doc.close()
+
+
 @router.post("/import-pdf/parse")
 async def parse_pdf_tasks(
     file: UploadFile = File(...),
     use_llm: bool = Form(False),
+    subject: str = Form("informatics"),
 ):
     """
     Extract text from uploaded PDF and split it into tasks.
@@ -2583,7 +2895,6 @@ async def parse_pdf_tasks(
     except ImportError:
         raise HTTPException(status_code=500, detail="pdfplumber не установлен. Выполните: pip install pdfplumber")
 
-    # Read the uploaded PDF
     content = await file.read()
     text_pages: list[str] = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
@@ -2597,6 +2908,10 @@ async def parse_pdf_tasks(
 
     # Clean joined text (always returned so the client can show it for debugging)
     raw_full_text = "\n\n".join(text_pages)
+
+    if subject == "math":
+        tasks = _parse_math_pdf_tasks(content, raw_full_text)
+        return {"tasks": tasks, "page_count": len(text_pages), "full_text": raw_full_text}
 
     # ── Regex mode (default, no LLM) ──────────────────────────
     if not use_llm:

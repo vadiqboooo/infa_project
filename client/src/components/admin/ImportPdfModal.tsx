@@ -28,7 +28,7 @@ function adminFetch<T>(path: string, apiKey: string, options: RequestInit = {}):
   });
 }
 
-export type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+export type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
 interface ParsedTask {
   index: number;
@@ -48,6 +48,7 @@ const ANSWER_TYPES = [
 
 const CATEGORIES: { value: TopicCategory; label: string }[] = [
   { value: 'variants', label: 'Вариант ЕГЭ' },
+  { value: 'math', label: 'Математика' },
   { value: 'control', label: 'Контрольная работа' },
   { value: 'mock', label: 'Пробник' },
   { value: 'tutorial', label: 'Разбор заданий' },
@@ -109,6 +110,7 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
     try {
       const fd = new FormData();
       fd.append('file', pdfFile);
+      fd.append('subject', category === 'math' ? 'math' : 'informatics');
       const token = localStorage.getItem('jwt_token');
       const headers: Record<string, string> = { 'X-API-Key': apiKey };
       if (token) headers['Authorization'] = `Bearer ${token}`;

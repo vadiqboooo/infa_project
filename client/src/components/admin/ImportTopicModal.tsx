@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-type CategoryValue = 'tutorial' | 'homework' | 'control' | 'variants' | 'mock';
+type CategoryValue = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
 interface ImportOptions {
   category: CategoryValue;
@@ -24,6 +24,7 @@ interface ImportTopicModalProps {
 
 const CATEGORIES: { value: CategoryValue; label: string }[] = [
   { value: 'variants', label: 'Вариант ЕГЭ' },
+  { value: 'math', label: 'Математика' },
   { value: 'tutorial', label: 'Разбор заданий' },
   { value: 'homework', label: 'Домашняя работа' },
   { value: 'control', label: 'Контрольная работа' },

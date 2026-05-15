@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubDark } from "@uiw/codemirror-theme-github";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare } from "lucide-react";
+import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
@@ -48,6 +48,7 @@ export default function ExamPage() {
     const [codeSolutions, setCodeSolutions] = useState<Record<number, string>>({});
     const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
+    const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
     const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
     const appliedTaskDeepLinkRef = useRef<string | null>(null);
     const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
@@ -82,6 +83,11 @@ export default function ExamPage() {
         clearSolutionDeepLink();
     };
     const currentTaskNav = tasks[taskIndex] ?? null;
+
+    useEffect(() => {
+        setDrawingPanelOpen(false);
+    }, [currentTaskNav?.id]);
+
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const { data: reviewTask, isLoading: reviewTaskLoading } = useTask(reviewTaskId);
@@ -837,7 +843,7 @@ export default function ExamPage() {
         };
 
         const sortedResults = [...taskResults].sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0));
-        const isVariant = String(currentTopic?.category) === "variants";
+        const isVariant = ["variants", "math"].includes(String(currentTopic?.category));
         const correctCount = result.correct_count ?? taskResults.filter(r => r.is_correct).length;
         const totalCount = result.total_tasks ?? taskResults.length;
         const pctScore = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
@@ -1544,11 +1550,35 @@ export default function ExamPage() {
                                         <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-tight">
                                             {task.title || "Вариант ЕГЭ"}
                                         </span>
+                                        {String(currentTopic?.category) === "math" && (
+                                            drawingPanelOpen ? (
+                                                <div
+                                                    id={`exam-drawing-toolbar-${task.id}`}
+                                                    className="ml-auto min-w-0 max-w-full"
+                                                />
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDrawingPanelOpen(true)}
+                                                    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700 transition-all hover:bg-sky-100"
+                                                >
+                                                    <PenLine size={13} />
+                                                    Черновик
+                                                </button>
+                                            )
+                                        )}
                                     </div>
                                     <div className="prose prose-slate max-w-none text-gray-800 leading-relaxed text-base md:text-lg">
                                         <TaskView
                                             content={task.content_html}
                                             files={task.media_resources?.files}
+                                            annotatable={String(currentTopic?.category) === "math"}
+                                            annotationKey={`exam:${currentTopic?.id ?? "topic"}:task:${task.id}`}
+                                            annotationTaskId={task.id}
+                                            annotationPanelOpen={drawingPanelOpen}
+                                            onAnnotationPanelOpenChange={setDrawingPanelOpen}
+                                            showAnnotationToggle={false}
+                                            annotationToolbarHostId={`exam-drawing-toolbar-${task.id}`}
                                         />
                                     </div>
                                 </>
