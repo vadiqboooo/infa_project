@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.access import can_access_task, can_access_topic, get_content_access, require_task_access
+from app.access import can_access_task, can_access_topic, can_access_topic_course, get_content_access, require_task_access
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.task import Task
 from app.models.topic import Topic
@@ -74,7 +74,11 @@ async def get_navigation(
     result = await db.execute(
         select(Topic).options(selectinload(Topic.tasks)).order_by(Topic.order_index)
     )
-    topics = result.scalars().unique().all()
+    topics = [
+        topic
+        for topic in result.scalars().unique().all()
+        if can_access_topic_course(topic, access)
+    ]
 
     # Fetch all progress for user in one query
     prog_result = await db.execute(
@@ -222,6 +226,7 @@ async def get_navigation(
             title=topic.title,
             order_index=topic.order_index,
             category=topic.category,
+            course_type=topic.course_type,
             tasks=tasks_nav,
             exam_id=exam.id if exam else None,
             latest_score=latest_attempt.get("score"),
@@ -260,10 +265,15 @@ async def mark_seen_topics(
     if not topic_ids:
         return {"updated": 0}
 
+    access = await get_content_access(user, db)
     result = await db.execute(
         select(Topic).options(selectinload(Topic.tasks)).where(Topic.id.in_(topic_ids))
     )
-    topics = result.scalars().unique().all()
+    topics = [
+        topic
+        for topic in result.scalars().unique().all()
+        if can_access_topic_course(topic, access)
+    ]
     if not topics:
         return {"updated": 0}
 

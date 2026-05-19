@@ -91,6 +91,7 @@ class PreparationTaskOptionOut(BaseModel):
     topic_id: int
     topic_title: str
     topic_category: str
+    topic_course_type: str = "year"
     order_index: int
     ege_number: int | None = None
     ege_number_max: int | None = None

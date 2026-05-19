@@ -342,6 +342,9 @@ export function TopicDetail({
     setEditingTopic((prev) => ({ ...prev, [field]: value }));
   };
 
+  const isCommonCourseCategory = (category: string) =>
+    category === 'variants' || category === 'math' || category === 'mock';
+
   const handleSaveTopicHeader = () => {
     onSaveTopic(editingTopic);
     setIsEditingHeader(false);
@@ -433,9 +436,16 @@ export function TopicDetail({
               </div>
               <select
                 value={editingTopic.category}
-                onChange={(e) =>
-                  handleTopicFieldChange('category', e.target.value as TopicCategory)
-                }
+                onChange={(e) => {
+                  const nextCategory = e.target.value as TopicCategory;
+                  setEditingTopic((prev) => ({
+                    ...prev,
+                    category: nextCategory,
+                    course_type: isCommonCourseCategory(nextCategory)
+                      ? 'common'
+                      : prev.course_type === 'common' ? 'year' : prev.course_type,
+                  }));
+                }}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
               >
                 <option value="tutorial">Разбор</option>
@@ -444,6 +454,16 @@ export function TopicDetail({
                 <option value="variants">Вариант</option>
                 <option value="math">Математика</option>
                 <option value="mock">Пробник</option>
+              </select>
+              <select
+                value={isCommonCourseCategory(editingTopic.category) ? 'common' : (editingTopic.course_type ?? 'year')}
+                onChange={(e) => handleTopicFieldChange('course_type', e.target.value)}
+                disabled={isCommonCourseCategory(editingTopic.category)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold disabled:text-gray-400"
+              >
+                <option value="year">Годовой</option>
+                <option value="summer">Летний</option>
+                <option value="common">Общий</option>
               </select>
               <button
                 onClick={handleSaveTopicHeader}
@@ -552,6 +572,16 @@ export function TopicDetail({
                 <div className="text-sm font-black text-gray-900">Превью карточки</div>
                 <div className="text-xs font-medium text-gray-400">Настройка фона и персонажа топика</div>
               </div>
+              <select
+                value={isCommonCourseCategory(editingTopic.category) ? 'common' : (editingTopic.course_type ?? 'year')}
+                onChange={(e) => handleTopicFieldChange('course_type', e.target.value)}
+                disabled={isCommonCourseCategory(editingTopic.category)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold disabled:text-gray-400"
+              >
+                <option value="year">Годовой</option>
+                <option value="summer">Летний</option>
+                <option value="common">Общий</option>
+              </select>
               <button
                 onClick={() => setIsCardPreviewOpen(false)}
                 className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"

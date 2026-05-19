@@ -10,9 +10,11 @@ import {
 import { clsx } from 'clsx';
 
 type CategoryValue = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
+type CourseTypeValue = 'year' | 'summer' | 'common';
 
 interface ImportOptions {
   category: CategoryValue;
+  course_type: CourseTypeValue;
   ege_number: number | null;
   ege_number_end: number | null;
 }
@@ -35,6 +37,7 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
   const [variantId, setVariantId] = useState('');
   const [topicTitle, setTopicTitle] = useState('');
   const [category, setCategory] = useState<CategoryValue>('variants');
+  const [courseType, setCourseType] = useState<CourseTypeValue>('common');
   const [egeValue, setEgeValue] = useState<string>(''); // '', '1'..'27', or '19-21'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +70,7 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
     try {
       await onImportVariant(topicTitle, parseInt(variantId), {
         category,
+        course_type: category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType,
         ege_number,
         ege_number_end,
       });
@@ -151,6 +155,8 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
                     onChange={(e) => {
                       const v = e.target.value as CategoryValue;
                       setCategory(v);
+                      if (v === 'variants' || v === 'math' || v === 'mock') setCourseType('common');
+                      else if (courseType === 'common') setCourseType('year');
                       if (v !== 'tutorial' && v !== 'homework') setEgeValue('');
                     }}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62] transition-all"
@@ -158,6 +164,20 @@ export function ImportTopicModal({ onClose, onImportVariant }: ImportTopicModalP
                     {CATEGORIES.map(c => (
                       <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5 ml-1">Курс</label>
+                  <select
+                    value={category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType}
+                    onChange={(e) => setCourseType(e.target.value as CourseTypeValue)}
+                    disabled={category === 'variants' || category === 'math' || category === 'mock'}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62] transition-all disabled:text-gray-400"
+                  >
+                    <option value="year">Годовой курс</option>
+                    <option value="summer">Летний курс</option>
+                    <option value="common">Общий контент</option>
                   </select>
                 </div>
 

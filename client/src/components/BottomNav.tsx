@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { ProfileModal } from './ProfileModal';
 import { NotificationsHoverCard } from './NotificationsHoverCard';
 import { useAuth } from '../context/AuthContext';
+import { ThemeToggle } from './ThemeToggle';
 
 const links = [
     { icon: Home, label: 'Главная', path: '/dashboard' },
@@ -55,6 +56,14 @@ export function BottomNav() {
                             </Link>
                         );
                     })}
+
+                    <div className="flex-1 flex flex-col items-center justify-center gap-1">
+                        <ThemeToggle
+                            compact
+                            className="border-transparent bg-transparent text-slate-500 hover:bg-white/5 hover:text-white"
+                        />
+                        <span className="text-[10px] font-medium text-slate-500">Тема</span>
+                    </div>
 
                     <div className="flex-1 flex flex-col items-center justify-center gap-1">
                         <NotificationsHoverCard

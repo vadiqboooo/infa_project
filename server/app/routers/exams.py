@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.access import require_exam_access
+from app.access import require_exam_access, require_exam_topic_access
 from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
@@ -36,6 +36,16 @@ def _answer_has_value(value) -> bool:
 router = APIRouter(prefix="/exams", tags=["exams"])
 
 
+async def _require_exam_course_access(exam: Exam, user: User, db: AsyncSession):
+    from app.models.topic import Topic
+
+    topic_result = await db.execute(select(Topic).where(Topic.id == exam.topic_id))
+    topic = topic_result.scalar_one_or_none()
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+    await require_exam_topic_access(topic, user, db)
+
+
 @router.get("/by-topic/{topic_id}")
 async def get_exam_by_topic(
     topic_id: int,
@@ -43,7 +53,13 @@ async def get_exam_by_topic(
     db: AsyncSession = Depends(get_db),
 ):
     """Get exam for a topic (variant). Creates one if it doesn't exist."""
-    await require_exam_access(user, db)
+    from app.models.topic import Topic
+
+    topic_result = await db.execute(select(Topic).where(Topic.id == topic_id))
+    topic = topic_result.scalar_one_or_none()
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+    await require_exam_topic_access(topic, user, db)
 
     result = await db.execute(
         select(Exam).options(selectinload(Exam.tasks)).where(Exam.topic_id == topic_id)
@@ -52,17 +68,9 @@ async def get_exam_by_topic(
 
     # Auto-create exam if it doesn't exist (for old variants)
     if exam is None:
-        from app.models.topic import Topic
-
         # Load all tasks for this topic
         tasks_result = await db.execute(select(Task).where(Task.topic_id == topic_id))
         tasks = list(tasks_result.scalars().all())
-
-        # Check if topic exists
-        topic_result = await db.execute(select(Topic).where(Topic.id == topic_id))
-        topic = topic_result.scalar_one_or_none()
-        if topic is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
 
         exam = Exam(topic_id=topic_id, time_limit_minutes=235)
         db.add(exam)
@@ -182,7 +190,7 @@ async def get_exam(
     exam = result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await require_exam_access(user, db)
+    await _require_exam_course_access(exam, user, db)
 
     # Check for active attempt
     active_attempt = await db.execute(
@@ -221,7 +229,7 @@ async def start_exam(
     exam = result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await require_exam_access(user, db)
+    await _require_exam_course_access(exam, user, db)
 
     # Return existing active attempt (idempotent)
     active = await db.execute(
@@ -272,7 +280,11 @@ async def save_draft_answer(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Active attempt not found")
-    await require_exam_access(user, db)
+    exam_result = await db.execute(select(Exam).where(Exam.id == attempt.exam_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    await _require_exam_course_access(exam, user, db)
 
     task_id = str(body.get("task_id", ""))
     answer = body.get("answer")  # {val: ...}
@@ -357,7 +369,7 @@ async def submit_exam(
     exam = exam_result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await require_exam_access(user, db)
+    await _require_exam_course_access(exam, user, db)
 
     # Build task lookup
     task_map: dict[int, Task] = {t.id: t for t in exam.tasks}

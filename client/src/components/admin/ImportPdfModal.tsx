@@ -29,6 +29,7 @@ function adminFetch<T>(path: string, apiKey: string, options: RequestInit = {}):
 }
 
 export type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
+type TopicCourseType = 'year' | 'summer' | 'common';
 
 interface ParsedTask {
   index: number;
@@ -74,6 +75,7 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [topicTitle, setTopicTitle] = useState('');
   const [category, setCategory] = useState<TopicCategory>('variants');
+  const [courseType, setCourseType] = useState<TopicCourseType>('common');
   const [isMock, setIsMock] = useState(false);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(235);
 
@@ -222,6 +224,7 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
         body: JSON.stringify({
           topic_title: topicTitle.trim(),
           category,
+          course_type: category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType,
           is_mock: isMock,
           time_limit_minutes: timeLimitMinutes,
           tasks: tasks.map(t => ({
@@ -328,10 +331,25 @@ export function ImportPdfModal({ onClose, apiKey, onSuccess }: ImportPdfModalPro
                       const v = e.target.value as TopicCategory;
                       setCategory(v);
                       setIsMock(v === 'mock');
+                      if (v === 'variants' || v === 'math' || v === 'mock') setCourseType('common');
+                      else if (courseType === 'common') setCourseType('year');
                     }}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-300 transition-all"
                   >
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5 ml-1">Курс</label>
+                  <select
+                    value={category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType}
+                    onChange={e => setCourseType(e.target.value as TopicCourseType)}
+                    disabled={category === 'variants' || category === 'math' || category === 'mock'}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-300 transition-all disabled:text-gray-400"
+                  >
+                    <option value="year">Годовой курс</option>
+                    <option value="summer">Летний курс</option>
+                    <option value="common">Общий контент</option>
                   </select>
                 </div>
                 <div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, Loader2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import './LoginModal.css';
 
 type Tab = 'login' | 'register';
 
@@ -91,52 +92,40 @@ export function LoginModal({ onClose, initialTab = 'login' }: Props) {
     setPasswordConfirm('');
   };
 
-  const inputCls = [
-    'w-full rounded-xl px-4 py-3 text-[14px] text-white placeholder-white/30 outline-none transition-all',
-    'bg-white/[0.06] border border-white/10 focus:border-[#4e8c5a]',
-  ].join(' ');
+  const inputCls = 'login-modal-input';
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md"
+      className="login-modal-overlay"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="relative mx-4 w-full max-w-[420px] rounded-3xl"
-        style={{
-          background: '#0d1318',
-          border: '1px solid rgba(255,255,255,0.1)',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(78,140,90,0.1)',
-        }}
+        className="login-modal-card"
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white"
+          className="login-modal-close"
         >
           <X size={16} />
         </button>
 
-        <div className="p-9">
-          <div className="mb-7 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4e8c5a] text-base font-extrabold text-white">
+        <div className="login-modal-content">
+          <div className="login-modal-brand">
+            <div className="login-modal-logo">
               И
             </div>
             <div>
-              <div className="text-[14px] font-extrabold text-white">Информатика ЕГЭ</div>
-              <div className="text-[11px] text-white/40">Подготовка к экзамену</div>
+              <div className="login-modal-title">Информатика ЕГЭ</div>
+              <div className="login-modal-subtitle">Подготовка к экзамену</div>
             </div>
           </div>
 
-          <div className="mb-7 flex gap-1 rounded-xl bg-white/[0.05] p-1">
+          <div className="login-modal-tabs">
             {(['login', 'register'] as Tab[]).map(t => (
               <button
                 key={t}
                 onClick={() => switchTab(t)}
-                className="flex-1 rounded-lg py-2.5 text-[13px] font-bold transition-all"
-                style={{
-                  background: tab === t ? '#4e8c5a' : 'transparent',
-                  color: tab === t ? '#fff' : 'rgba(255,255,255,0.45)',
-                }}
+                className={`login-modal-tab ${tab === t ? 'is-active' : ''}`}
               >
                 {t === 'login' ? 'Войти' : 'Регистрация'}
               </button>
@@ -144,7 +133,7 @@ export function LoginModal({ onClose, initialTab = 'login' }: Props) {
           </div>
 
           {tab === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="login-modal-form">
               <LoginField
                 ref={firstInputRef}
                 label="Логин"
@@ -172,15 +161,15 @@ export function LoginModal({ onClose, initialTab = 'login' }: Props) {
                 Войти в платформу →
               </SubmitButton>
 
-              <p className="text-center text-[12px] text-white/35">
+              <p className="login-modal-switch">
                 Нет аккаунта?{' '}
-                <button type="button" onClick={() => switchTab('register')} className="font-semibold text-[#62aa78] hover:underline">
+                <button type="button" onClick={() => switchTab('register')}>
                   Зарегистрироваться
                 </button>
               </p>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
+            <form onSubmit={handleRegister} className="login-modal-form">
               <LoginField
                 ref={firstInputRef}
                 label="Логин"
@@ -218,9 +207,9 @@ export function LoginModal({ onClose, initialTab = 'login' }: Props) {
                 Зарегистрироваться →
               </SubmitButton>
 
-              <p className="text-center text-[12px] text-white/35">
+              <p className="login-modal-switch">
                 Уже есть аккаунт?{' '}
-                <button type="button" onClick={() => switchTab('login')} className="font-semibold text-[#62aa78] hover:underline">
+                <button type="button" onClick={() => switchTab('login')}>
                   Войти
                 </button>
               </p>
@@ -242,7 +231,7 @@ const LoginField = React.forwardRef<HTMLInputElement, {
   type?: string;
 }>(({ label, value, onChange, placeholder, autoComplete, inputCls, type = 'text' }, ref) => (
   <div>
-    <label className="mb-2 block text-[11px] font-bold uppercase tracking-widest text-white/40">
+    <label className="login-modal-label">
       {label}
     </label>
     <input
@@ -278,10 +267,10 @@ function PasswordField({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-[11px] font-bold uppercase tracking-widest text-white/40">
+      <label className="login-modal-label">
         {label}
       </label>
-      <div className="relative">
+      <div className="login-modal-password">
         <input
           type={show ? 'text' : 'password'}
           value={value}
@@ -293,7 +282,7 @@ function PasswordField({
         <button
           type="button"
           onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 transition-colors hover:text-white/70"
+          className="login-modal-eye"
           tabIndex={-1}
         >
           {show ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -306,7 +295,7 @@ function PasswordField({
 function FormError({ error }: { error: string }) {
   if (!error) return null;
   return (
-    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-[13px] font-medium text-red-400">
+    <div className="login-modal-error">
       {error}
     </div>
   );
@@ -317,14 +306,10 @@ function SubmitButton({ children, loading, loadingText }: { children: React.Reac
     <button
       type="submit"
       disabled={loading}
-      className="w-full rounded-xl py-3.5 text-[15px] font-bold text-white transition-all hover:brightness-110 disabled:opacity-60"
-      style={{
-        background: '#4e8c5a',
-        boxShadow: '0 0 24px rgba(78,140,90,0.35)',
-      }}
+      className="login-modal-submit"
     >
       {loading
-        ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> {loadingText}</span>
+        ? <span className="login-modal-loading"><Loader2 size={16} className="animate-spin" /> {loadingText}</span>
         : children
       }
     </button>

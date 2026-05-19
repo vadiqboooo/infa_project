@@ -8,6 +8,7 @@ interface Props {
     onChange: (val: AnswerVal) => void;
     disabled?: boolean;
     egeNumber?: number;
+    isMath?: boolean;
     // Per-element correctness feedback (for tasks 26/27 after check)
     // pair (26): boolean[] of length 2
     // table (27): boolean[][] shape 2x2
@@ -69,13 +70,77 @@ const stringifyTable = (arr: (number | string)[][]): string => {
     return trimmed.map(row => row.join(' ')).join('\n');
 };
 
-export default function AnswerInput({ type, value, onChange, disabled, egeNumber, feedback }: Props) {
+const getArrayValue = (value: AnswerVal, size: number): (number | string)[] => {
+    const source = Array.isArray(value) && !Array.isArray(value[0]) ? value as (number | string)[] : [];
+    return Array.from({ length: size }, (_, index) => source[index] ?? "");
+};
+
+export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, feedback }: Props) {
     const formatValue = (v: any) => (v === null || v === undefined ? "" : String(v));
 
     // Tailwind classes for per-cell feedback color
     const cellCls = (ok: boolean | undefined) =>
         ok === true ? "!border-emerald-400 !bg-emerald-400/10 !text-emerald-200" :
         ok === false ? "!border-red-400 !bg-red-400/10 !text-red-200" : "";
+
+    if (isMath && (egeNumber === 13 || egeNumber === 19)) {
+        const labels = egeNumber === 13 ? ["А", "Б"] : ["А", "Б", "В"];
+        const val = getArrayValue(value, labels.length);
+
+        return (
+            <div className="math-part-inputs">
+                {labels.map((label, index) => (
+                    <label key={label} className="math-part-field">
+                        <span className="math-part-label">Ответ {label}</span>
+                        <input
+                            type="text"
+                            className="input answer-input-single"
+                            value={formatValue(val[index])}
+                            onChange={(e) => {
+                                const next = [...val];
+                                next[index] = e.target.value;
+                                onChange(next);
+                            }}
+                            disabled={disabled}
+                            placeholder=""
+                        />
+                    </label>
+                ))}
+            </div>
+        );
+    }
+
+    if (isMath && (egeNumber === 14 || egeNumber === 17)) {
+        const val = getArrayValue(value, 2);
+
+        return (
+            <div className="math-part-inputs">
+                <label className="math-part-field">
+                    <span className="math-part-label">Ответ А - доказательство</span>
+                    <textarea
+                        className="input math-proof-input"
+                        value={formatValue(val[0])}
+                        onChange={(e) => onChange([e.target.value, val[1]])}
+                        disabled={disabled}
+                        placeholder=""
+                        rows={4}
+                    />
+                </label>
+                <label className="math-part-field">
+                    <span className="math-part-label">Ответ Б - число</span>
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        className="input answer-input-single"
+                        value={formatValue(val[1])}
+                        onChange={(e) => onChange([val[0], parseInputValue(e.target.value)])}
+                        disabled={disabled}
+                        placeholder=""
+                    />
+                </label>
+            </div>
+        );
+    }
 
     if (type === "text") {
         return (

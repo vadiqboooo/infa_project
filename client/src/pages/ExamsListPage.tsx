@@ -15,6 +15,7 @@ import {
 import { clsx } from 'clsx';
 import { useNavigation } from '../hooks/useApi';
 import type { TopicNav } from '../api/types';
+import { useTheme } from '../context/ThemeContext';
 
 const CATEGORY_STYLE = {
     control: {
@@ -73,6 +74,33 @@ const CATEGORY_STYLE = {
 
 type CategoryKey = keyof typeof CATEGORY_STYLE;
 
+const LIGHT_CATEGORY_STYLE: Record<CategoryKey, { background: string; border: string; glow: string; watermark: string }> = {
+    control: {
+        background: 'linear-gradient(135deg, rgba(244,251,255,0.98) 0%, rgba(232,246,255,0.98) 54%, rgba(255,255,255,0.98) 100%)',
+        border: 'border-sky-300/45',
+        glow: 'rgba(14,165,233,0.13)',
+        watermark: 'rgba(3,105,161,0.11)',
+    },
+    variants: {
+        background: 'linear-gradient(135deg, rgba(240,253,246,0.98) 0%, rgba(219,246,233,0.98) 52%, rgba(255,255,255,0.98) 100%)',
+        border: 'border-emerald-300/45',
+        glow: 'rgba(16,185,129,0.16)',
+        watermark: 'rgba(13,122,74,0.12)',
+    },
+    math: {
+        background: 'linear-gradient(135deg, rgba(240,253,250,0.98) 0%, rgba(218,245,242,0.98) 54%, rgba(255,255,255,0.98) 100%)',
+        border: 'border-teal-300/45',
+        glow: 'rgba(20,184,166,0.14)',
+        watermark: 'rgba(15,118,110,0.12)',
+    },
+    mock: {
+        background: 'linear-gradient(135deg, rgba(248,245,255,0.98) 0%, rgba(237,233,254,0.98) 52%, rgba(255,255,255,0.98) 100%)',
+        border: 'border-violet-300/45',
+        glow: 'rgba(124,58,237,0.13)',
+        watermark: 'rgba(91,75,183,0.12)',
+    },
+};
+
 const TABS: { key: CategoryKey; label: string }[] = [
     { key: 'control', label: 'Контрольные' },
     { key: 'variants', label: 'Варианты' },
@@ -82,7 +110,10 @@ const TABS: { key: CategoryKey; label: string }[] = [
 
 function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: CategoryKey }) {
     const navigate = useNavigate();
+    const { theme } = useTheme();
     const style = CATEGORY_STYLE[categoryKey];
+    const isLight = theme === 'light';
+    const lightStyle = LIGHT_CATEGORY_STYLE[categoryKey];
     const Icon = style.icon;
     const isLocked = !!variant.is_locked;
 
@@ -117,17 +148,18 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
                 'group relative min-h-[194px] w-full overflow-hidden rounded-[18px] border p-5 text-left',
                 'shadow-[0_18px_48px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.03]',
                 'transition duration-300',
+                isLight && 'exam-card-light',
                 isLocked
                     ? 'cursor-not-allowed opacity-70'
                     : 'hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_22px_60px_rgba(0,0,0,0.34)]',
-                style.border,
+                isLight ? lightStyle.border : style.border,
             )}
-            style={{ background: style.background }}
+            style={{ background: isLight ? lightStyle.background : style.background }}
         >
             <div
                 aria-hidden="true"
                 className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full blur-3xl"
-                style={{ background: style.glow }}
+                style={{ background: isLight ? lightStyle.glow : style.glow }}
             />
             <div
                 aria-hidden="true"
@@ -139,7 +171,10 @@ function ExamCard({ variant, categoryKey }: { variant: TopicNav; categoryKey: Ca
             />
 
             {showLargeScore && (
-                <div className="pointer-events-none absolute bottom-1 right-4 z-0 select-none text-[82px] font-black leading-none tracking-normal text-white/[0.08] transition-transform duration-700 group-hover:scale-105">
+                <div
+                    className="exam-score-watermark pointer-events-none absolute bottom-1 right-4 z-0 select-none text-[82px] font-black leading-none tracking-normal text-white/[0.08] transition-transform duration-700 group-hover:scale-105"
+                    style={isLight ? { color: lightStyle.watermark } : undefined}
+                >
                     {visibleScore}
                 </div>
             )}
@@ -278,7 +313,7 @@ export default function ExamsListPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1400px] p-4 animate-in fade-in duration-500 md:p-8">
+        <div className="exams-list-page mx-auto max-w-[1400px] p-4 animate-in fade-in duration-500 md:p-8">
             <div className="mb-6 flex gap-6 overflow-x-auto border-b border-white/10 scrollbar-hide">
                 {TABS.map(tab => {
                     const isActive = activeTab === tab.key;

@@ -32,6 +32,7 @@ function apiFetch<T>(path: string, apiKey: string, options: RequestInit = {}): P
 }
 
 type TopicCategory = 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
+type TopicCourseType = 'year' | 'summer' | 'common';
 
 interface TaskFile {
     url: string;
@@ -136,6 +137,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
         tasks?: ParsedTask[];
         topic_title?: string;
         category?: TopicCategory;
+        course_type?: TopicCourseType;
         time_limit_minutes?: number;
         is_mock?: boolean;
         ege_number?: number | null;
@@ -148,6 +150,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [topicTitle, setTopicTitle] = useState(initial?.topic_title ?? '');
     const [category, setCategory] = useState<TopicCategory>(initial?.category ?? 'variants');
+    const [courseType, setCourseType] = useState<TopicCourseType>(initial?.course_type ?? 'common');
     const [isMock, setIsMock] = useState(initial?.is_mock ?? false);
     const [timeLimitMinutes, setTimeLimitMinutes] = useState(initial?.time_limit_minutes ?? 235);
     const [topicEgeNumber, setTopicEgeNumber] = useState<number | null>(initial?.ege_number ?? null);
@@ -472,7 +475,9 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                 method: 'POST',
                 body: JSON.stringify({
                     topic_title: topicTitle.trim(),
-                    category, is_mock: isMock,
+                    category,
+                    course_type: category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType,
+                    is_mock: isMock,
                     time_limit_minutes: timeLimitMinutes,
                     ege_number: topicEgeNumber,
                     ege_number_end: topicEgeNumberEnd,
@@ -566,10 +571,29 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5">Курс</label>
+                                    <select
+                                        value={category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType}
+                                        onChange={e => setCourseType(e.target.value as TopicCourseType)}
+                                        disabled={category === 'variants' || category === 'math' || category === 'mock'}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-300 transition-all disabled:text-gray-400"
+                                    >
+                                        <option value="year">Годовой курс</option>
+                                        <option value="summer">Летний курс</option>
+                                        <option value="common">Общий контент</option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5">Категория</label>
                                     <select
                                         value={category}
-                                        onChange={e => { const v = e.target.value as TopicCategory; setCategory(v); setIsMock(v === 'mock'); }}
+                                        onChange={e => {
+                                            const v = e.target.value as TopicCategory;
+                                            setCategory(v);
+                                            setIsMock(v === 'mock');
+                                            if (v === 'variants' || v === 'math' || v === 'mock') setCourseType('common');
+                                            else if (courseType === 'common') setCourseType('year');
+                                        }}
                                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-300 transition-all"
                                     >
                                         {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -876,6 +900,8 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                         const v = e.target.value as TopicCategory;
                         setCategory(v);
                         setIsMock(v === 'mock');
+                        if (v === 'variants' || v === 'math' || v === 'mock') setCourseType('common');
+                        else if (courseType === 'common') setCourseType('year');
                         if (v !== 'tutorial' && v !== 'homework') {
                             setTopicEgeNumber(null);
                             setTopicEgeNumberEnd(null);
@@ -884,6 +910,17 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                     className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20"
                 >
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-2">Курс</span>
+                <select
+                    value={category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType}
+                    onChange={e => setCourseType(e.target.value as TopicCourseType)}
+                    disabled={category === 'variants' || category === 'math' || category === 'mock'}
+                    className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-[#3F8C62] focus:ring-1 focus:ring-[#3F8C62]/20 disabled:text-gray-400"
+                >
+                    <option value="year">Годовой</option>
+                    <option value="summer">Летний</option>
+                    <option value="common">Общий</option>
                 </select>
 
                 {needsTopicEgeNumber && (

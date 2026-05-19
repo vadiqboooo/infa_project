@@ -83,7 +83,8 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.task-body svg {
+.task-body > svg,
+.task-body .task-inline-svg {
     display: block;
     max-width: 100%;
     height: auto;
@@ -309,6 +310,13 @@
 .task-annotation-plane {
     position: relative;
     transform-origin: top left;
+    border-radius: 1rem;
+}
+
+.task-annotation-plane::after {
+    content: "";
+    display: block;
+    min-height: 0;
 }
 
 .task-annotation-layer {
@@ -402,8 +410,134 @@
     color: #e2e8f0;
 }
 
+.task-body .katex .sqrt > .root,
+.task-body .katex .sqrt > .sqrt-sign {
+    color: inherit;
+}
+
+.task-body .katex .sqrt .sqrt-line {
+    border-top-color: currentColor;
+}
+
 /* Inline формулы */
 .task-body p .katex {
     font-size: 1.1em;
     vertical-align: middle;
+}
+
+.light .task-title {
+    color: #13231b;
+}
+
+.light .task-body {
+    color: #2d3e34;
+}
+
+.light .task-body strong,
+.light .task-body b {
+    color: #13231b;
+}
+
+.light .task-body em,
+.light .task-body i {
+    color: #4f6256;
+}
+
+.light .task-body code,
+.light .task-body pre {
+    background: rgba(35, 71, 49, 0.07);
+    border-color: rgba(57, 79, 66, 0.14);
+    color: #24734a;
+}
+
+.light .task-body img {
+    border-color: rgba(57, 79, 66, 0.14);
+    box-shadow: 0 8px 24px rgba(22, 52, 35, 0.08);
+}
+
+.light .task-body th,
+.light .task-body td {
+    border-color: rgba(57, 79, 66, 0.16);
+}
+
+.light .task-body th {
+    background: rgba(35, 71, 49, 0.06);
+}
+
+.light .task-body .katex,
+.light .task-body .katex-html {
+    color: #13231b;
+}
+
+.dark .task-body .task-inline-svg [stroke="#000"],
+.dark .task-body .task-inline-svg [stroke="#000000"],
+.dark .task-body .task-inline-svg [stroke="black"] {
+    stroke: #e5edf5 !important;
+}
+
+.dark .task-body .task-inline-svg [fill="#000"],
+.dark .task-body .task-inline-svg [fill="#000000"],
+.dark .task-body .task-inline-svg [fill="black"] {
+    fill: #e5edf5 !important;
+}
+
+.dark .task-body .task-inline-svg [fill="#fff"],
+.dark .task-body .task-inline-svg [fill="#ffffff"],
+.dark .task-body .task-inline-svg [fill="white"] {
+    fill: #07111d !important;
+}
+
+.light .task-body .task-inline-svg [stroke="#000"],
+.light .task-body .task-inline-svg [stroke="#000000"],
+.light .task-body .task-inline-svg [stroke="black"] {
+    stroke: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [stroke]:not([stroke="none"]):not([stroke="transparent"]) {
+    stroke: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [stroke="#e5edf5"],
+.light .task-body .task-inline-svg [stroke="#e2e8f0"],
+.light .task-body .task-inline-svg [stroke="#cbd5e1"] {
+    stroke: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [stroke="#94a3b8"],
+.light .task-body .task-inline-svg [stroke="#64748b"],
+.light .task-body .task-inline-svg [stroke="#6b7280"] {
+    stroke: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [fill="#000"],
+.light .task-body .task-inline-svg [fill="#000000"],
+.light .task-body .task-inline-svg [fill="black"] {
+    fill: #13231b !important;
+}
+
+.light .task-body .task-inline-svg text,
+.light .task-body .task-inline-svg tspan,
+.light .task-body .task-inline-svg textPath,
+.light .task-body .task-inline-svg text[fill]:not([fill="none"]):not([fill="transparent"]),
+.light .task-body .task-inline-svg tspan[fill]:not([fill="none"]):not([fill="transparent"]),
+.light .task-body .task-inline-svg textPath[fill]:not([fill="none"]):not([fill="transparent"]) {
+    fill: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [fill="#e5edf5"],
+.light .task-body .task-inline-svg [fill="#e2e8f0"],
+.light .task-body .task-inline-svg [fill="#cbd5e1"] {
+    fill: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [fill="#94a3b8"],
+.light .task-body .task-inline-svg [fill="#64748b"],
+.light .task-body .task-inline-svg [fill="#6b7280"] {
+    fill: #000000 !important;
+}
+
+.light .task-body .task-inline-svg [fill="#fff"],
+.light .task-body .task-inline-svg [fill="#ffffff"],
+.light .task-body .task-inline-svg [fill="white"] {
+    fill: #ffffff !important;
 }

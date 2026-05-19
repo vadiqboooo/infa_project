@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import { Check, Eraser, Loader2, Minus, PenLine, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { authFetch } from "../api/client";
 import type { TaskFile } from "../api/types";
+import { useTheme } from "../context/ThemeContext";
 import "./TaskView.css";
 
 interface Props {
@@ -133,6 +134,18 @@ function normalizeLatexFractions(formula: string): string {
         .replace(/\\frac\s*\{([^{}]+)\}\s*([A-Za-z0-9])/g, "\\frac{$1}{$2}");
 }
 
+function normalizeBareRoots(html: string): string {
+    return html.replace(
+        /(\d*)\s*(?:√|&radic;|&#8730;|&#x221a;|&#x221A;|в€љ)\s*(\([^()]+\)|[A-Za-zА-Яа-яЁё0-9]+(?:[,.][0-9]+)?)/g,
+        (_match, coefficient: string, radicand: string) => {
+            const value = radicand.startsWith("(") && radicand.endsWith(")")
+                ? radicand.slice(1, -1)
+                : radicand;
+            return `\\(${coefficient || ""}\\sqrt{${value}}\\)`;
+        }
+    );
+}
+
 // Декодируем HTML-сущности внутри формулы в LaTeX-команды
 function decodeHtmlEntitiesInFormula(formula: string): string {
     return formula.replace(htmlEntityPattern, (match) => {
@@ -207,6 +220,7 @@ function normalizeStackedFractions(html: string): string {
 // Функция для рендеринга LaTeX-формул
 function renderLatex(text: string): string {
     text = normalizeStackedFractions(text);
+    text = normalizeBareRoots(text);
 
     // Обрабатываем display-формулы $$...$$
     text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
@@ -332,6 +346,61 @@ function isSvgImageSrc(src?: string): boolean {
     return src.startsWith("data:image/svg+xml") || /\.svg(?:[?#].*)?$/i.test(src);
 }
 
+function decodeSvgDataUri(src: string): string | null {
+    const commaIndex = src.indexOf(",");
+    if (!src.startsWith("data:image/svg+xml") || commaIndex < 0) return null;
+    const payload = src.slice(commaIndex + 1);
+    try {
+        return src.includes(";base64,")
+            ? atob(payload)
+            : decodeURIComponent(payload);
+    } catch {
+        return null;
+    }
+}
+
+function encodeSvgDataUri(svg: string): string {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function applySvgTheme(svg: string, theme: "dark" | "light"): string {
+    const ink = theme === "dark" ? "#e5edf5" : "#13231b";
+    const softInk = theme === "dark" ? "#94a3b8" : "#607064";
+    const paper = theme === "dark" ? "#07111d" : "#ffffff";
+
+    let themed = svg
+        .replace(/(stroke=["'])(?:#000000|#000|black|rgb\(0,\s*0,\s*0\))(["'])/gi, `$1${ink}$2`)
+        .replace(/(fill=["'])(?:#000000|#000|black|rgb\(0,\s*0,\s*0\))(["'])/gi, `$1${ink}$2`)
+        .replace(/(stroke=["'])(?:#333333|#333|#444444|#444)(["'])/gi, `$1${softInk}$2`)
+        .replace(/(fill=["'])(?:#333333|#333|#444444|#444)(["'])/gi, `$1${softInk}$2`)
+        .replace(/(fill=["'])(?:#ffffff|#fff|white|rgb\(255,\s*255,\s*255\))(["'])/gi, `$1${paper}$2`);
+
+    if (theme === "light") {
+        themed = themed
+            .replace(/(stroke=["'])(?:#e5edf5|#e2e8f0|#cbd5e1)(["'])/gi, `$1${ink}$2`)
+            .replace(/(fill=["'])(?:#e5edf5|#e2e8f0|#cbd5e1)(["'])/gi, `$1${ink}$2`)
+            .replace(/(stroke=["'])(?:#94a3b8|#64748b|#6b7280)(["'])/gi, `$1${softInk}$2`)
+            .replace(/(fill=["'])(?:#94a3b8|#64748b|#6b7280)(["'])/gi, `$1${softInk}$2`)
+            .replace(/(stroke=["'])rgba?\(\s*(?:226|229|203|148)\s*,\s*(?:232|237|213|163)\s*,\s*(?:240|245|225|184)(?:\s*,\s*[\d.]+)?\s*\)(["'])/gi, `$1${softInk}$2`)
+            .replace(/(fill=["'])rgba?\(\s*(?:226|229|203|148)\s*,\s*(?:232|237|213|163)\s*,\s*(?:240|245|225|184)(?:\s*,\s*[\d.]+)?\s*\)(["'])/gi, `$1${softInk}$2`)
+            .replace(/(stroke=["'])(?!(?:none|transparent)\2)[^"']+(["'])/gi, "$1#000000$2")
+            .replace(/(style=["'][^"']*?stroke\s*:\s*)(?!none\b|transparent\b)[^;"']+/gi, "$1#000000")
+            .replace(/(<text\b[^>]*\sfill=["'])(?!(?:none|transparent)\2)[^"']+(["'])/gi, "$1#000000$2")
+            .replace(/(<text\b[^>]*\sstyle=["'][^"']*?fill\s*:\s*)(?!none\b|transparent\b)[^;"']+/gi, "$1#000000")
+            .replace(/(<(?:tspan|textPath)\b[^>]*\sfill=["'])(?!(?:none|transparent)\2)[^"']+(["'])/gi, "$1#000000$2")
+            .replace(/(<(?:tspan|textPath)\b[^>]*\sstyle=["'][^"']*?fill\s*:\s*)(?!none\b|transparent\b)[^;"']+/gi, "$1#000000");
+    }
+
+    return themed;
+}
+
+function themeSvgImageSrc(src: string | undefined, theme: "dark" | "light"): string | undefined {
+    if (!src) return src;
+    const svg = decodeSvgDataUri(src);
+    if (!svg) return src;
+    return encodeSvgDataUri(applySvgTheme(svg, theme));
+}
+
 function parseStyleAttribute(style?: string): React.CSSProperties {
     if (!style) return {};
 
@@ -350,6 +419,16 @@ function getSvgViewBoxSize(viewBox?: string): { width: number; height: number } 
     const parts = viewBox.trim().split(/[\s,]+/).map(Number);
     if (parts.length < 4 || parts.some((part) => !Number.isFinite(part))) return null;
     return { width: Math.max(1, parts[2]), height: Math.max(1, parts[3]) };
+}
+
+function hasAncestorClass(node: any, className: string): boolean {
+    let current = node?.parent;
+    while (current) {
+        const classes = String(current.attribs?.class ?? "").split(/\s+/);
+        if (classes.includes(className)) return true;
+        current = current.parent;
+    }
+    return false;
 }
 
 function InlineTaskSvg({
@@ -397,10 +476,12 @@ function toAnnotationRect(rect: DOMRect, planeRect: DOMRect): AnnotationRect {
 
 function SvgZoomImage({
     attribs,
+    theme,
     getPlaneRect,
     onZoomChange,
 }: {
     attribs: Record<string, string>;
+    theme: "dark" | "light";
     getPlaneRect: () => DOMRect | null;
     onZoomChange: (oldRect: AnnotationRect, newRect: AnnotationRect) => void;
 }) {
@@ -474,7 +555,7 @@ function SvgZoomImage({
                 </button>
             </span>
             <img
-                src={attribs.src}
+                src={themeSvgImageSrc(attribs.src, theme)}
                 alt={attribs.alt ?? ""}
                 title={attribs.title}
                 decoding="async"
@@ -504,6 +585,7 @@ export default function TaskView({
     showAnnotationToggle = true,
     annotationToolbarHostId,
 }: Props) {
+    const { theme } = useTheme();
     const contentRef = useRef<HTMLDivElement | null>(null);
     const planeRef = useRef<HTMLDivElement | null>(null);
     const [tool, setTool] = useState<AnnotationTool>("none");
@@ -525,6 +607,11 @@ export default function TaskView({
     }, []);
 
     const panelOpen = annotationPanelOpen ?? internalAnnotationPanelOpen;
+    const drawingSize = useMemo(() => ({
+        width: contentSize.width,
+        height: panelOpen ? Math.max(contentSize.height + 640, 760) : contentSize.height,
+    }), [contentSize.height, contentSize.width, panelOpen]);
+
     const setPanelOpen = useCallback((open: boolean) => {
         if (!open) setTool("none");
         if (onAnnotationPanelOpenChange) {
@@ -586,7 +673,7 @@ export default function TaskView({
                 return undefined;
             }
 
-            if (node.name === "svg") {
+            if (node.name === "svg" && !hasAncestorClass(node, "katex")) {
                 return (
                     <InlineTaskSvg attribs={node.attribs ?? {}}>
                         {domToReact(node.children ?? [], options)}
@@ -595,12 +682,17 @@ export default function TaskView({
             }
 
             if (!annotatable || node.name !== "img" || !isSvgImageSrc(node.attribs?.src)) {
+                if (node.name === "img" && isSvgImageSrc(node.attribs?.src)) {
+                    const props = attributesToProps(node.attribs ?? {}) as React.ImgHTMLAttributes<HTMLImageElement>;
+                    return <img {...props} src={themeSvgImageSrc(node.attribs?.src, theme)} />;
+                }
                 return undefined;
             }
 
             return (
                 <SvgZoomImage
                     attribs={node.attribs}
+                    theme={theme}
                     getPlaneRect={getPlaneRect}
                     onZoomChange={handleSvgZoomChange}
                 />
@@ -609,7 +701,7 @@ export default function TaskView({
         };
 
         return options;
-    }, [annotatable, getPlaneRect, handleSvgZoomChange]);
+    }, [annotatable, getPlaneRect, handleSvgZoomChange, theme]);
 
     const parsedContent = useMemo(() => {
         const processedContent = renderLatex(normalizeEntities(content));
@@ -688,8 +780,8 @@ export default function TaskView({
 
         const rect = plane.getBoundingClientRect();
         return {
-            x: Math.max(0, Math.min(contentSize.width, event.clientX - rect.left)),
-            y: Math.max(0, Math.min(contentSize.height, event.clientY - rect.top)),
+            x: Math.max(0, Math.min(drawingSize.width, event.clientX - rect.left)),
+            y: Math.max(0, Math.min(drawingSize.height, event.clientY - rect.top)),
         };
     };
 
@@ -754,7 +846,7 @@ export default function TaskView({
         setDrawingSaved(false);
         setDrawingSaveError(null);
         try {
-            const blob = await renderStrokesToPngBlob(strokes, contentSize);
+            const blob = await renderStrokesToPngBlob(strokes, drawingSize);
             const form = new FormData();
             form.append("file", blob, `task-${annotationTaskId}-drawing.png`);
             const response = await authFetch(`/api/tasks/${annotationTaskId}/solution/upload/image`, {
@@ -897,23 +989,24 @@ export default function TaskView({
                     <div
                         className="task-annotation-canvas"
                         style={{
-                            width: contentSize.width ? `${contentSize.width}px` : undefined,
-                            minHeight: contentSize.height ? `${contentSize.height}px` : undefined,
+                            width: drawingSize.width ? `${drawingSize.width}px` : undefined,
+                            minHeight: drawingSize.height ? `${drawingSize.height}px` : undefined,
                         }}
                     >
                         <div
                             ref={planeRef}
                             className="task-annotation-plane"
                             style={{
-                                width: contentSize.width ? `${contentSize.width}px` : "100%",
+                                width: drawingSize.width ? `${drawingSize.width}px` : "100%",
+                                minHeight: drawingSize.height ? `${drawingSize.height}px` : undefined,
                             }}
                         >
                             {body}
                             <svg
                                 className={`task-annotation-layer ${panelOpen && tool !== "none" ? "drawing" : ""}`}
-                                width={contentSize.width || 1}
-                                height={contentSize.height || 1}
-                                viewBox={`0 0 ${contentSize.width || 1} ${contentSize.height || 1}`}
+                                width={drawingSize.width || 1}
+                                height={drawingSize.height || 1}
+                                viewBox={`0 0 ${drawingSize.width || 1} ${drawingSize.height || 1}`}
                                 onPointerDown={handlePointerDown}
                                 onPointerMove={handlePointerMove}
                                 onPointerUp={stopDrawing}

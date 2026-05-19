@@ -1,6 +1,10 @@
 """Solving router — answer checking & AI-assisted hints."""
 
 import mimetypes
+import base64
+import re
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +42,11 @@ router = APIRouter(prefix="/tasks", tags=["solving"])
 
 class TaskSolutionIn(BaseModel):
     code: str | None = None
+
+
+class TaskSolutionOcrOut(BaseModel):
+    text: str
+    raw_text: str
 
 
 class TaskSolutionCommentOut(BaseModel):
@@ -673,6 +682,232 @@ def _solution_upload_suffix(file: UploadFile, kind: str) -> str:
     if kind == "image" and file.content_type == "image/png":
         return ".png"
     return guessed or ""
+
+
+def _solution_upload_path_from_url(url: str | None) -> Path | None:
+    if not url or not url.startswith("/uploads/"):
+        return None
+    uploads_root = Path("uploads").resolve()
+    path = Path(url.lstrip("/")).resolve()
+    try:
+        path.relative_to(uploads_root)
+    except ValueError:
+        return None
+    return path
+
+
+def _normalize_ocr_math_to_latex(raw_text: str) -> str:
+    text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
+    replacements = {
+        "≤": r"\le ",
+        "≥": r"\ge ",
+        "≠": r"\ne ",
+        "≈": r"\approx ",
+        "∞": r"\infty ",
+        "π": r"\pi ",
+        "Π": r"\Pi ",
+        "α": r"\alpha ",
+        "β": r"\beta ",
+        "γ": r"\gamma ",
+        "δ": r"\delta ",
+        "φ": r"\varphi ",
+        "ϕ": r"\varphi ",
+        "ω": r"\omega ",
+        "∠": r"\angle ",
+        "△": r"\triangle ",
+        "∆": r"\triangle ",
+        "°": r"^\circ ",
+        "·": r"\cdot ",
+        "×": r"\times ",
+        "÷": r"\div ",
+        "→": r"\to ",
+        "⇒": r"\Rightarrow ",
+        "⇔": r"\Leftrightarrow ",
+    }
+    for src, dst in replacements.items():
+        text = text.replace(src, dst)
+
+    text = re.sub(r"√\s*\(?\s*([A-Za-zА-Яа-я0-9]+)\s*\)?", r"\\sqrt{\1}", text)
+    text = re.sub(r"(?<![\w}])(\d+)\s*/\s*(\d+)(?![\w{])", r"\\frac{\1}{\2}", text)
+    text = re.sub(r"\b([A-Za-zА-Яа-я])\s*\^\s*(\d+)\b", r"\1^{\2}", text)
+    text = re.sub(r"\blog\s*([0-9]+)\s*\((.+?)\)", r"\\log_{\1}(\2)", text)
+    text = re.sub(r"(?<!\\)\b(sin|cos|tg|tan)\b", lambda m: "\\" + ("tan" if m.group(1) == "tg" else m.group(1)), text)
+
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    return "\n".join(lines)
+
+
+def _run_tesseract_ocr(image_path: Path) -> str:
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Pillow is required for OCR preprocessing: {exc}",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        prepared_path = Path(tmp_dir) / "ocr-input.png"
+        try:
+            with Image.open(image_path) as image:
+                grayscale = ImageOps.grayscale(image)
+                grayscale = ImageOps.autocontrast(grayscale)
+                grayscale.save(prepared_path)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Cannot read image: {exc}")
+
+        try:
+            result = subprocess.run(
+                [
+                    settings.TESSERACT_CMD,
+                    str(prepared_path),
+                    "stdout",
+                    "-l",
+                    settings.TESSERACT_LANG,
+                    "--psm",
+                    "6",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Tesseract не установлен или не найден в PATH. "
+                    "Установите Tesseract OCR и укажите путь в server/.env: "
+                    'TESSERACT_CMD="C:\\Program Files\\Tesseract-OCR\\tesseract.exe"'
+                ),
+            )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Распознавание заняло слишком много времени")
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Tesseract OCR failed").strip()
+        if "Failed loading language" in detail or "Error opening data file" in detail:
+            detail = (
+                "Tesseract установлен, но не найдены языковые данные. "
+                f"Проверьте TESSERACT_LANG={settings.TESSERACT_LANG!r} и наличие файлов rus.traineddata/eng.traineddata."
+            )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+    return result.stdout.strip()
+
+
+def _strip_markdown_code_fence(text: str) -> str:
+    cleaned = text.strip()
+    match = re.fullmatch(r"```(?:latex|tex|text|markdown)?\s*([\s\S]*?)\s*```", cleaned, flags=re.IGNORECASE)
+    return match.group(1).strip() if match else cleaned
+
+
+async def _recognize_solution_image_with_ai(image_path: Path) -> str:
+    if not settings.LLM_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM_API_KEY не задан. Нельзя распознать фото через ИИ.",
+        )
+
+    mime_type = mimetypes.guess_type(str(image_path))[0] or "image/png"
+    image_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    model = settings.LLM_VISION_MODEL or settings.LLM_MODEL
+    headers = {
+        "Authorization": f"Bearer {settings.LLM_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "Edu Platform",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Ты OCR-модуль для школьных математических решений. "
+                    "Распознай рукописный или печатный текст с изображения и верни только редактируемый текст решения. "
+                    "Математические формулы записывай в LaTeX. Не решай задачу заново, не исправляй смысл, не добавляй объяснения от себя. "
+                    "Если часть изображения не читается, пометь это как [неразборчиво]."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Преобразуй это решение в текст с LaTeX. "
+                            "Сохрани структуру строк и доказательства насколько возможно. "
+                            "Верни только результат распознавания, без комментариев."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{image_data}"},
+                    },
+                ],
+            },
+        ],
+        "temperature": 0,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp = await client.post(
+                f"{settings.LLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Ошибка подключения к LLM API: {exc}",
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM API вернул {resp.status_code}: {resp.text}",
+        )
+
+    try:
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Не удалось разобрать ответ LLM API: {exc}",
+        )
+
+    text = _strip_markdown_code_fence(text)
+    if not text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ИИ не вернул распознанный текст")
+    return text
+
+
+@router.post("/{task_id}/solution/ocr-image", response_model=TaskSolutionOcrOut)
+async def recognize_own_task_solution_image(
+    task_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_task_access(task_id, user, db)
+    result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.user_id == user.id, UserTaskSolution.task_id == task_id)
+    )
+    solution = result.scalar_one_or_none()
+    image_path = _solution_upload_path_from_url(solution.image_url if solution else None)
+    if image_path is None or not image_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сначала прикрепите фото решения")
+
+    if settings.LLM_API_KEY:
+        raw_text = await _recognize_solution_image_with_ai(image_path)
+        return TaskSolutionOcrOut(text=raw_text, raw_text=raw_text)
+
+    raw_text = _run_tesseract_ocr(image_path)
+    if not raw_text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="На изображении не удалось распознать текст")
+    return TaskSolutionOcrOut(text=_normalize_ocr_math_to_latex(raw_text), raw_text=raw_text)
 
 
 @router.post("/{task_id}/solution/upload/{kind}", response_model=TaskSolutionOut)

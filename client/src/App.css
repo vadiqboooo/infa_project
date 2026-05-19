@@ -103,3 +103,547 @@
   border-color: rgba(148, 163, 184, 0.18);
   color: #e5edf5;
 }
+
+.theme-toggle {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.light body {
+  background: #f4faf6;
+  color: #13231b;
+}
+
+.light .bg-\[\#030A12\] {
+  background-color: #f4faf6 !important;
+}
+
+.light .bg-\[\#07111D\],
+.light .bg-\[\#07111D\]\/92,
+.light .bg-\[\#07111D\]\/95,
+.light .bg-\[\#07111D\]\/72 {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.light .border-white\/10 {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+}
+
+.light .bg-white\/10,
+.light .bg-white\/\[0\.03\],
+.light .bg-white\/\[0\.04\],
+.light .bg-white\/\[0\.05\],
+.light .bg-white\/\[0\.06\],
+.light .bg-white\/\[0\.07\] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.light .hover\:bg-white\/5:hover,
+.light .hover\:bg-white\/\[0\.06\]:hover,
+.light .hover\:bg-white\/\[0\.07\]:hover,
+.light .hover\:bg-white\/\[0\.10\]:hover {
+  background-color: rgba(222, 238, 229, 0.78) !important;
+}
+
+.light .text-slate-100,
+.light .text-slate-200,
+.light .text-slate-300 {
+  color: #13231b !important;
+}
+
+.light .text-slate-400,
+.light .text-slate-500,
+.light .text-slate-600 {
+  color: #607064 !important;
+}
+
+.light .hover\:text-white:hover,
+.light .hover\:text-slate-300:hover {
+  color: #13231b !important;
+}
+
+.light .theme-toggle {
+  border-color: rgba(57, 79, 66, 0.14);
+  background: rgba(255, 255, 255, 0.76);
+  color: #294033;
+}
+
+.light .theme-toggle:hover {
+  background: #eaf5ee;
+  color: #102017;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 {
+  border-color: rgba(45, 72, 55, 0.14) !important;
+  background: #ffffff !important;
+  color: #17251d !important;
+  box-shadow: 10px 0 34px rgba(22, 52, 35, 0.06) !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .text-white {
+  color: #17251d !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .text-slate-300,
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .text-slate-400,
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .text-slate-500,
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .text-slate-600 {
+  color: #4d6256 !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 a:not([class*="bg-[#113E2D]"]) {
+  color: #3f5549 !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 a:not([class*="bg-[#113E2D]"]):hover,
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 button:hover {
+  background-color: #eef7f1 !important;
+  color: #102017 !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .bg-\[\#113E2D\] {
+  background-color: #0d4f35 !important;
+  color: #d9ffea !important;
+  box-shadow: 0 10px 24px rgba(13, 79, 53, 0.14) !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .bg-\[\#113E2D\] span,
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .bg-\[\#113E2D\] svg {
+  color: #d9ffea !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .bg-white\/\[0\.04\] {
+  background-color: #f5faf7 !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .hover\:bg-white\/\[0\.07\]:hover {
+  background-color: #eef7f1 !important;
+}
+
+.light .hidden.md\:flex > .flex.flex-col.h-screen.w-60 .border-\[\#07111D\] {
+  border-color: #ffffff !important;
+}
+
+.light .topic-card-light,
+.light .exam-card-light {
+  border-color: rgba(63, 140, 98, 0.18) !important;
+  box-shadow: 0 16px 42px rgba(22, 52, 35, 0.09) !important;
+}
+
+.light .exam-card-light {
+  box-shadow: 0 18px 44px rgba(22, 52, 35, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
+}
+
+.light .topic-card-light h3,
+.light .exam-card-light h3,
+.light .exam-card-light h2,
+.light .topic-card-light .text-white,
+.light .exam-card-light .text-white {
+  color: #13231b !important;
+  text-shadow: none !important;
+}
+
+.light .topic-card-light .text-slate-400,
+.light .exam-card-light .text-slate-400,
+.light .topic-card-light .text-slate-300,
+.light .exam-card-light .text-slate-300 {
+  color: #607064 !important;
+}
+
+.light .topic-card-light .bg-white\/10,
+.light .topic-card-light .bg-white\/\[0\.06\],
+.light .exam-card-light .bg-white\/10,
+.light .exam-card-light .bg-white\/\[0\.06\] {
+  background-color: rgba(35, 71, 49, 0.08) !important;
+}
+
+.light .exam-card-light img {
+  mix-blend-mode: multiply;
+}
+
+.light .topic-card-light img {
+  mix-blend-mode: normal;
+}
+
+.light .topic-card-light [class*="drop-shadow"] {
+  filter: none !important;
+}
+
+.light .topic-card-light h3 {
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+.light .exams-list-page {
+  color: #13231b;
+}
+
+.light .exams-list-page .border-b.border-white\/10 {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+}
+
+.light .exams-list-page button.border-\[\#21B66F\] {
+  color: #0d7a4a !important;
+}
+
+.light .exams-list-page button.border-transparent {
+  color: #506458 !important;
+}
+
+.light .exams-list-page button.border-transparent:hover {
+  color: #13231b !important;
+}
+
+.light .exams-list-page h2,
+.light .exams-list-page .text-white {
+  color: #13231b !important;
+  text-shadow: none !important;
+}
+
+.light .exams-list-page .text-slate-300,
+.light .exams-list-page .text-slate-400,
+.light .exams-list-page .text-slate-500 {
+  color: #5f7066 !important;
+}
+
+.light .exam-card-light .text-sky-100,
+.light .exam-card-light .text-sky-200 {
+  color: #0369a1 !important;
+}
+
+.light .exam-card-light .text-emerald-100,
+.light .exam-card-light .text-emerald-200 {
+  color: #158354 !important;
+}
+
+.light .exam-card-light .text-teal-100 {
+  color: #0f766e !important;
+}
+
+.light .exam-card-light .text-violet-100,
+.light .exam-card-light .text-violet-200 {
+  color: #5b4bb7 !important;
+}
+
+.light .exam-card-light .text-amber-200 {
+  color: #b45309 !important;
+}
+
+.light .exam-card-light .bg-sky-400\/10,
+.light .exam-card-light .bg-sky-400\/12,
+.light .exam-card-light .bg-emerald-400\/10,
+.light .exam-card-light .bg-emerald-400\/12,
+.light .exam-card-light .bg-teal-300\/10,
+.light .exam-card-light .bg-teal-300\/12,
+.light .exam-card-light .bg-violet-400\/10,
+.light .exam-card-light .bg-violet-400\/12,
+.light .exam-card-light .bg-white\/\[0\.06\] {
+  background-color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.light .exam-card-light .ring-white\/10,
+.light .exam-card-light .ring-sky-300\/20,
+.light .exam-card-light .ring-emerald-300\/20,
+.light .exam-card-light .ring-teal-200\/20,
+.light .exam-card-light .ring-violet-300\/20 {
+  --tw-ring-color: rgba(57, 79, 66, 0.12) !important;
+}
+
+.light .exam-card-light .group-hover\:bg-white\/\[0\.10\] {
+  background-color: rgba(255, 255, 255, 0.58) !important;
+  color: #0d7a4a !important;
+  box-shadow: 0 8px 20px rgba(22, 52, 35, 0.07);
+}
+
+.light .exam-card-light:hover .group-hover\:bg-white\/\[0\.10\] {
+  background-color: rgba(22, 131, 79, 0.12) !important;
+}
+
+.light .exam-card-light .exam-score-watermark {
+  text-shadow: none !important;
+}
+
+.light .exam-card-light,
+.light .exam-card-light * {
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+.light .exam-card-light .rounded-full {
+  border-color: rgba(57, 79, 66, 0.10);
+}
+
+.light .exam-card-light .bg-\[\#21B66F\],
+.light .exams-list-page .bg-\[\#21B66F\] {
+  color: #06351f !important;
+}
+
+.light .home-page {
+  color: #13231b;
+}
+
+.light .home-panel,
+.light .home-metric-card {
+  border-color: rgba(57, 79, 66, 0.12) !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 42px rgba(22, 52, 35, 0.08) !important;
+}
+
+.light .home-metric-card {
+  background:
+    radial-gradient(circle at 86% 18%, rgba(33, 182, 111, 0.08), transparent 34%),
+    #ffffff !important;
+}
+
+.light .home-page .text-white,
+.light .home-page .text-slate-100,
+.light .home-page .text-slate-200,
+.light .home-page .text-slate-300 {
+  color: #13231b !important;
+}
+
+.light .home-page .text-slate-400,
+.light .home-page .text-slate-500,
+.light .home-page .text-slate-600 {
+  color: #5f7066 !important;
+}
+
+.light .home-page .text-emerald-300,
+.light .home-page .text-emerald-200,
+.light .home-page .text-emerald-100 {
+  color: #158354 !important;
+}
+
+.light .home-page .text-violet-300,
+.light .home-page .text-violet-200,
+.light .home-page .text-violet-100 {
+  color: #6550cc !important;
+}
+
+.light .home-page .text-amber-300,
+.light .home-page .text-amber-200,
+.light .home-page .text-amber-100 {
+  color: #b45309 !important;
+}
+
+.light .home-page .text-green-300,
+.light .home-page .text-green-200,
+.light .home-page .text-green-100 {
+  color: #16834f !important;
+}
+
+.light .home-page .bg-\[\#07111D\] {
+  background-color: #ffffff !important;
+}
+
+.light .home-page input,
+.light .home-page select {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+  background: #ffffff !important;
+  color: #13231b !important;
+}
+
+.light .home-page .bg-white\/10,
+.light .home-page .bg-white\/15,
+.light .home-page .bg-white\/\[0\.03\],
+.light .home-page .bg-white\/\[0\.04\],
+.light .home-page .bg-white\/\[0\.06\] {
+  background-color: rgba(35, 71, 49, 0.07) !important;
+}
+
+.light .home-page .border-white\/10 {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+}
+
+.light .home-page .bg-violet-500\/10 {
+  background-color: rgba(109, 91, 208, 0.10) !important;
+}
+
+.light .home-page .text-violet-200 {
+  color: #5b4bb7 !important;
+}
+
+.light .home-page .home-action-button,
+.light .home-page .bg-\[\#05C96A\],
+.light .home-page .bg-emerald-500,
+.light .home-page .bg-violet-500 {
+  color: #ffffff !important;
+}
+
+.light .task-solve-page {
+  background: #f4faf6 !important;
+  color: #13231b;
+}
+
+.light .task-solve-page > .relative,
+.light .task-solve-page .bg-\[\#07111D\]\/92,
+.light .task-solve-page .bg-\[\#07111D\]\/72,
+.light .task-solve-page .bg-\[\#07111D\] {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: #13231b !important;
+  box-shadow: 0 1px 0 rgba(57, 79, 66, 0.08) !important;
+}
+
+.light .task-solve-page .bg-\[\#0A1522\] {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+  background: #ffffff !important;
+  color: #13231b !important;
+  box-shadow: 0 20px 54px rgba(22, 52, 35, 0.10) !important;
+}
+
+.light .task-solve-page .bg-\[radial-gradient\(circle_at_50\%_0\%\,rgba\(16\,185\,129\,0\.10\)\,transparent_34\%\)\,linear-gradient\(180deg\,rgba\(3\,10\,18\,0\)\,rgba\(3\,10\,18\,0\.96\)\)\] {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(33, 182, 111, 0.10), transparent 34%),
+    linear-gradient(180deg, rgba(244, 250, 246, 0), rgba(230, 239, 234, 0.92)) !important;
+}
+
+.light .task-solve-page .border-white\/10,
+.light .task-solve-page .border-white\/5 {
+  border-color: rgba(57, 79, 66, 0.14) !important;
+}
+
+.light .task-solve-page .text-white,
+.light .task-solve-page .text-slate-100,
+.light .task-solve-page .text-slate-200,
+.light .task-solve-page .text-slate-300 {
+  color: #13231b !important;
+}
+
+.light .task-solve-page .text-slate-400,
+.light .task-solve-page .text-slate-500,
+.light .task-solve-page .text-slate-600,
+.light .task-solve-page .text-slate-700 {
+  color: #5f7066 !important;
+}
+
+.light .task-solve-page .text-emerald-100,
+.light .task-solve-page .text-emerald-200 {
+  color: #0d7a4a !important;
+}
+
+.light .task-solve-page .text-violet-200 {
+  color: #5b4bb7 !important;
+}
+
+.light .task-solve-page .text-amber-200 {
+  color: #b45309 !important;
+}
+
+.light .task-solve-page .text-sky-200 {
+  color: #0369a1 !important;
+}
+
+.light .task-solve-page .text-red-200 {
+  color: #b91c1c !important;
+}
+
+.light .task-solve-page .bg-white\/\[0\.025\],
+.light .task-solve-page .bg-white\/\[0\.04\],
+.light .task-solve-page .bg-white\/\[0\.05\],
+.light .task-solve-page .bg-white\/\[0\.06\],
+.light .task-solve-page .bg-white\/10 {
+  background-color: rgba(35, 71, 49, 0.06) !important;
+}
+
+.light .task-solve-page .hover\:bg-white\/\[0\.06\]:hover,
+.light .task-solve-page .hover\:bg-white\/\[0\.10\]:hover {
+  background-color: rgba(22, 131, 79, 0.10) !important;
+}
+
+.light .task-solve-page .prose-invert {
+  --tw-prose-body: #2d3e34;
+  --tw-prose-headings: #13231b;
+  --tw-prose-lead: #2d3e34;
+  --tw-prose-links: #0d7a4a;
+  --tw-prose-bold: #13231b;
+  --tw-prose-counters: #5f7066;
+  --tw-prose-bullets: #5f7066;
+  --tw-prose-hr: rgba(57, 79, 66, 0.14);
+  --tw-prose-quotes: #13231b;
+  --tw-prose-quote-borders: rgba(57, 79, 66, 0.14);
+  --tw-prose-captions: #5f7066;
+  --tw-prose-code: #24734a;
+  --tw-prose-pre-code: #13231b;
+  --tw-prose-pre-bg: rgba(35, 71, 49, 0.06);
+  --tw-prose-th-borders: rgba(57, 79, 66, 0.20);
+  --tw-prose-td-borders: rgba(57, 79, 66, 0.14);
+}
+
+.light .task-solve-page .ring-\[\#0A1522\],
+.light .task-solve-page .ring-2.ring-\[\#0A1522\] {
+  --tw-ring-color: #ffffff !important;
+}
+
+.light .task-solve-page .border-\[\#07111D\] {
+  border-color: #ffffff !important;
+}
+
+.light .task-solve-page input,
+.light .task-solve-page textarea,
+.light .task-solve-page select {
+  color: #13231b !important;
+}
+
+.light .input,
+.light .table-input {
+  color: #13231b;
+  border-bottom-color: rgba(57, 79, 66, 0.25) !important;
+}
+
+.light .math-part-label,
+.light .task-27-label {
+  color: #5f7066;
+}
+
+.light .input-separator {
+  color: #0d7a4a;
+  opacity: 0.55;
+}
+
+.light .exam-dark {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(33, 182, 111, 0.09), transparent 34%),
+    #f4faf6 !important;
+  color: #13231b;
+}
+
+.light .exam-dark .bg-white,
+.light .exam-dark .bg-gray-50,
+.light .exam-dark .bg-gray-100,
+.light .exam-dark .bg-gray-200 {
+  background-color: #ffffff !important;
+}
+
+.light .exam-dark .text-gray-950,
+.light .exam-dark .text-gray-900,
+.light .exam-dark .text-gray-800,
+.light .exam-dark .text-gray-700,
+.light .exam-dark .text-gray-600 {
+  color: #13231b !important;
+}
+
+.light .exam-dark .text-gray-500,
+.light .exam-dark .text-gray-400,
+.light .exam-dark .text-gray-300 {
+  color: #5f7066 !important;
+}
+
+.light .exam-dark input,
+.light .exam-dark textarea,
+.light .exam-dark select {
+  background-color: transparent !important;
+  border-color: rgba(57, 79, 66, 0.25) !important;
+  color: #13231b !important;
+}
+
+.light .exam-dark input::placeholder,
+.light .exam-dark textarea::placeholder {
+  color: #7a8b80 !important;
+}

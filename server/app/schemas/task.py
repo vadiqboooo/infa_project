@@ -74,8 +74,8 @@ class AnswerIn(BaseModel):
       answers[0] = main task answer (.val)
       answers[1..] = sub-task answers (.val each)
     """
-    val: float | list[float] | list[list[float | str]] | str | None = None
-    answers: list[float | list[float] | list[list[float | str]] | str | None] | None = None
+    val: float | str | list[float | str] | list[list[float | str]] | None = None
+    answers: list[float | str | list[float | str] | list[list[float | str]] | None] | None = None
 
     @field_validator("val", mode="after")
     @classmethod

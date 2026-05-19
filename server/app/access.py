@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.preparation_plan import PreparationPlan
+from app.models.preparation_plan import PreparationPlan, UserPreparationPlan
 from app.models.task import Task
 from app.models.topic import Topic
 from app.models.user import User
@@ -17,8 +17,13 @@ from app.models.user import User
 @dataclass(frozen=True)
 class ContentAccess:
     subscription_plan: str
+    course_type: str
     has_subscription: bool
     trial_task_ids: set[int]
+    can_access_all: bool = False
+
+
+COMMON_TOPIC_COURSE_TYPES = {"common", "all"}
 
 
 def active_subscription_plan(user: User) -> str:
@@ -37,8 +42,28 @@ def active_subscription_plan(user: User) -> str:
     return plan
 
 
+async def active_content_course_type(user: User, db: AsyncSession, subscription_plan: str) -> str:
+    result = await db.execute(
+        select(PreparationPlan.course_type)
+        .join(UserPreparationPlan, UserPreparationPlan.plan_id == PreparationPlan.id)
+        .where(
+            UserPreparationPlan.user_id == user.id,
+            UserPreparationPlan.status == "active",
+        )
+        .order_by(UserPreparationPlan.id.desc())
+        .limit(1)
+    )
+    selected_course = result.scalar_one_or_none()
+    if selected_course in {"year", "summer"}:
+        return selected_course
+    if subscription_plan in {"year", "summer"}:
+        return subscription_plan
+    return "summer"
+
+
 async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
     plan = active_subscription_plan(user)
+    course_type = await active_content_course_type(user, db, plan)
     has_subscription = plan in {"summer", "year"}
     trial_task_ids: set[int] = set()
 
@@ -66,7 +91,7 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
                 task_result = await db.execute(
                     select(Task.id)
                     .join(Topic, Topic.id == Task.topic_id)
-                    .where(Task.ege_number.in_(ege_numbers))
+                    .where(Task.ege_number.in_(ege_numbers), Topic.course_type == "summer")
                     .order_by(Topic.order_index, Task.order_index, Task.id)
                     .limit(2)
                 )
@@ -74,8 +99,10 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
 
     return ContentAccess(
         subscription_plan=plan,
+        course_type=course_type,
         has_subscription=has_subscription,
         trial_task_ids=trial_task_ids,
+        can_access_all=user.role == "admin" and course_type not in {"year", "summer"},
     )
 
 
@@ -83,7 +110,16 @@ def can_access_task(task_id: int, access: ContentAccess) -> bool:
     return access.has_subscription or task_id in access.trial_task_ids
 
 
+def can_access_topic_course(topic: Topic, access: ContentAccess) -> bool:
+    if access.can_access_all:
+        return True
+    course_type = getattr(topic, "course_type", None) or "year"
+    return course_type in COMMON_TOPIC_COURSE_TYPES or course_type == access.course_type
+
+
 def can_access_topic(topic: Topic, access: ContentAccess) -> bool:
+    if not can_access_topic_course(topic, access):
+        return False
     if access.has_subscription:
         return True
     if topic.category in {"control", "variants", "math", "mock"}:
@@ -93,7 +129,13 @@ def can_access_topic(topic: Topic, access: ContentAccess) -> bool:
 
 async def require_task_access(task_id: int, user: User, db: AsyncSession) -> ContentAccess:
     access = await get_content_access(user, db)
-    if not can_access_task(task_id, access):
+    task_result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.topic))
+        .where(Task.id == task_id)
+    )
+    task = task_result.scalar_one_or_none()
+    if task is None or not can_access_topic_course(task.topic, access) or not can_access_task(task_id, access):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",
@@ -104,6 +146,16 @@ async def require_task_access(task_id: int, user: User, db: AsyncSession) -> Con
 async def require_exam_access(user: User, db: AsyncSession) -> ContentAccess:
     access = await get_content_access(user, db)
     if not access.has_subscription:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Subscription required",
+        )
+    return access
+
+
+async def require_exam_topic_access(topic: Topic, user: User, db: AsyncSession) -> ContentAccess:
+    access = await require_exam_access(user, db)
+    if not can_access_topic_course(topic, access):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",

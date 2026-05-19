@@ -3,8 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
+import { ThemeProvider } from "./context/ThemeContext";
 import LoginPage from "./pages/LoginPage";
 import LandingPage from "./pages/LandingPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
 import { HomePage } from "./pages/HomePage";
 import TasksPage from "./pages/TasksPage";
 import { TasksListPage } from "./pages/TasksListPage";
@@ -24,6 +27,8 @@ const queryClient = new QueryClient({
 });
 
 const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
+  { pattern: /^\/terms/, title: "Условия" },
+  { pattern: /^\/privacy/, title: "Политика конфиденциальности" },
   { pattern: /^\/login/, title: "Вход" },
   { pattern: /^\/exams\/\d+/, title: "Пробник" },
   { pattern: /^\/exams/, title: "Пробники" },
@@ -53,46 +58,50 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <PageTitle />
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <PageTitle />
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
 
-            {/* Routes with MainLayout (Sidebar) */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <MainLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<HomePage />} />
-              <Route path="dashboard" element={<HomePage />} />
-              <Route path="exams" element={<ExamsListPage />} />
-              <Route path="tasks" element={<TasksListPage />} />
-              <Route path="tasks/:id" element={<TasksPage />} />
-              <Route path="homework" element={<TasksListPage />} />
-              <Route path="homework/:id" element={<TasksPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="admin/*" element={<AdminPage />} />
-            </Route>
+              {/* Routes with MainLayout (Sidebar) */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <MainLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<HomePage />} />
+                <Route path="dashboard" element={<HomePage />} />
+                <Route path="exams" element={<ExamsListPage />} />
+                <Route path="tasks" element={<TasksListPage />} />
+                <Route path="tasks/:id" element={<TasksPage />} />
+                <Route path="homework" element={<TasksListPage />} />
+                <Route path="homework/:id" element={<TasksPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="admin/*" element={<AdminPage />} />
+              </Route>
 
-            {/* Routes without MainLayout (keep old ones if needed or remove) */}
-            <Route
-              path="/exams/:id"
-              element={
-                <ProtectedRoute>
-                  <ExamPage />
-                </ProtectedRoute>
-              }
-            />
+              {/* Routes without MainLayout (keep old ones if needed or remove) */}
+              <Route
+                path="/exams/:id"
+                element={
+                  <ProtectedRoute>
+                    <ExamPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

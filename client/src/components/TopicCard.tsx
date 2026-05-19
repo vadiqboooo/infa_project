@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { clsx } from "clsx";
 import { ArrowRight, Lock, Sparkles } from "lucide-react";
 import type { TopicImagePosition } from "../api/types";
+import { useTheme } from "../context/ThemeContext";
 
 function ShuttleInImage() {
   const cfg = useMemo(
@@ -69,6 +70,7 @@ type Accent = {
   background: string;
   border: string;
   glow: string;
+  stars?: string;
   progress: string;
   button: string;
   buttonText: string;
@@ -119,6 +121,54 @@ function pickAccent(key: number): Accent {
   return PALETTE[n % PALETTE.length];
 }
 
+const LIGHT_PALETTE: Accent[] = [
+  {
+    background: "linear-gradient(135deg, rgba(228,250,239,0.98) 0%, rgba(212,242,230,0.98) 54%, rgba(246,252,248,0.98) 100%)",
+    border: "border-emerald-300/45",
+    glow: "rgba(16,185,129,0.20)",
+    stars: "radial-gradient(circle at 18% 12%, rgba(13,122,74,0.34) 0 1.2px, transparent 2.3px), radial-gradient(circle at 43% 8%, rgba(22,78,99,0.22) 0 1px, transparent 2px), radial-gradient(circle at 82% 28%, rgba(13,122,74,0.22) 0 1px, transparent 2px), radial-gradient(circle at 70% 78%, rgba(22,78,99,0.18) 0 1px, transparent 2px)",
+    progress: "from-emerald-500 to-green-600",
+    button: "bg-emerald-500/12 ring-1 ring-emerald-600/15 group-hover:bg-emerald-500/18",
+    buttonText: "text-emerald-700",
+    dot: "bg-emerald-500",
+  },
+  {
+    background: "linear-gradient(135deg, rgba(240,235,255,0.98) 0%, rgba(224,234,255,0.98) 54%, rgba(248,250,255,0.98) 100%)",
+    border: "border-violet-300/45",
+    glow: "rgba(139,92,246,0.18)",
+    stars: "radial-gradient(circle at 18% 12%, rgba(109,40,217,0.34) 0 1.2px, transparent 2.3px), radial-gradient(circle at 43% 8%, rgba(37,99,235,0.20) 0 1px, transparent 2px), radial-gradient(circle at 82% 28%, rgba(109,40,217,0.22) 0 1px, transparent 2px), radial-gradient(circle at 70% 78%, rgba(37,99,235,0.16) 0 1px, transparent 2px)",
+    progress: "from-violet-500 to-purple-600",
+    button: "bg-violet-500/12 ring-1 ring-violet-600/15 group-hover:bg-violet-500/18",
+    buttonText: "text-violet-700",
+    dot: "bg-violet-500",
+  },
+  {
+    background: "linear-gradient(135deg, rgba(255,233,241,0.98) 0%, rgba(238,231,249,0.98) 54%, rgba(250,247,252,0.98) 100%)",
+    border: "border-rose-300/45",
+    glow: "rgba(244,63,94,0.18)",
+    stars: "radial-gradient(circle at 18% 12%, rgba(225,29,72,0.34) 0 1.2px, transparent 2.3px), radial-gradient(circle at 43% 8%, rgba(124,58,237,0.20) 0 1px, transparent 2px), radial-gradient(circle at 82% 28%, rgba(225,29,72,0.22) 0 1px, transparent 2px), radial-gradient(circle at 70% 78%, rgba(124,58,237,0.16) 0 1px, transparent 2px)",
+    progress: "from-rose-500 to-pink-600",
+    button: "bg-rose-500/12 ring-1 ring-rose-600/15 group-hover:bg-rose-500/18",
+    buttonText: "text-rose-700",
+    dot: "bg-rose-500",
+  },
+  {
+    background: "linear-gradient(135deg, rgba(255,246,220,0.98) 0%, rgba(236,243,220,0.98) 54%, rgba(253,250,242,0.98) 100%)",
+    border: "border-amber-300/45",
+    glow: "rgba(245,158,11,0.20)",
+    stars: "radial-gradient(circle at 18% 12%, rgba(217,119,6,0.34) 0 1.2px, transparent 2.3px), radial-gradient(circle at 43% 8%, rgba(101,163,13,0.20) 0 1px, transparent 2px), radial-gradient(circle at 82% 28%, rgba(217,119,6,0.22) 0 1px, transparent 2px), radial-gradient(circle at 70% 78%, rgba(101,163,13,0.16) 0 1px, transparent 2px)",
+    progress: "from-amber-400 to-orange-600",
+    button: "bg-amber-500/14 ring-1 ring-amber-600/15 group-hover:bg-amber-500/20",
+    buttonText: "text-amber-700",
+    dot: "bg-amber-500",
+  },
+];
+
+function pickLightAccent(key: number): Accent {
+  const n = Number.isFinite(key) ? Math.abs(Math.trunc(key)) : 0;
+  return LIGHT_PALETTE[n % LIGHT_PALETTE.length];
+}
+
 const ASTRONAUTS = [
   "/character/cute-astronaut-blowing-gum-with-hoodie-cartoon-vector-icon-illustration-science-fashion-isolated.png",
   "/character/cute-astronaut-dancing-cartoon-vector-icon-illustration-science-technology-icon-concept-isolated.png",
@@ -139,6 +189,8 @@ export function TopicCard({
   locked = false,
   trial = false,
 }: TopicCardProps) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const totalSolved = (tutorial?.solved ?? 0) + (homework?.solved ?? 0);
   const totalTasks = (tutorial?.total ?? 0) + (homework?.total ?? 0);
   const pct = totalTasks > 0 ? Math.round((totalSolved / totalTasks) * 100) : 0;
@@ -156,7 +208,8 @@ export function TopicCard({
       : null;
 
   const accentKey = egeNum ?? parseInt(egeId.split("-")[0], 10) ?? 0;
-  const accent = pickAccent(accentKey);
+  const darkAccent = pickAccent(accentKey);
+  const accent = isLight ? pickLightAccent(accentKey) : darkAccent;
   const badgeText = !egeId.includes("-") && egeId.length === 1 ? `0${egeId}` : egeId;
   const fallbackAstronaut = ASTRONAUTS[Math.abs(accentKey) % ASTRONAUTS.length];
   const astronautSrc = characterUrl === null ? null : (characterUrl ?? fallbackAstronaut);
@@ -170,6 +223,7 @@ export function TopicCard({
         "group relative flex min-h-[194px] overflow-hidden rounded-[18px] border p-5",
         "shadow-[0_18px_48px_rgba(0,0,0,0.24)] ring-1 ring-white/[0.03]",
         "transition duration-300",
+        isLight && "topic-card-light",
         locked
           ? "cursor-not-allowed opacity-70"
           : "hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_22px_60px_rgba(0,0,0,0.34)]",
@@ -187,6 +241,7 @@ export function TopicCard({
         className="pointer-events-none absolute inset-0 opacity-70"
         style={{
           background:
+            accent.stars ??
             "radial-gradient(circle at 18% 12%, rgba(255,255,255,0.24) 0 1px, transparent 2px), radial-gradient(circle at 43% 8%, rgba(255,255,255,0.16) 0 1px, transparent 2px), radial-gradient(circle at 82% 28%, rgba(255,255,255,0.13) 0 1px, transparent 2px), radial-gradient(circle at 70% 78%, rgba(255,255,255,0.10) 0 1px, transparent 2px)",
         }}
       />
@@ -194,7 +249,10 @@ export function TopicCard({
         <img
           src={bgUrl}
           alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.10] mix-blend-screen"
+          className={clsx(
+            "pointer-events-none absolute inset-0 h-full w-full object-cover",
+            isLight ? "opacity-[0.14] mix-blend-multiply" : "opacity-[0.10] mix-blend-screen",
+          )}
           draggable={false}
           onError={(e) => {
             const target = e.target as HTMLImageElement;

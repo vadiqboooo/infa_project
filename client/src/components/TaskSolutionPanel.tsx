@@ -59,12 +59,16 @@ interface TaskSolution {
 export function TaskSolutionPanel({
   taskId,
   disabled = false,
+  initialTab = "code",
+  prefillCode = "",
   onChanged,
   onClose,
   registerBeforeClose,
 }: {
   taskId: number;
   disabled?: boolean;
+  initialTab?: "code" | "file" | "image";
+  prefillCode?: string;
   onChanged?: () => void;
   onClose?: () => void;
   registerBeforeClose?: (handler: (() => boolean) | null) => void;
@@ -74,11 +78,13 @@ export function TaskSolutionPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const [helpRequested, setHelpRequested] = useState(false);
   const [showComments, setShowComments] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"code" | "file" | "image">("code");
+  const [activeTab, setActiveTab] = useState<"code" | "file" | "image">(initialTab);
   const [closeWarningOpen, setCloseWarningOpen] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [imageDragActive, setImageDragActive] = useState(false);
@@ -97,7 +103,7 @@ export function TaskSolutionPanel({
       .then((data) => {
         if (cancelled) return;
         setSolution(data);
-        setCode(data.code ?? "");
+        setCode(prefillCode || data.code || "");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -106,6 +112,15 @@ export function TaskSolutionPanel({
       cancelled = true;
     };
   }, [taskId]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (!prefillCode) return;
+    setCode(prefillCode);
+  }, [prefillCode]);
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -168,6 +183,26 @@ export function TaskSolutionPanel({
     }
   }
 
+  async function recognizeImageToLatex() {
+    setRecognizing(true);
+    setOcrError(null);
+    try {
+      const data = await api<{ text: string; raw_text: string }>(`/tasks/${taskId}/solution/ocr-image`, {
+        method: "POST",
+      });
+      setCode((prev) => {
+        const current = prev.trim();
+        return current ? `${current}\n\n${data.text}` : data.text;
+      });
+      setActiveTab("code");
+      setSaved(false);
+    } catch (error) {
+      setOcrError(error instanceof Error ? error.message : "Не удалось распознать изображение");
+    } finally {
+      setRecognizing(false);
+    }
+  }
+
   const upload = useCallback(async (kind: "file" | "image", file: File | undefined) => {
     if (!file) return;
     setSaving(true);
@@ -181,6 +216,7 @@ export function TaskSolutionPanel({
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       setSolution(data);
+      setOcrError(null);
       onChanged?.();
     } finally {
       setSaving(false);
@@ -525,6 +561,22 @@ export function TaskSolutionPanel({
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <ImageUp size={13} />}
                 {imageHref ? "Заменить картинку" : "Выбрать картинку"}
               </button>
+              {imageHref && (
+                <button
+                  type="button"
+                  onClick={recognizeImageToLatex}
+                  disabled={disabled || saving || recognizing}
+                  className="mt-2 inline-flex items-center gap-2 rounded-xl border border-sky-300/20 bg-sky-400/10 px-5 py-2.5 text-xs font-black text-sky-200 hover:bg-sky-400/15 disabled:opacity-50"
+                >
+                  {recognizing ? <Loader2 size={13} className="animate-spin" /> : <Code2 size={13} />}
+                  {recognizing ? "Распознаю..." : "Распознать через ИИ"}
+                </button>
+              )}
+              {ocrError && (
+                <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs leading-relaxed text-amber-100">
+                  {ocrError}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -21,6 +21,7 @@ class TopicNav(BaseModel):
     title: str
     order_index: int
     category: str = "tutorial"
+    course_type: str = "year"
     tasks: list[TaskNav] = []
     exam_id: int | None = None
     latest_score: float | None = None

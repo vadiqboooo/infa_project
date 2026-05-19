@@ -25,9 +25,15 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
     LLM_MODEL: str = "gpt-4o-mini"
+    LLM_VISION_MODEL: str = ""
 
     # ── Parser / Admin API key ────────────────────────────────
     PARSER_API_KEY: str = ""
+
+    # Optional local OCR for solution images.
+    # Install the Tesseract binary separately and set this if it is not in PATH.
+    TESSERACT_CMD: str = "tesseract"
+    TESSERACT_LANG: str = "rus+eng"
 
     # YooKassa test/live shop credentials
     YOOKASSA_SHOP_ID: str = ""

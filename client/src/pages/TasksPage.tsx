@@ -12,7 +12,7 @@ import Skeleton from "../components/Skeleton";
 import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock, PenLine } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer, useCurrentPreparationPlan } from "../hooks/useApi";
-import type { AnswerVal, TaskNav, TopicNav, ExamResult } from "../api/types";
+import { TopicCategory, type AnswerVal, type TaskNav, type TopicNav, type ExamResult } from "../api/types";
 import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
 import "./TasksPage.css";
@@ -87,6 +87,8 @@ export default function TasksPage() {
     const [showChat, setShowChat] = useState(true);
     const [mentorOpen, setMentorOpen] = useState(false);
     const [attachSolutionOpen, setAttachSolutionOpen] = useState(false);
+    const [attachSolutionInitialTab, setAttachSolutionInitialTab] = useState<"code" | "file" | "image">("code");
+    const [attachSolutionPrefillCode, setAttachSolutionPrefillCode] = useState("");
     const [solutionOpen, setSolutionOpen] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
@@ -193,7 +195,14 @@ export default function TasksPage() {
     }, [location.pathname, location.search, navigate, tasks]);
 
     const isVariant = currentTopic?.category === "variants";
-    const canAnnotateTask = currentTopic?.category === "math";
+    const canAnnotateTask = currentTopic != null && [
+        TopicCategory.tutorial,
+        TopicCategory.homework,
+        TopicCategory.control,
+        TopicCategory.variants,
+        TopicCategory.mock,
+        TopicCategory.math,
+    ].includes(currentTopic.category);
     const { data: examInfo } = useExamByTopic(isVariant ? currentTopic?.id ?? null : null);
     const startExam = useStartExam(examInfo?.id ?? 0);
     const submitExam = useSubmitExam(examInfo?.id ?? 0);
@@ -250,6 +259,17 @@ export default function TasksPage() {
     const closeAttachSolution = () => {
         if (attachSolutionBeforeCloseRef.current?.() === false) return;
         closeAttachSolutionNow();
+    };
+
+    const openProofSolutionPanel = (taskId: number, answerValue: AnswerVal, tab: "code" | "image") => {
+        const proofText = Array.isArray(answerValue) && !Array.isArray(answerValue[0])
+            ? String(answerValue[0] ?? "")
+            : "";
+        setMentorOpen(false);
+        setAttachSolutionInitialTab(tab);
+        setAttachSolutionPrefillCode(tab === "code" ? proofText : "");
+        setAttachSolutionOpen(true);
+        queryClient.invalidateQueries({ queryKey: ["task", taskId] });
     };
 
     const selectTask = (index: number) => {
@@ -485,7 +505,7 @@ export default function TasksPage() {
     };
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-[#030A12]">
+        <div className="task-solve-page flex h-full flex-col overflow-hidden bg-[#030A12]">
             {/* Header */}
             <div className="relative z-10 flex min-h-14 shrink-0 items-center border-b border-white/10 bg-[#07111D]/92 px-4 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl md:px-6">
                 <div className="flex items-center gap-2 md:gap-3 w-full min-w-0">
@@ -652,6 +672,8 @@ export default function TasksPage() {
                                                     <button
                                                             onClick={() => {
                                                                 setMentorOpen(false);
+                                                                setAttachSolutionInitialTab("code");
+                                                                setAttachSolutionPrefillCode("");
                                                                 setAttachSolutionOpen(o => !o);
                                                             }}
                                                             className={clsx(
@@ -741,6 +763,7 @@ export default function TasksPage() {
                                                         <AnswerInput
                                                             type={task.answer_type || 'single_number'}
                                                             egeNumber={task.ege_number}
+                                                            isMath={currentTopic?.category === "math"}
                                                             value={
                                                                 isVariant && viewingFinishedExam
                                                                     ? (reviewExamAnswers[task.id] ?? 0)
@@ -761,6 +784,32 @@ export default function TasksPage() {
                                                             disabled={check.isPending || viewingFinishedExam}
                                                             feedback={partialCorrect}
                                                         />
+                                                        {currentTopic?.category === "math" && (task.ege_number === 14 || task.ege_number === 17) && !viewingFinishedExam && (
+                                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openProofSolutionPanel(
+                                                                        task.id,
+                                                                        isVariant && examInfo?.active_attempt
+                                                                            ? (examAnswers[task.id] ?? "")
+                                                                            : (savedAnswers[task.id] ?? ""),
+                                                                        "code",
+                                                                    )}
+                                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15"
+                                                                >
+                                                                    <Paperclip size={13} />
+                                                                    Прикрепить написанное решение
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openProofSolutionPanel(task.id, "", "image")}
+                                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300/20 bg-sky-400/10 px-3 py-2 text-xs font-black text-sky-200 transition hover:bg-sky-400/15"
+                                                                >
+                                                                    <PenLine size={13} />
+                                                                    Прикрепить фото
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                         {subResults && subResults[0] !== undefined && (
                                                             <div className={clsx(
                                                                 "mt-1.5 text-xs font-medium",
@@ -808,6 +857,7 @@ export default function TasksPage() {
                                                                     <AnswerInput
                                                                         type={sub.answer_type || 'single_number'}
                                                                         egeNumber={sub.number ?? undefined}
+                                                                        isMath={currentTopic?.category === "math"}
                                                                         value={savedSubAnswers[key] ?? 0}
                                                                         onChange={(val) => {
                                                                             setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
@@ -975,7 +1025,10 @@ export default function TasksPage() {
                             </button>
                         </div>
                         <TaskSolutionPanel
+                            key={`${task.id}:${attachSolutionInitialTab}:${attachSolutionPrefillCode}`}
                             taskId={task.id}
+                            initialTab={attachSolutionInitialTab}
+                            prefillCode={attachSolutionPrefillCode}
                             onChanged={refreshCurrentTask}
                             onClose={closeAttachSolutionNow}
                             registerBeforeClose={(handler) => {

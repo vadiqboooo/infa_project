@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   useCurrentPreparationPlan,
@@ -14,11 +14,12 @@ import {
   useWeeklyActivity,
 } from '../hooks/useApi';
 import { TopicCategory, type TopicNav } from '../api/types';
-import { Award, CheckCircle2, ChevronRight, MoreHorizontal, Star, TrendingUp } from 'lucide-react';
+import { Award, Brain, CheckCircle2, ChevronRight, FileText, ListChecks, LockKeyhole, MoreHorizontal, PlaySquare, Route, Save, Sparkles, Star, TrendingUp, Zap } from 'lucide-react';
 import metricChart from '../assets/metric-chart.png';
 import metricCup from '../assets/metric-cup.png';
 import metricGift from '../assets/metric-gift.png';
 import metricTasks from '../assets/metric-tasks.png';
+import { useTheme } from '../context/ThemeContext';
 import {
   Area,
   AreaChart,
@@ -160,7 +161,7 @@ export function HomePage() {
   }, [paymentStatus, setSearchParams]);
 
   return (
-    <div className="-m-4 min-h-screen bg-[#030A12] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-12">
+    <div className="home-page -m-4 min-h-screen bg-[#030A12] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-12">
       <div className="mx-auto max-w-[1232px] space-y-8">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
@@ -212,7 +213,7 @@ export function HomePage() {
               </div>
             )}
             {currentPlan?.subscription_required ? (
-              <SubscriptionOfferCard plans={plans ?? []} topics={navigation ?? []} />
+              <SubscriptionOfferCard />
             ) : (
               <PreparationPlanCard
                 currentPlan={currentPlan}
@@ -434,7 +435,7 @@ function MetricCard({
   const safeProgress = Math.min(100, Math.max(0, progress ?? 0));
 
   return (
-    <div className="relative h-[164px] overflow-hidden rounded-[16px] border border-white/10 bg-[#0A1522] p-4 shadow-[0_14px_34px_rgba(0,0,0,0.28)] ring-1 ring-white/[0.03]">
+    <div className="home-metric-card relative h-[164px] overflow-hidden rounded-[16px] border border-white/10 bg-[#0A1522] p-4 shadow-[0_14px_34px_rgba(0,0,0,0.28)] ring-1 ring-white/[0.03]">
       <div className={`absolute -bottom-12 -right-10 h-32 w-32 rounded-full blur-2xl ${toneClass.glow}`} />
       <MetricArt type={art} />
       <div className="relative z-10 flex h-full flex-col">
@@ -533,70 +534,78 @@ function MetricArt({ type }: { type: 'tasks' | 'gift' | 'chart' | 'cup' }) {
   );
 }
 
-function SubscriptionOfferCard({
-  plans,
-  topics,
-}: {
-  plans: NonNullable<ReturnType<typeof usePreparationPlans>['data']>;
-  topics: TopicNav[];
-}) {
-  const summer = plans.find((plan) => plan.course_type === 'summer');
-  const yearly = plans.find((plan) => plan.course_type !== 'summer');
-  const navigate = useNavigate();
+function SubscriptionOfferCard() {
   const createCheckout = useCreateCheckout();
-  const firstTrial = topics
-    .filter((topic) => topic.category === TopicCategory.tutorial || topic.category === TopicCategory.homework)
-    .flatMap((topic) => topic.tasks.map((task) => ({ topic, task })))
-    .find((item) => item.task.is_trial);
-  const trialHref = firstTrial
-    ? `${firstTrial.topic.category === TopicCategory.homework ? '/homework' : '/tasks'}/${firstTrial.topic.id}?from=home&task=${firstTrial.task.id}`
-    : '/tasks';
   const handleCheckout = async (plan: 'summer' | 'year') => {
     const checkout = await createCheckout.mutateAsync({ plan });
     window.location.assign(checkout.confirmation_url);
   };
+  const features = [
+    { icon: FileText, title: 'Все задания ЕГЭ', text: 'Актуальные задачи с решениями' },
+    { icon: Brain, title: 'ИИ-ассистент', text: 'Помощь в решении и объяснения' },
+    { icon: Route, title: 'Планы подготовки', text: 'Персональные маршруты' },
+    { icon: Save, title: 'Сохранение решений', text: 'Все твои решения в одном месте' },
+    { icon: PlaySquare, title: 'Разборы и теория', text: 'Подробные разборы и материалы' },
+    { icon: ListChecks, title: 'Варианты ЕГЭ', text: 'Тренируйся на реальных вариантах' },
+  ];
 
   return (
-    <Panel className="p-5 md:p-6">
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-white">Оформите подписку</h2>
-          <p className="mt-1 text-sm text-slate-400">Без подписки открыт пробный доступ к двум первым заданиям летнего курса.</p>
-        </div>
-        <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-200 ring-1 ring-emerald-300/20">
-          Задания, варианты и контрольные
-        </span>
-      </div>
+    <Panel className="relative overflow-hidden !rounded-[24px] !border-emerald-300/20 !bg-[#030B12] !p-0 shadow-[0_28px_80px_rgba(0,0,0,0.42),0_0_70px_rgba(16,185,129,0.08)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_8%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(135deg,rgba(3,11,18,0.98),rgba(2,32,24,0.68))]" />
+      <div className="relative p-6 md:p-7">
+        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px] md:items-start">
+          <div className="min-w-0">
+            <h2 className="text-[34px] font-black leading-none tracking-tight text-white sm:text-[40px]">
+              Lite <span className="text-emerald-300">Access</span>
+            </h2>
+            <p className="mt-3 max-w-[360px] text-[13px] leading-5 text-slate-400">
+              Полный доступ к задачам, ИИ и инструментам подготовки.
+            </p>
+          </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <SubscriptionOption
-          title="Летний курс"
-          description="Короткий интенсив с отдельным набором заданий."
-          plan={summer}
-          accent="emerald"
-          actionLabel="Оплатить 990 ₽"
-          footnote="Позже цена будет 1990 ₽"
-          onAction={() => handleCheckout('summer')}
-          isBusy={createCheckout.isPending}
-        />
-        <SubscriptionOption
-          title="Годовой курс"
-          description="Полный план подготовки и все материалы платформы."
-          plan={yearly}
-          accent="violet"
-          actionLabel="Оплатить 990 ₽/мес"
-          footnote="Позже цена будет 1490 ₽/мес"
-          onAction={() => handleCheckout('year')}
-          isBusy={createCheckout.isPending}
-        />
+          <div className="min-w-0 md:text-right">
+            <div className="flex items-center gap-3 md:justify-end">
+              <div className="text-[34px] font-black leading-none tracking-tight text-emerald-300">990 ₽</div>
+              <div className="inline-flex rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-300">
+                -84%
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-2 whitespace-nowrap text-[11px] leading-4 md:justify-end">
+              <span className="font-bold text-slate-500 line-through">6 240 ₽</span>
+              <span className="font-semibold text-slate-400">цена за один предмет в месяц в любой школе</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-7 space-y-2">
+          {features.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="flex min-w-0 items-center gap-3 rounded-xl border border-emerald-300/12 bg-emerald-400/[0.045] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-300/18 bg-emerald-400/10 text-emerald-300">
+                <Icon size={17} />
+              </div>
+              <div className="min-w-0 truncate text-[13px] leading-5">
+                <span className="font-black text-white">{title}</span>
+                <span className="font-semibold text-slate-400"> — {text}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          disabled={createCheckout.isPending}
+          onClick={() => handleCheckout('year')}
+          className="mt-7 inline-flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black text-[#00140d] shadow-[0_18px_42px_rgba(16,185,129,0.32)] transition hover:bg-emerald-300 disabled:opacity-70"
+        >
+          {createCheckout.isPending ? 'Готовим оплату...' : 'Получить доступ'}
+          <Zap size={18} />
+        </button>
+
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
+          <LockKeyhole size={14} />
+          <span>Доступ активируется сразу после оплаты.</span>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => navigate(trialHref)}
-        className="mt-4 text-sm font-bold text-slate-400 transition hover:text-emerald-200"
-      >
-        Открыть пробные задания
-      </button>
     </Panel>
   );
 }
@@ -978,7 +987,7 @@ function PerformanceCard({ scores }: { scores: ExamScorePoint[] }) {
 
 function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-[16px] border border-white/10 bg-[#0A1522] p-6 shadow-[0_18px_42px_rgba(0,0,0,0.25)] ${className}`}>
+    <section className={`home-panel rounded-[16px] border border-white/10 bg-[#0A1522] p-6 shadow-[0_18px_42px_rgba(0,0,0,0.25)] ${className}`}>
       {children}
     </section>
   );
@@ -1071,7 +1080,9 @@ function PlanBlockTrackerSection({
   active?: boolean;
   toneIndex?: number;
 }) {
-  const tone = planBlockToneClasses[toneIndex % planBlockToneClasses.length];
+  const { theme } = useTheme();
+  const tones = theme === 'light' ? lightPlanBlockToneClasses : planBlockToneClasses;
+  const tone = tones[toneIndex % tones.length];
   const primaryHref = block.tasks.find((item) => item.href)?.href ?? '/tasks';
 
   return (
@@ -1136,7 +1147,7 @@ function PlanBlockTrackerSection({
 
       <Link
         to={primaryHref}
-        className="relative z-10 mt-4 flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-extrabold text-white shadow-[0_10px_22px_rgba(15,23,42,0.10)] transition hover:translate-y-[-1px]"
+        className="home-action-button relative z-10 mt-4 flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-extrabold text-white shadow-[0_10px_22px_rgba(15,23,42,0.10)] transition hover:translate-y-[-1px]"
         style={{ background: tone.buttonBg }}
       >
         {active ? 'Продолжить подготовку' : 'Перейти к блоку'}
@@ -1194,6 +1205,57 @@ const planBlockToneClasses = [
     glow: 'rgba(100,200,61,0.22)',
     secondaryGlow: 'rgba(255,214,72,0.18)',
     shadow: 'rgba(100,200,61,0.18)',
+  },
+];
+
+const lightPlanBlockToneClasses = [
+  {
+    background: 'linear-gradient(135deg, rgba(244,253,248,0.98) 0%, rgba(234,247,240,0.98) 56%, rgba(255,255,255,0.98) 100%)',
+    activeBackground: 'linear-gradient(135deg, rgba(226,248,237,0.98) 0%, rgba(242,251,246,0.98) 54%, rgba(255,255,255,0.98) 100%)',
+    border: 'rgba(63,140,98,0.18)',
+    activeBorder: '#16A765',
+    accent: '#158354',
+    scoreBg: 'rgba(22,167,101,0.12)',
+    buttonBg: 'linear-gradient(135deg, #20C46C 0%, #0EA95B 100%)',
+    glow: 'rgba(22,167,101,0.14)',
+    secondaryGlow: 'rgba(89,197,255,0.10)',
+    shadow: 'rgba(22,167,101,0.12)',
+  },
+  {
+    background: 'linear-gradient(135deg, rgba(255,250,238,0.98) 0%, rgba(255,246,229,0.98) 55%, rgba(255,255,255,0.98) 100%)',
+    activeBackground: 'linear-gradient(135deg, rgba(255,243,216,0.98) 0%, rgba(255,249,236,0.98) 55%, rgba(255,255,255,0.98) 100%)',
+    border: 'rgba(217,119,6,0.18)',
+    activeBorder: '#D97706',
+    accent: '#B45309',
+    scoreBg: 'rgba(217,119,6,0.12)',
+    buttonBg: 'linear-gradient(135deg, #FFB21A 0%, #E98500 100%)',
+    glow: 'rgba(217,119,6,0.12)',
+    secondaryGlow: 'rgba(255,111,166,0.08)',
+    shadow: 'rgba(217,119,6,0.10)',
+  },
+  {
+    background: 'linear-gradient(135deg, rgba(248,245,255,0.98) 0%, rgba(240,247,255,0.98) 55%, rgba(255,255,255,0.98) 100%)',
+    activeBackground: 'linear-gradient(135deg, rgba(241,235,255,0.98) 0%, rgba(236,247,255,0.98) 55%, rgba(255,255,255,0.98) 100%)',
+    border: 'rgba(124,77,255,0.18)',
+    activeBorder: '#6D5BD0',
+    accent: '#5B4BB7',
+    scoreBg: 'rgba(109,91,208,0.12)',
+    buttonBg: 'linear-gradient(135deg, #78A0FF 0%, #4E6CFF 100%)',
+    glow: 'rgba(109,91,208,0.12)',
+    secondaryGlow: 'rgba(58,190,255,0.08)',
+    shadow: 'rgba(109,91,208,0.10)',
+  },
+  {
+    background: 'linear-gradient(135deg, rgba(247,252,238,0.98) 0%, rgba(255,250,232,0.98) 54%, rgba(255,255,255,0.98) 100%)',
+    activeBackground: 'linear-gradient(135deg, rgba(239,250,218,0.98) 0%, rgba(255,247,221,0.98) 54%, rgba(255,255,255,0.98) 100%)',
+    border: 'rgba(101,163,13,0.18)',
+    activeBorder: '#65A30D',
+    accent: '#4D7C0F',
+    scoreBg: 'rgba(101,163,13,0.12)',
+    buttonBg: 'linear-gradient(135deg, #8B74E8 0%, #6550CC 100%)',
+    glow: 'rgba(101,163,13,0.12)',
+    secondaryGlow: 'rgba(255,214,72,0.08)',
+    shadow: 'rgba(101,163,13,0.10)',
   },
 ];
 

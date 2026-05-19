@@ -12,6 +12,7 @@ from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.preparation_plan import PreparationPlan, PreparationPlanBlock, UserPreparationPlan
 from app.models.progress import ProgressStatus, UserProgress
 from app.models.task import Task
+from app.models.topic import Topic
 from app.models.user import User
 from app.schemas.preparation_plan import (
     CurrentPlanRecommendationOut,
@@ -177,7 +178,12 @@ async def _calculate_current_plan(
         progress_result = await db.execute(
             select(UserProgress, Task.ege_number)
             .join(Task, Task.id == UserProgress.task_id)
-            .where(UserProgress.user_id == user.id, Task.ege_number.in_(all_ege_numbers))
+            .join(Topic, Topic.id == Task.topic_id)
+            .where(
+                UserProgress.user_id == user.id,
+                Task.ege_number.in_(all_ege_numbers),
+                Topic.course_type.in_([plan.course_type, "common", "all"]),
+            )
         )
         ege_progress_rows = progress_result.all()
 
@@ -408,8 +414,6 @@ async def admin_list_plans(db: AsyncSession = Depends(get_db)):
     dependencies=[Depends(verify_parser_api_key)],
 )
 async def admin_preparation_task_options(db: AsyncSession = Depends(get_db)):
-    from app.models.topic import Topic
-
     result = await db.execute(
         select(Task, Topic)
         .join(Topic, Topic.id == Task.topic_id)
@@ -426,6 +430,7 @@ async def admin_preparation_task_options(db: AsyncSession = Depends(get_db)):
                 topic_id=topic.id,
                 topic_title=topic.title,
                 topic_category=topic.category,
+                topic_course_type=topic.course_type,
                 order_index=task.order_index,
                 ege_number=task.ege_number,
                 ege_number_max=ege_number_max,

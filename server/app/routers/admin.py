@@ -80,6 +80,15 @@ router = APIRouter(
 )
 
 
+COMMON_TOPIC_CATEGORIES = {"variants", "math", "mock"}
+
+
+def _normalize_topic_course_type(category: str, course_type: str | None) -> str:
+    if category in COMMON_TOPIC_CATEGORIES:
+        return "common"
+    return course_type if course_type in {"year", "summer", "common"} else "year"
+
+
 class AdminHelpNotificationOut(BaseModel):
     id: int
     source: str
@@ -240,6 +249,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             title=t.title,
             order_index=t.order_index,
             category=t.category,
+            course_type=t.course_type,
             task_count=counts.get(t.id, 0),
             time_limit_minutes=exams.get(t.id, 60),
             is_mock=t.is_mock,
@@ -261,6 +271,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         title=body.title,
         order_index=body.order_index,
         category=body.category,
+        course_type=_normalize_topic_course_type(body.category, body.course_type),
         is_mock=body.is_mock,
         ege_number=body.ege_number,
         ege_number_end=body.ege_number_end,
@@ -283,6 +294,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         title=topic.title,
         order_index=topic.order_index,
         category=topic.category,
+        course_type=topic.course_type,
         task_count=0,
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
@@ -306,6 +318,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.title = body.title
     topic.order_index = body.order_index
     topic.category = body.category
+    topic.course_type = _normalize_topic_course_type(body.category, body.course_type)
     topic.is_mock = body.is_mock
     topic.ege_number = body.ege_number
     topic.ege_number_end = body.ege_number_end
@@ -335,6 +348,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         title=topic.title,
         order_index=topic.order_index,
         category=topic.category,
+        course_type=topic.course_type,
         task_count=task_count,
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
@@ -423,6 +437,7 @@ async def upload_topic_image(
         title=topic.title,
         order_index=topic.order_index,
         category=topic.category,
+        course_type=topic.course_type,
         task_count=task_count,
         time_limit_minutes=exam.time_limit_minutes if exam else 60,
         is_mock=topic.is_mock,
@@ -2358,7 +2373,7 @@ async def import_variant(body: ImportVariantIn, db: AsyncSession = Depends(get_d
 
     # Create topic
     title = body.topic_title or f"Вариант {body.variant_id}"
-    topic = Topic(title=title, order_index=0, category="variants")
+    topic = Topic(title=title, order_index=0, category="variants", course_type="common")
     db.add(topic)
     await db.flush()
 
@@ -3084,6 +3099,7 @@ class PdfTaskIn(BaseModel):
 class PdfImportConfirm(BaseModel):
     topic_title: str
     category: str = "variants"
+    course_type: str = "common"
     is_mock: bool = False
     time_limit_minutes: int = 235
     ege_number: int | None = None
@@ -3109,6 +3125,7 @@ async def confirm_pdf_import(
         title=title,
         order_index=max_order + 1,
         category=body.category,
+        course_type=_normalize_topic_course_type(body.category, body.course_type),
         is_mock=body.is_mock,
         ege_number=body.ege_number,
         ege_number_end=body.ege_number_end,

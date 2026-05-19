@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { ProfileModal } from './ProfileModal';
 import { NotificationsHoverCard } from './NotificationsHoverCard';
 import { useAuth } from '../context/AuthContext';
+import { ThemeToggle } from './ThemeToggle';
 
 export function Sidebar() {
   const location = useLocation();
@@ -87,6 +88,8 @@ export function Sidebar() {
 
         {/* User card */}
         <div className="p-3 space-y-2">
+          <ThemeToggle className="w-full border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] hover:text-white" />
+
           <div className="flex items-stretch gap-2">
             <div
               onClick={() => setShowProfile(true)}

@@ -34,6 +34,8 @@ export enum TopicCategory {
     mock = "mock"
 }
 
+export type TopicCourseType = "year" | "summer" | "common" | string;
+
 export interface TaskNav {
     id: number;
     external_id: string | null;
@@ -52,6 +54,7 @@ export interface TopicNav {
     title: string;
     order_index: number;
     category: TopicCategory;
+    course_type: TopicCourseType;
     tasks: TaskNav[];
     exam_id?: number;
     latest_score?: number;
@@ -116,7 +119,8 @@ export interface TaskOut {
 }
 
 /* ── Answers ───────────────────────────────────────── */
-export type AnswerVal = number | number[] | number[][] | string;
+export type AnswerScalar = number | string;
+export type AnswerVal = AnswerScalar | AnswerScalar[] | AnswerScalar[][];
 
 export interface CheckResult {
     correct: boolean;
@@ -236,6 +240,7 @@ export interface TopicAdmin {
     title: string;
     order_index: number;
     category: TopicCategory;
+    course_type: TopicCourseType;
     task_count: number;
     time_limit_minutes?: number;
     is_mock: boolean;
@@ -277,6 +282,7 @@ export interface TopicIn {
     title: string;
     order_index: number;
     category: TopicCategory;
+    course_type: TopicCourseType;
     time_limit_minutes?: number;
     is_mock: boolean;
     ege_number?: number | null;
@@ -577,6 +583,7 @@ export interface PreparationTaskOption {
     topic_id: number;
     topic_title: string;
     topic_category: TopicCategory;
+    topic_course_type: TopicCourseType;
     order_index: number;
     ege_number: number | null;
     ege_number_max: number | null;

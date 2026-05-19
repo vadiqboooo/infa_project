@@ -9,6 +9,8 @@ import './LandingPage.css';
 
 const IC = { size: 26, color: 'rgba(255,255,255,0.85)', strokeWidth: 1.8 } as const;
 const IC_SM = { size: 22, color: '#62aa78', strokeWidth: 1.8 } as const;
+const SELF_EMPLOYED_NAME = import.meta.env.VITE_SELF_EMPLOYED_NAME?.trim();
+const SELF_EMPLOYED_INN = import.meta.env.VITE_SELF_EMPLOYED_INN?.trim();
 
 type SummerSubject = 'informatics' | 'math' | 'physics' | 'russian' | 'english' | 'social';
 type AuthTab = 'login' | 'register';
@@ -24,6 +26,7 @@ const SUMMER_SUBJECTS: { value: SummerSubject; label: string }[] = [
 
 export default function LandingPage() {
   const [showModal, setShowModal] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [modalTab, setModalTab] = useState<AuthTab>('login');
   const [summerSubject, setSummerSubject] = useState<SummerSubject>('informatics');
   const [leadContact, setLeadContact] = useState('');
@@ -168,9 +171,9 @@ export default function LandingPage() {
         <canvas ref={canvasRef} className="lp-canvas" />
         <div className="lp-hero-glow" />
         <div className="lp-hero-content" ref={heroContentRef}>
-          <div className="lp-tag"><span className="lp-tag-dot" />Подготовка к ЕГЭ 2025</div>
+          <div className="lp-tag"><span className="lp-tag-dot" />Подготовка к ЕГЭ 2026-2027</div>
           <h1 className="lp-h1">
-            Сдай ЕГЭ по <em>информатике</em>
+            Сдай ЕГЭ по <em>информатике и математике</em>
             <span className="lp-h1-line2">на 90+ баллов</span>
           </h1>
           <p className="lp-hero-sub">
@@ -385,22 +388,70 @@ export default function LandingPage() {
           <h2 className="lp-cta-h2">Начни готовиться<br/>к ЕГЭ <em>прямо сейчас</em></h2>
           <p className="lp-cta-sub">Тысячи учеников уже на пути к высокому баллу.</p>
           <button className="lp-btn-primary" onClick={() => openAuth('register')}>Войти / Зарегистрироваться →</button>
-          <div className="lp-cta-note">Авторизация через Telegram · Безопасно и быстро</div>
         </div>
       </section>
 
       {showModal && <LoginModal initialTab={modalTab} onClose={() => setShowModal(false)} />}
 
+      {showContacts && (
+        <div className="lp-contact-modal" role="dialog" aria-modal="true" aria-labelledby="contact-title" onClick={() => setShowContacts(false)}>
+          <div className="lp-contact-card" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="lp-contact-close"
+              onClick={() => setShowContacts(false)}
+              aria-label="Закрыть контакты"
+            >
+              ×
+            </button>
+            <div className="lp-contact-kicker">Контакты</div>
+            <h2 id="contact-title">Божко Вадим Дмитриевич</h2>
+            <p className="lp-contact-lead">
+              Создатель проекта и преподаватель по информатике и математике.
+            </p>
+
+            <div className="lp-contact-list">
+              <div className="lp-contact-row">
+                <span>Почта для контакта</span>
+                <a href="mailto:vadiqbozhko@gmail.com">vadiqbozhko@gmail.com</a>
+              </div>
+              <div className="lp-contact-row">
+                <span>Telegram</span>
+                <a href="https://t.me/rancheasy" target="_blank" rel="noreferrer">@rancheasy</a>
+              </div>
+              <div className="lp-contact-row">
+                <span>Статус для приема платежей</span>
+                <strong>самозанятый</strong>
+              </div>
+              {SELF_EMPLOYED_INN ? (
+                <div className="lp-contact-row">
+                  <span>ИНН</span>
+                  <strong>{SELF_EMPLOYED_INN}</strong>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FOOTER */}
       <footer className="lp-footer">
-        <div className="lp-footer-brand">
-          <div className="lp-nav-icon" style={{ width: 28, height: 28, fontSize: 13 }}>И</div>
-          Информатика ЕГЭ
+        <div className="lp-footer-legal">
+          <div className="lp-footer-copy">Copyright © 2025-2026</div>
+          <div className="lp-footer-details">
+            {SELF_EMPLOYED_NAME ? (
+              <div>{SELF_EMPLOYED_NAME}</div>
+            ) : null}
+            {SELF_EMPLOYED_INN ? (
+              <div>ИНН {SELF_EMPLOYED_INN}</div>
+            ) : null}
+            <div>Статус: самозанятый</div>
+          </div>
         </div>
         <div className="lp-footer-links">
-          <a href="#">О платформе</a><a href="#">Условия</a><a href="#">Политика</a><a href="#">Контакты</a>
+          <a href="#">О платформе</a><a href="/terms">Условия</a><a href="/privacy">Политика</a>
+          <button type="button" onClick={() => setShowContacts(true)}>Контакты</button>
         </div>
-        <div className="lp-footer-copy">© 2025 Информатика ЕГЭ</div>
       </footer>
     </div>
   );

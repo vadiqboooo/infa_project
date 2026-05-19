@@ -315,6 +315,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             title, 
             order_index: topics.length, 
             category: 'tutorial' as TopicCategory,
+            course_type: 'year',
             time_limit_minutes: 60,
             is_mock: false
         };
@@ -336,7 +337,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const handleImportVariant = async (
         topic_title: string,
         variant_id: number,
-        options: { category: 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock'; ege_number: number | null; ege_number_end: number | null }
+        options: { category: 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock'; course_type: 'year' | 'summer' | 'common'; ege_number: number | null; ege_number_end: number | null }
     ) => {
         try {
             const data = await adminFetch<{
@@ -354,6 +355,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     tasks: data.tasks,
                     topic_title: data.topic_title,
                     category: options.category,
+                    course_type: options.course_type,
                     is_mock: options.category === 'mock',
                     time_limit_minutes: 235,
                     ege_number: options.ege_number,
@@ -381,6 +383,12 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         if (cat === 'math') return 'bg-emerald-100 text-emerald-700';
         if (cat === 'mock') return 'bg-purple-100 text-purple-700';
         return 'bg-orange-100 text-orange-700';
+    };
+
+    const courseTypeLabel = (courseType?: string) => {
+        if (courseType === 'summer') return 'Летний';
+        if (courseType === 'common') return 'Общий';
+        return 'Годовой';
     };
 
     return (
@@ -549,6 +557,9 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                             <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
                                                 {categoryLabel(topic.category)}
                                             </span>
+                                            <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                {courseTypeLabel(topic.course_type)}
+                                            </span>
                                             {topic.is_mock && (
                                                 <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
                                                     Пробник
@@ -643,6 +654,9 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                 <div className="flex items-center gap-2">
                                                     <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
                                                         {categoryLabel(topic.category)}
+                                                    </span>
+                                                    <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                        {courseTypeLabel(topic.course_type)}
                                                     </span>
                                                     {topic.is_mock && (
                                                         <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
@@ -986,8 +1000,10 @@ function PlansPanel({
     const [blocks, setBlocks] = useState<PreparationPlanBlock[]>(defaultPlanBlocks);
     const [saving, setSaving] = useState(false);
     const controlTopics = useMemo(
-        () => topics.filter((topic) => topic.category === 'control').sort((a, b) => a.order_index - b.order_index),
-        [topics],
+        () => topics
+            .filter((topic) => topic.category === 'control' && (topic.course_type ?? 'year') === courseType)
+            .sort((a, b) => a.order_index - b.order_index),
+        [topics, courseType],
     );
     const controlTopicTitleById = useMemo(
         () => new Map(controlTopics.map((topic) => [topic.id, topic.title])),
@@ -1344,6 +1360,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             title: data.title || topic.title,
             order_index: data.order_index ?? topic.order_index,
             category: (data.category as TopicCategory) || topic.category,
+            course_type: data.course_type ?? topic.course_type ?? 'year',
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
             ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,

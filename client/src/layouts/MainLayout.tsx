@@ -4,7 +4,7 @@ import { BottomNav } from "../components/BottomNav";
 
 export function MainLayout() {
   return (
-    <div className="flex h-screen bg-[#030A12]">
+    <div className="flex h-screen bg-[#030A12] transition-colors">
       {/* Sidebar — hidden on mobile, visible on md+ */}
       <div className="hidden md:flex">
         <Sidebar />

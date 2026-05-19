@@ -48,6 +48,8 @@ export default function ExamPage() {
     const [codeSolutions, setCodeSolutions] = useState<Record<number, string>>({});
     const [fileSolutions, setFileSolutions] = useState<Record<number, File>>({});
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
+    const [solutionPanelInitialTab, setSolutionPanelInitialTab] = useState<"code" | "file" | "image">("code");
+    const [solutionPanelPrefillCode, setSolutionPanelPrefillCode] = useState("");
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
     const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
     const appliedTaskDeepLinkRef = useRef<string | null>(null);
@@ -220,6 +222,15 @@ export default function ExamPage() {
         clearSolutionDeepLink();
         setSolutionPanelTaskId(null);
         setTaskIndex(Math.max(0, Math.min(tasks.length - 1, index)));
+    };
+
+    const openProofSolutionPanel = (taskId: number, answerValue: AnswerVal, tab: "code" | "image") => {
+        const proofText = Array.isArray(answerValue) && !Array.isArray(answerValue[0])
+            ? String(answerValue[0] ?? "")
+            : "";
+        setSolutionPanelInitialTab(tab);
+        setSolutionPanelPrefillCode(tab === "code" ? proofText : "");
+        setSolutionPanelTaskId(taskId);
     };
 
     // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
@@ -1376,7 +1387,10 @@ export default function ExamPage() {
                             </button>
                         </div>
                         <TaskSolutionPanel
+                            key={`${solutionPanelTaskId}:${solutionPanelInitialTab}:${solutionPanelPrefillCode}`}
                             taskId={solutionPanelTaskId}
+                            initialTab={solutionPanelInitialTab}
+                            prefillCode={solutionPanelPrefillCode}
                             onClose={() => {
                                 setSolutionPanelTaskId(null);
                                 clearSolutionDeepLink();
@@ -1598,7 +1612,30 @@ export default function ExamPage() {
                                         onChange={setCurrentAnswer}
                                         disabled={isSubmitting}
                                         egeNumber={task?.ege_number}
+                                        isMath={String(currentTopic?.category) === "math"}
                                     />
+                                    {task && String(currentTopic?.category) === "math" && (task.ege_number === 14 || task.ege_number === 17) && (
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => openProofSolutionPanel(task.id, currentAnswer, "code")}
+                                                disabled={isSubmitting}
+                                                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs font-black text-[#1f6f46] transition hover:bg-emerald-100 disabled:opacity-50"
+                                            >
+                                                <Paperclip size={14} />
+                                                Прикрепить написанное решение
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => openProofSolutionPanel(task.id, "", "image")}
+                                                disabled={isSubmitting}
+                                                className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs font-black text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
+                                            >
+                                                <PenLine size={14} />
+                                                Прикрепить фото
+                                            </button>
+                                        </div>
+                                    )}
 
                                     <button
                                         onClick={handleSaveAnswer}
@@ -1633,7 +1670,11 @@ export default function ExamPage() {
                                     {/* Solution attachment button */}
                                     {task && (
                                         <button
-                                            onClick={() => setSolutionPanelTaskId(task.id)}
+                                            onClick={() => {
+                                                setSolutionPanelInitialTab("code");
+                                                setSolutionPanelPrefillCode("");
+                                                setSolutionPanelTaskId(task.id);
+                                            }}
                                             disabled={isSubmitting}
                                             className={clsx(
                                                 "w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 border",

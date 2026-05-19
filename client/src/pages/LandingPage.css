@@ -12,13 +12,13 @@
 
 .lp { font-family: 'Manrope', sans-serif; background: var(--lp-dark); color: var(--lp-white); overflow-x: hidden; min-height: 100vh; }
 
-.lp-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 60px; height: 64px; background: rgba(8,12,16,0.75); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid var(--lp-border); }
-.lp-nav-brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 800; color: #fff; cursor: pointer; }
+.lp-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; padding: 0 60px; height: 64px; background: rgba(8,12,16,0.75); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid var(--lp-border); }
+.lp-nav-brand { justify-self: start; display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 15px; line-height: 1; font-weight: 800; color: #fff; cursor: pointer; }
 .lp-nav-icon { width: 32px; height: 32px; background: var(--lp-green); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-.lp-nav-links { display: flex; align-items: center; gap: 32px; }
-.lp-nav-links a { font-size: 14px; font-weight: 500; color: var(--lp-dim); text-decoration: none; transition: color 0.2s; }
+.lp-nav-links { justify-self: center; display: flex; align-items: center; gap: 32px; }
+.lp-nav-links a { display: inline-flex; align-items: center; min-height: 32px; font-size: 14px; line-height: 1; font-weight: 500; color: var(--lp-dim); text-decoration: none; transition: color 0.2s; }
 .lp-nav-links a:hover { color: #fff; }
-.lp-nav-cta { background: var(--lp-green); color: #fff; border: none; border-radius: 20px; padding: 8px 22px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.2s, transform 0.15s; }
+.lp-nav-cta { justify-self: end; display: inline-flex; align-items: center; justify-content: center; min-height: 36px; background: var(--lp-green); color: #fff; border: none; border-radius: 20px; padding: 0 22px; font-size: 13px; line-height: 1; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.2s, transform 0.15s; }
 .lp-nav-cta:hover { background: var(--lp-green-l); transform: scale(1.04); }
 
 .lp-hero { position: relative; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; padding: 100px 20px 60px; }
@@ -148,12 +148,30 @@
 .lp-cta-sub { font-size: 18px; color: var(--lp-mid); line-height: 1.6; margin-bottom: 44px; font-weight: 400; }
 .lp-cta-note { font-size: 12px; color: var(--lp-dim); margin-top: 16px; }
 
-.lp-footer { background: var(--lp-dark2); border-top: 1px solid var(--lp-border); padding: 40px 60px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.lp-footer { background: var(--lp-dark2); border-top: 1px solid var(--lp-border); padding: 40px 60px; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
 .lp-footer-brand { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.7); }
+.lp-footer-legal { display: flex; flex-direction: column; gap: 20px; min-width: 220px; }
+.lp-footer-details { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.35; font-weight: 700; color: rgba(148,163,184,0.68); }
 .lp-footer-links { display: flex; gap: 28px; }
-.lp-footer-links a { font-size: 13px; color: var(--lp-dim); text-decoration: none; transition: color 0.2s; }
-.lp-footer-links a:hover { color: #fff; }
-.lp-footer-copy { font-size: 12px; color: rgba(255,255,255,0.3); }
+.lp-footer-links a,
+.lp-footer-links button { appearance: none; border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; color: var(--lp-dim); text-decoration: none; transition: color 0.2s; cursor: pointer; }
+.lp-footer-links a:hover,
+.lp-footer-links button:hover { color: #fff; }
+.lp-footer-copy { font-size: 13px; line-height: 1.35; font-weight: 700; color: rgba(148,163,184,0.82); }
+
+.lp-contact-modal { position: fixed; inset: 0; z-index: 240; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(2,6,10,0.68); backdrop-filter: blur(14px); animation: lpFadeIn 0.18s ease both; }
+.lp-contact-card { position: relative; width: min(520px, 100%); border: 1px solid rgba(98,170,120,0.28); border-radius: 24px; padding: 30px; background: linear-gradient(145deg, rgba(13,19,24,0.98), rgba(9,31,20,0.98)); box-shadow: 0 32px 90px rgba(0,0,0,0.5), 0 0 54px rgba(78,140,90,0.14); animation: lpFadeUp 0.24s ease both; }
+.lp-contact-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.72); font-size: 24px; line-height: 1; cursor: pointer; transition: background 0.18s, color 0.18s; }
+.lp-contact-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.lp-contact-kicker { margin-bottom: 10px; color: var(--lp-green-l); font-size: 11px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+.lp-contact-card h2 { margin: 0; max-width: 390px; font-size: clamp(26px, 4vw, 38px); line-height: 1.08; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
+.lp-contact-lead { margin: 14px 0 24px; color: var(--lp-mid); font-size: 15px; line-height: 1.6; }
+.lp-contact-list { display: flex; flex-direction: column; gap: 10px; }
+.lp-contact-row { display: grid; grid-template-columns: 0.8fr 1fr; gap: 16px; align-items: start; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px 16px; background: rgba(255,255,255,0.04); }
+.lp-contact-row span { color: rgba(255,255,255,0.48); font-size: 12px; line-height: 1.35; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.lp-contact-row a,
+.lp-contact-row strong { color: #eaffef; font-size: 14px; line-height: 1.45; font-weight: 800; text-decoration: none; overflow-wrap: anywhere; }
+.lp-contact-row a:hover { color: #fff; text-decoration: underline; }
 
 .lp-reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease, transform 0.7s ease; }
 .lp-reveal.is-visible { opacity: 1; transform: translateY(0); }
@@ -176,4 +194,7 @@
   .lp-grid { grid-template-columns: 1fr; }
   .lp-ai-inner { grid-template-columns: 1fr; gap: 48px; }
   .lp-footer { flex-direction: column; gap: 24px; padding: 32px 24px; }
+  .lp-footer-links { flex-wrap: wrap; gap: 16px 24px; }
+  .lp-contact-card { padding: 24px 18px; }
+  .lp-contact-row { grid-template-columns: 1fr; gap: 6px; }
 }
