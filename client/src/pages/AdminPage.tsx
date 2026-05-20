@@ -16,6 +16,7 @@ import {
     X,
     Check,
     ClipboardList,
+    BarChart3,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { Routes, Route, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -32,6 +33,7 @@ import type {
     GroupOut,
     PreparationPlan,
     PreparationPlanBlock,
+    AnalyticsSummary,
 } from "../api/types";
 import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
@@ -48,7 +50,7 @@ const API_BASE = "/api";
 const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
 
 type AdminDashboardState = {
-    activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans';
+    activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics';
     search?: string;
     filter?: FilterCategory;
     topicsScrollTop?: number;
@@ -238,11 +240,12 @@ export default function AdminPage() {
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
     const savedState = readAdminDashboardState();
-    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'plans'>(savedState.activeTab ?? 'topics');
+    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics'>(savedState.activeTab ?? 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
     const [plans, setPlans] = useState<PreparationPlan[]>([]);
+    const [metrics, setMetrics] = useState<AnalyticsSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState(savedState.search ?? "");
     const [filter, setFilter] = useState<FilterCategory>(normalizeTopicFilter(savedState.filter));
@@ -256,16 +259,18 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [t, s, g, p] = await Promise.all([
+            const [t, s, g, p, m] = await Promise.all([
                 adminFetch<TopicAdmin[]>("/admin/topics", apiKey),
                 adminFetch<StudentOut[]>("/admin/students", apiKey),
                 adminFetch<GroupOut[]>("/admin/groups", apiKey),
                 adminFetch<PreparationPlan[]>("/admin/preparation-plans", apiKey),
+                adminFetch<AnalyticsSummary>("/analytics/admin/summary?days=14", apiKey).catch(() => null),
             ]);
             setTopics(t);
             setStudents(s);
             setGroups(g);
             setPlans(p);
+            setMetrics(m);
         } finally {
             setLoading(false);
         }
@@ -300,7 +305,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     useEffect(() => {
         if (loading) return;
         const state = readAdminDashboardState();
-        if (activeTab === 'subscriptions' || activeTab === 'plans') return;
+        if (activeTab === 'subscriptions' || activeTab === 'plans' || activeTab === 'metrics') return;
         const scrollTop = activeTab === 'students' ? state.studentsScrollTop : state.topicsScrollTop;
         requestAnimationFrame(() => {
             const target = activeTab === 'students' ? studentsScrollRef.current : topicsScrollRef.current;
@@ -448,6 +453,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 >
                     <ClipboardList size={16} />
                     Планы
+                </button>
+                <button
+                    onClick={() => setActiveTab('metrics')}
+                    className={clsx(
+                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
+                        activeTab === 'metrics' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    )}
+                >
+                    <BarChart3 size={16} />
+                    Метрики
                 </button>
             </div>
 
@@ -722,6 +737,8 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 </div>
             ) : activeTab === "subscriptions" ? (
                 <SubscriptionsPanel groups={groups} apiKey={apiKey} onRefresh={loadData} />
+            ) : activeTab === "metrics" ? (
+                <MetricsPanel metrics={metrics} loading={loading && !metrics} />
             ) : (
                 <PlansPanel plans={plans} topics={topics} apiKey={apiKey} onRefresh={loadData} />
             )}
@@ -739,6 +756,106 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
 }
 
 const SUBSCRIPTION_COLORS = ['#3F8C62', '#6366f1', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+function MetricsPanel({ metrics, loading }: { metrics: AnalyticsSummary | null; loading: boolean }) {
+    const maxDailyValue = Math.max(
+        1,
+        ...(metrics?.daily ?? []).map((item) => Math.max(item.visitors, item.registrations)),
+    );
+
+    if (loading) {
+        return (
+            <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {[1, 2, 3, 4].map((item) => (
+                        <div key={item} className="h-32 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    if (!metrics) {
+        return (
+            <div className="flex-1 overflow-y-auto">
+                <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">
+                    <BarChart3 size={42} className="mx-auto mb-3 text-gray-300" />
+                    <p className="text-sm font-bold text-gray-900">Метрики пока недоступны</p>
+                    <p className="mt-1 text-sm">Данные появятся после первых посещений сайта.</p>
+                </div>
+            </div>
+        );
+    }
+
+    const cards = [
+        { label: "Всего визитов", value: metrics.total_visits, caption: `Сегодня ${metrics.today_visits}` },
+        { label: "Уникальных посетителей", value: metrics.unique_visitors, caption: `Сегодня ${metrics.today_unique_visitors}` },
+        { label: "Регистраций", value: metrics.registered_users, caption: `Сегодня ${metrics.today_registrations}` },
+        { label: "Конверсия", value: `${metrics.conversion_rate}%`, caption: "Регистрации / посетители" },
+    ];
+
+    return (
+        <div className="flex-1 overflow-y-auto">
+            <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {cards.map((card) => (
+                        <div key={card.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#3F8C62]/10 text-[#3F8C62]">
+                                    <BarChart3 size={20} />
+                                </div>
+                                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-gray-500">
+                                    сайт
+                                </span>
+                            </div>
+                            <div className="mt-5 text-3xl font-black text-gray-900">{card.value}</div>
+                            <div className="mt-1 text-sm font-bold text-gray-500">{card.label}</div>
+                            <div className="mt-3 text-xs font-semibold text-gray-400">{card.caption}</div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="mb-6 flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">Динамика за 14 дней</h2>
+                            <p className="mt-1 text-sm text-gray-500">Посетители и регистрации по дням.</p>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs font-bold text-gray-500">
+                            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#3F8C62]" />Посетители</span>
+                            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />Регистрации</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-3 lg:grid-cols-[repeat(14,minmax(0,1fr))]">
+                        {metrics.daily.map((day) => {
+                            const visitorHeight = Math.max(4, Math.round((day.visitors / maxDailyValue) * 120));
+                            const registrationHeight = Math.max(4, Math.round((day.registrations / maxDailyValue) * 120));
+                            const label = new Date(`${day.date}T00:00:00`).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+                            return (
+                                <div key={day.date} className="flex min-w-0 flex-col items-center gap-2">
+                                    <div className="flex h-32 items-end gap-1">
+                                        <div
+                                            className="w-3 rounded-t bg-[#3F8C62]"
+                                            style={{ height: visitorHeight }}
+                                            title={`${day.visitors} посетителей`}
+                                        />
+                                        <div
+                                            className="w-3 rounded-t bg-indigo-500"
+                                            style={{ height: registrationHeight }}
+                                            title={`${day.registrations} регистраций`}
+                                        />
+                                    </div>
+                                    <div className="text-[10px] font-bold text-gray-400">{label}</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function SubscriptionsPanel({
     groups,

@@ -644,6 +644,24 @@ export interface PaymentHistoryItem {
     created_at: string;
 }
 
+export interface AnalyticsDailyPoint {
+    date: string;
+    visits: number;
+    visitors: number;
+    registrations: number;
+}
+
+export interface AnalyticsSummary {
+    total_visits: number;
+    unique_visitors: number;
+    today_visits: number;
+    today_unique_visitors: number;
+    registered_users: number;
+    today_registrations: number;
+    conversion_rate: number;
+    daily: AnalyticsDailyPoint[];
+}
+
 export interface TokenResponse {
     access_token: string;
     token_type: string;

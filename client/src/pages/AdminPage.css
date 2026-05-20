@@ -4,6 +4,36 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+.admin-import-page input,
+.admin-import-page textarea,
+.admin-import-page select,
+.admin-import-page .ProseMirror {
+    color: #111827 !important;
+    caret-color: #111827;
+}
+
+.admin-import-page input::placeholder,
+.admin-import-page textarea::placeholder {
+    color: #9ca3af !important;
+}
+
+.admin-import-page select option {
+    color: #111827;
+    background: #ffffff;
+}
+
+.admin-import-page .prose,
+.admin-import-page .prose * {
+    color: #374151;
+}
+
+.admin-import-page .ProseMirror p,
+.admin-import-page .ProseMirror li,
+.admin-import-page .ProseMirror td,
+.admin-import-page .ProseMirror th {
+    color: #111827;
+}
+
 /* Scrollbar styling */
 .admin-page *::-webkit-scrollbar {
     width: 6px;

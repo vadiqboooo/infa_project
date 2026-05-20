@@ -16,6 +16,7 @@ from app.models.admin_help_notification_read import AdminHelpNotificationRead
 from app.models.preparation_plan import PreparationPlan, PreparationPlanBlock, UserPreparationPlan
 from app.models.course_lead import CourseLead
 from app.models.payment import Payment
+from app.models.site_visit import SiteVisit
 
 __all__ = [
     "Topic",
@@ -39,4 +40,5 @@ __all__ = [
     "UserPreparationPlan",
     "CourseLead",
     "Payment",
+    "SiteVisit",
 ]

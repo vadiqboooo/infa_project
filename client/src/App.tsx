@@ -50,6 +50,44 @@ function PageTitle() {
   return null;
 }
 
+function getOrCreateStorageId(storage: Storage, key: string) {
+  let value = storage.getItem(key);
+  if (!value) {
+    value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    storage.setItem(key, value);
+  }
+  return value;
+}
+
+function AnalyticsTracker() {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    const visitorId = getOrCreateStorageId(localStorage, "analytics_visitor_id");
+    const sessionId = getOrCreateStorageId(sessionStorage, "analytics_session_id");
+    const token = localStorage.getItem("jwt_token");
+
+    fetch("/api/analytics/track", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        visitor_id: visitorId,
+        session_id: sessionId,
+        path: `${pathname}${search}`,
+        referrer: document.referrer || null,
+      }),
+      keepalive: true,
+    }).catch(() => {
+      // Analytics must never interrupt the user flow.
+    });
+  }, [pathname, search]);
+
+  return null;
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loggedIn } = useAuth();
   return loggedIn ? <>{children}</> : <LandingPage />;
@@ -62,6 +100,7 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <PageTitle />
+            <AnalyticsTracker />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />

@@ -338,6 +338,10 @@
     width: 100%;
     border-collapse: collapse;
     margin: 1.25rem 0;
+    background: rgba(7, 17, 29, 0.72);
+    color: #e5edf5;
+    border-radius: 0.75rem;
+    overflow: hidden;
 }
 
 .task-body th,
@@ -345,11 +349,52 @@
     padding: 0.5rem 0.75rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
     text-align: left;
+    background-color: transparent;
+    color: inherit;
 }
 
 .task-body th {
     background: rgba(255, 255, 255, 0.06);
     font-weight: 600;
+}
+
+.dark .task-body table,
+.dark .task-body table * {
+    color: #e5edf5 !important;
+}
+
+.dark .task-body table,
+.dark .task-body thead,
+.dark .task-body tbody,
+.dark .task-body tr,
+.dark .task-body th,
+.dark .task-body td {
+    background-color: rgba(7, 17, 29, 0.86) !important;
+    border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.dark .task-body th {
+    background-color: rgba(30, 58, 83, 0.62) !important;
+    color: #f8fafc !important;
+}
+
+.dark .task-body tr:nth-child(even) td {
+    background-color: rgba(15, 35, 54, 0.58) !important;
+}
+
+.light .task-body table {
+    background: #ffffff;
+    color: #13231b;
+}
+
+.light .task-body th,
+.light .task-body td {
+    border-color: rgba(57, 79, 66, 0.18);
+}
+
+.light .task-body th {
+    background: rgba(35, 71, 49, 0.06);
+    color: #13231b;
 }
 
 .task-files {

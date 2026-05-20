@@ -506,7 +506,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     // ── Upload step ───────────────────────────────────────────
     if (step === 'upload') {
         return (
-            <div className="min-h-full bg-[#F8F7F4] flex flex-col">
+            <div className="admin-import-page min-h-full bg-[#F8F7F4] flex flex-col">
                 {/* Header */}
                 <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-8 py-4 flex items-center gap-4">
                     <button onClick={() => navigate('/admin')} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700">
@@ -690,7 +690,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     if (step === 'annotate') {
         const markerCount = countMarkers();
         return (
-            <div className="h-full flex flex-col bg-[#F8F7F4]">
+            <div className="admin-import-page h-full flex flex-col bg-[#F8F7F4]">
                 {/* Top bar */}
                 <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3">
                     <button onClick={() => setStep('upload')} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700">
@@ -779,7 +779,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     // ── Done step ─────────────────────────────────────────────
     if (step === 'done') {
         return (
-            <div className="min-h-full bg-[#F8F7F4] flex items-center justify-center p-8">
+            <div className="admin-import-page min-h-full bg-[#F8F7F4] flex items-center justify-center p-8">
                 <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-12 text-center max-w-md w-full">
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 size={40} className="text-emerald-600" />
@@ -826,7 +826,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const needsTopicEgeNumber = category === 'tutorial' || category === 'homework';
 
     return (
-        <div className="h-full flex flex-col bg-[#F8F7F4]">
+        <div className="admin-import-page h-full flex flex-col bg-[#F8F7F4]">
             {/* Top bar — row 1 */}
             <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3">
                 <button onClick={() => setStep('upload')} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700">
