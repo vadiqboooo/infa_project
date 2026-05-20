@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Crosshair, BookOpen, Bot, Zap,
   Route, Sparkles, BookMarked, MessageCircle, TrendingUp, GraduationCap,
-  User,
+  User, CheckCircle2, ShieldCheck,
 } from 'lucide-react';
 import { LoginModal } from '../components/LoginModal';
 import './LandingPage.css';
@@ -162,6 +162,7 @@ export default function LandingPage() {
           <a href="#how"      onClick={e => { e.preventDefault(); scrollTo('how'); }}>Как работает</a>
           <a href="#features" onClick={e => { e.preventDefault(); scrollTo('features'); }}>Возможности</a>
           <a href="#ai"       onClick={e => { e.preventDefault(); scrollTo('ai'); }}>ИИ-ассистент</a>
+          <a href="#subscription" onClick={e => { e.preventDefault(); scrollTo('subscription'); }}>Подписка</a>
         </div>
         <button className="lp-nav-cta" onClick={() => openAuth('login')}>Войти</button>
       </nav>
@@ -378,6 +379,50 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SUBSCRIPTION */}
+      <section id="subscription" className="lp-section lp-subscription">
+        <div className="lp-inner">
+          <div className="lp-subscription-layout">
+            <div className="lp-pricing-grid">
+              <div className="lp-price-card lp-price-card-featured lp-card">
+                <div className="lp-price-top">
+                  <div>
+                    <div className="lp-price-kicker">Подписка</div>
+                    <h3>Lite Access</h3>
+                  </div>
+                  <span className="lp-price-badge is-featured">-84%</span>
+                </div>
+                <p className="lp-price-desc">Полный доступ к платформе: практика, разборы, ИИ-помощник и личный прогресс в одном кабинете.</p>
+                <div className="lp-price-row">
+                  <span className="lp-price">990 ₽</span>
+                  <span className="lp-price-period">за доступ</span>
+                </div>
+                <div className="lp-price-old">Обычная стоимость аналогичной подготовки выше</div>
+                <ul className="lp-price-list">
+                  {['Все задания ЕГЭ', 'ИИ-ассистент 24/7', 'Персональный план подготовки', 'Разборы, теория и варианты', 'Сохранение решений и прогресса', 'Чат и поддержка в обучении'].map(item => (
+                    <li key={item}><CheckCircle2 size={17} />{item}</li>
+                  ))}
+                </ul>
+                <button className="lp-price-action is-featured" onClick={() => openAuth('register')}>Получить Lite</button>
+              </div>
+            </div>
+
+            <div className="lp-subscription-header lp-reveal">
+              <div className="lp-section-tag">Подписка</div>
+              <h2 className="lp-section-h2">Открой полный доступ<br/>к подготовке</h2>
+              <p className="lp-section-sub">
+                Lite включает задания, разборы, ИИ-помощника, сохранение решений и персональный план подготовки.
+              </p>
+            </div>
+          </div>
+
+          <div className="lp-subscription-note lp-reveal">
+            <ShieldCheck size={18} />
+            <span>Доступ активируется после оплаты в личном кабинете. Первые пробные задания доступны без подписки.</span>
           </div>
         </div>
       </section>
