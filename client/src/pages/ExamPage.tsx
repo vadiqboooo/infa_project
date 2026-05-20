@@ -70,6 +70,7 @@ export default function ExamPage() {
 
     const isMock = String(currentTopic?.category) === "mock";
     const isControl = String(currentTopic?.category) === "control";
+    const canAnnotateExamTask = ["variants", "math", "mock", "control"].includes(String(currentTopic?.category));
     const showTimer = isMock || isControl;
     const clearSolutionDeepLink = () => {
         const params = new URLSearchParams(location.search);
@@ -1564,7 +1565,7 @@ export default function ExamPage() {
                                         <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-tight">
                                             {task.title || "Вариант ЕГЭ"}
                                         </span>
-                                        {String(currentTopic?.category) === "math" && (
+                                        {canAnnotateExamTask && (
                                             drawingPanelOpen ? (
                                                 <div
                                                     id={`exam-drawing-toolbar-${task.id}`}
@@ -1586,7 +1587,7 @@ export default function ExamPage() {
                                         <TaskView
                                             content={task.content_html}
                                             files={task.media_resources?.files}
-                                            annotatable={String(currentTopic?.category) === "math"}
+                                            annotatable={canAnnotateExamTask}
                                             annotationKey={`exam:${currentTopic?.id ?? "topic"}:task:${task.id}`}
                                             annotationTaskId={task.id}
                                             annotationPanelOpen={drawingPanelOpen}
