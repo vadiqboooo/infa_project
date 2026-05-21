@@ -104,6 +104,48 @@
   color: #e5edf5;
 }
 
+.exam-result-page .exam-result-card--checked .text-gray-950,
+.exam-result-page .exam-result-card--checked .text-gray-900,
+.exam-result-page .exam-result-card--checked .text-gray-800,
+.exam-result-page .exam-result-card--checked .text-gray-700,
+.exam-result-page .exam-result-card--checked .text-gray-600,
+.exam-result-page .exam-result-card--pending .text-gray-950,
+.exam-result-page .exam-result-card--pending .text-gray-900,
+.exam-result-page .exam-result-card--pending .text-gray-800,
+.exam-result-page .exam-result-card--pending .text-gray-700,
+.exam-result-page .exam-result-card--pending .text-gray-600,
+.exam-result-page .exam-result-row td,
+.exam-result-page .exam-result-row .text-gray-950,
+.exam-result-page .exam-result-row .text-gray-900,
+.exam-result-page .exam-result-row .text-gray-800,
+.exam-result-page .exam-result-row .text-gray-700,
+.exam-result-page .exam-result-row .text-gray-600 {
+  color: #111827 !important;
+}
+
+.exam-result-page .exam-result-card--checked .text-gray-500,
+.exam-result-page .exam-result-card--checked .text-gray-400,
+.exam-result-page .exam-result-card--checked .text-gray-300,
+.exam-result-page .exam-result-card--pending .text-gray-500,
+.exam-result-page .exam-result-card--pending .text-gray-400,
+.exam-result-page .exam-result-card--pending .text-gray-300,
+.exam-result-page .exam-result-row .text-gray-500,
+.exam-result-page .exam-result-row .text-gray-400,
+.exam-result-page .exam-result-row .text-gray-300 {
+  color: #64748b !important;
+}
+
+.exam-result-page .exam-result-card--checked .text-red-600,
+.exam-result-page .exam-result-card--checked .text-red-500,
+.exam-result-page .exam-result-row .text-red-600,
+.exam-result-page .exam-result-row .text-red-500 {
+  color: #dc2626 !important;
+}
+
+.exam-result-page .exam-result-row .text-amber-700 {
+  color: #b45309 !important;
+}
+
 .theme-toggle {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
@@ -646,4 +688,60 @@
 .light .exam-dark input::placeholder,
 .light .exam-dark textarea::placeholder {
   color: #7a8b80 !important;
+}
+
+.exam-review-pending-page {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(5, 201, 106, 0.10), transparent 34%),
+    #030a12 !important;
+  color: #e5edf5;
+}
+
+.light .exam-review-pending-page {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(33, 182, 111, 0.09), transparent 34%),
+    #f4faf6 !important;
+  color: #13231b;
+}
+
+.exam-review-pending-page .exam-result-card--pending {
+  min-height: 58px;
+  padding: 10px 22px !important;
+  border-radius: 14px;
+  background-color: #0a1522 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  box-shadow: none !important;
+}
+
+.exam-review-pending-page .exam-result-card--pending:hover {
+  background-color: #0d1b2b !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+.exam-review-pending-page .exam-result-card--pending .text-gray-800 {
+  color: #f8fafc !important;
+}
+
+.exam-review-pending-page .exam-result-card--pending .text-gray-400,
+.exam-review-pending-page .exam-result-card--pending .text-gray-300 {
+  color: #94a3b8 !important;
+}
+
+.light .exam-review-pending-page .exam-result-card--pending {
+  background-color: #ffffff !important;
+  border-color: rgba(226, 232, 240, 0.92) !important;
+}
+
+.light .exam-review-pending-page .exam-result-card--pending:hover {
+  background-color: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.96) !important;
+}
+
+.light .exam-review-pending-page .exam-result-card--pending .text-gray-800 {
+  color: #0f172a !important;
+}
+
+.light .exam-review-pending-page .exam-result-card--pending .text-gray-400,
+.light .exam-review-pending-page .exam-result-card--pending .text-gray-300 {
+  color: #8aa0bd !important;
 }

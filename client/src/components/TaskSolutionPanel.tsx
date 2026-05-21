@@ -61,6 +61,7 @@ export function TaskSolutionPanel({
   disabled = false,
   initialTab = "code",
   prefillCode = "",
+  textSolutionMode = false,
   onChanged,
   onClose,
   registerBeforeClose,
@@ -69,6 +70,7 @@ export function TaskSolutionPanel({
   disabled?: boolean;
   initialTab?: "code" | "file" | "image";
   prefillCode?: string;
+  textSolutionMode?: boolean;
   onChanged?: () => void;
   onClose?: () => void;
   registerBeforeClose?: (handler: (() => boolean) | null) => void;
@@ -346,6 +348,7 @@ export function TaskSolutionPanel({
               { key: "image" as const, label: "Картинка", icon: ImageUp },
             ].map((tab) => {
               const Icon = tab.icon;
+              const displayLabel = tab.key === "code" && textSolutionMode ? "Решение" : tab.label;
               const active = activeTab === tab.key;
               return (
                 <button
@@ -359,7 +362,7 @@ export function TaskSolutionPanel({
                   }`}
                 >
                   <Icon size={16} />
-                  {tab.label}
+                  {displayLabel}
                 </button>
               );
             })}
@@ -402,6 +405,15 @@ export function TaskSolutionPanel({
             >
               <History size={15} />
             </button>
+            {textSolutionMode ? (
+              <textarea
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                disabled={disabled || loading}
+                className="h-full min-h-[280px] w-full resize-none bg-[#0A1522] px-5 py-14 text-[15px] leading-7 text-slate-100 outline-none placeholder:text-slate-600 disabled:opacity-60"
+                placeholder="Введите или отредактируйте текст решения..."
+              />
+            ) : (
             <CodeMirror
               key={editorKey}
               value={code}
@@ -427,6 +439,7 @@ export function TaskSolutionPanel({
                 opacity: disabled || loading ? 0.6 : 1,
               }}
             />
+            )}
           </div>
         )}
 

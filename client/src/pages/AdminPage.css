@@ -2,8 +2,20 @@
 
 .admin-page {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #F8F7F4;
+    color: #111827;
+    color-scheme: light;
 }
 
+.dark .admin-page,
+.light .admin-page {
+    background: #F8F7F4;
+    color: #111827;
+}
+
+.admin-page input,
+.admin-page textarea,
+.admin-page select,
 .admin-import-page input,
 .admin-import-page textarea,
 .admin-import-page select,
@@ -12,21 +24,67 @@
     caret-color: #111827;
 }
 
+.admin-page input::placeholder,
+.admin-page textarea::placeholder,
 .admin-import-page input::placeholder,
 .admin-import-page textarea::placeholder {
     color: #9ca3af !important;
 }
 
+.admin-page select option,
 .admin-import-page select option {
     color: #111827;
     background: #ffffff;
 }
 
+.admin-page .text-gray-950,
+.admin-page .text-gray-900,
+.admin-page .text-gray-800 {
+    color: #111827 !important;
+}
+
+.admin-page .text-gray-700,
+.admin-page .text-gray-600 {
+    color: #374151 !important;
+}
+
+.admin-page .text-gray-500,
+.admin-page .text-gray-400,
+.admin-page .text-gray-300 {
+    color: #6b7280 !important;
+}
+
+.admin-page .text-white {
+    color: #ffffff !important;
+}
+
+.admin-page .bg-white {
+    background-color: #ffffff !important;
+}
+
+.admin-page .bg-gray-50 {
+    background-color: #f9fafb !important;
+}
+
+.admin-page .bg-gray-100 {
+    background-color: #f3f4f6 !important;
+}
+
+.admin-page .bg-gray-200 {
+    background-color: #e5e7eb !important;
+}
+
+.admin-page .prose,
+.admin-page .prose *,
 .admin-import-page .prose,
 .admin-import-page .prose * {
     color: #374151;
 }
 
+.admin-page .ProseMirror p,
+.admin-page .ProseMirror li,
+.admin-page .ProseMirror td,
+.admin-page .ProseMirror th,
 .admin-import-page .ProseMirror p,
 .admin-import-page .ProseMirror li,
 .admin-import-page .ProseMirror td,

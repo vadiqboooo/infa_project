@@ -15,6 +15,7 @@ import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, u
 import { TopicCategory, type AnswerVal, type TaskNav, type TopicNav, type ExamResult } from "../api/types";
 import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
+import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
 import "./TasksPage.css";
 
 interface ChatMessage {
@@ -89,8 +90,10 @@ export default function TasksPage() {
     const [attachSolutionOpen, setAttachSolutionOpen] = useState(false);
     const [attachSolutionInitialTab, setAttachSolutionInitialTab] = useState<"code" | "file" | "image">("code");
     const [attachSolutionPrefillCode, setAttachSolutionPrefillCode] = useState("");
+    const [attachSolutionTextMode, setAttachSolutionTextMode] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
+    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string; imageSrc?: string }>>({});
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
@@ -268,8 +271,20 @@ export default function TasksPage() {
         setMentorOpen(false);
         setAttachSolutionInitialTab(tab);
         setAttachSolutionPrefillCode(tab === "code" ? proofText : "");
+        setAttachSolutionTextMode(false);
         setAttachSolutionOpen(true);
         queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+    };
+
+    const openRecognizedDrawingSolution = (text: string, rawText?: string, imageSrc?: string) => {
+        if (task) {
+            setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: rawText || text, imageSrc } }));
+        }
+        setMentorOpen(false);
+        setAttachSolutionInitialTab("code");
+        setAttachSolutionPrefillCode(text);
+        setAttachSolutionTextMode(true);
+        setAttachSolutionOpen(true);
     };
 
     const selectTask = (index: number) => {
@@ -674,6 +689,7 @@ export default function TasksPage() {
                                                                 setMentorOpen(false);
                                                                 setAttachSolutionInitialTab("code");
                                                                 setAttachSolutionPrefillCode("");
+                                                                setAttachSolutionTextMode(false);
                                                                 setAttachSolutionOpen(o => !o);
                                                             }}
                                                             className={clsx(
@@ -748,7 +764,14 @@ export default function TasksPage() {
                                                     onAnnotationPanelOpenChange={setDrawingPanelOpen}
                                                     showAnnotationToggle={false}
                                                     annotationToolbarHostId={`task-drawing-toolbar-${task.id}`}
+                                                    onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
                                                 />
+                                                {task && recognizedDrawingSolutions[task.id] && (
+                                                    <RecognizedSolutionBlock
+                                                        text={recognizedDrawingSolutions[task.id].text}
+                                                        imageSrc={recognizedDrawingSolutions[task.id].imageSrc}
+                                                    />
+                                                )}
                                             </div>
 
                                             {/* Answer section — bottom of task card */}
@@ -849,6 +872,7 @@ export default function TasksPage() {
                                                                             annotatable={canAnnotateTask}
                                                                             annotationKey={`task:${task.id}:sub:${sIdx}`}
                                                                             annotationTaskId={task.id}
+                                                                            onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
                                                                         />
                                                                     </div>
                                                                     <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
@@ -1029,6 +1053,7 @@ export default function TasksPage() {
                             taskId={task.id}
                             initialTab={attachSolutionInitialTab}
                             prefillCode={attachSolutionPrefillCode}
+                            textSolutionMode={attachSolutionTextMode}
                             onChanged={refreshCurrentTask}
                             onClose={closeAttachSolutionNow}
                             registerBeforeClose={(handler) => {

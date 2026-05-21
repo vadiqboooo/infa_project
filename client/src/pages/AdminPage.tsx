@@ -169,7 +169,7 @@ export default function AdminPage() {
 
     if (user && user.role !== 'admin' && !apiKey) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F7F4] p-6 text-center">
+            <div className="admin-page flex flex-col items-center justify-center min-h-screen bg-[#F8F7F4] p-6 text-center">
                 <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-6">
                     <ShieldAlert size={40} />
                 </div>
@@ -190,7 +190,7 @@ export default function AdminPage() {
 
     if (!authed) {
         return (
-            <div className="admin-auth-screen flex items-center justify-center min-h-screen bg-[#F8F7F4]">
+            <div className="admin-page admin-auth-screen flex items-center justify-center min-h-screen bg-[#F8F7F4]">
                 <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md">
                     <div className="flex flex-col items-center mb-8">
                         <div className="w-16 h-16 bg-[#3F8C62]/10 rounded-2xl flex items-center justify-center mb-4">
@@ -226,7 +226,7 @@ export default function AdminPage() {
     }
 
     return (
-        <div className="h-full bg-[#F8F7F4]">
+        <div className="admin-page h-full bg-[#F8F7F4]">
             <Routes>
                 <Route index element={<AdminDashboard apiKey={apiKey} />} />
                 <Route path="topics/:id/stats" element={<AdminTopicStatsPage apiKey={apiKey} />} />

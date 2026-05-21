@@ -12,6 +12,7 @@ import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
 import Skeleton from "../components/Skeleton";
 import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
+import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
 import type { AnswerVal, TaskNav, TaskResult } from "../api/types";
 import { authFetch } from "../api/client";
 import confetti from "canvas-confetti";
@@ -50,7 +51,9 @@ export default function ExamPage() {
     const [solutionPanelTaskId, setSolutionPanelTaskId] = useState<number | null>(null);
     const [solutionPanelInitialTab, setSolutionPanelInitialTab] = useState<"code" | "file" | "image">("code");
     const [solutionPanelPrefillCode, setSolutionPanelPrefillCode] = useState("");
+    const [solutionPanelTextMode, setSolutionPanelTextMode] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
+    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string; imageSrc?: string }>>({});
     const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
     const appliedTaskDeepLinkRef = useRef<string | null>(null);
     const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
@@ -231,7 +234,17 @@ export default function ExamPage() {
             : "";
         setSolutionPanelInitialTab(tab);
         setSolutionPanelPrefillCode(tab === "code" ? proofText : "");
+        setSolutionPanelTextMode(false);
         setSolutionPanelTaskId(taskId);
+    };
+
+    const openRecognizedDrawingSolution = (text: string, rawText?: string, imageSrc?: string) => {
+        if (!task) return;
+        setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: rawText || text, imageSrc } }));
+        setSolutionPanelInitialTab("code");
+        setSolutionPanelPrefillCode(text);
+        setSolutionPanelTextMode(true);
+        setSolutionPanelTaskId(task.id);
     };
 
     // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
@@ -547,7 +560,7 @@ export default function ExamPage() {
         };
 
         return (
-            <div className="exam-dark min-h-screen bg-[#F8F7F4]">
+            <div className={clsx("exam-dark exam-result-page min-h-screen bg-[#F8F7F4]", !publishedAnalysis && "exam-review-pending-page")}>
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
@@ -619,7 +632,10 @@ export default function ExamPage() {
                                         return (
                                             <div
                                                 key={tr.task_id}
-                                                className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
+                                                className={clsx(
+                                                    "exam-result-card flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm",
+                                                    publishedAnalysis ? "exam-result-card--checked" : "exam-result-card--pending",
+                                                )}
                                                 style={{
                                                     backgroundColor: isCorrect ? '#d4edd4' : isWrong ? '#f5b5a8' : isPartial ? '#fde68a' : '#ffffff',
                                                     borderColor: isCorrect ? '#b6ddb6' : isWrong ? '#e8998a' : isPartial ? '#f5d06b' : '#e5e7eb',
@@ -869,7 +885,7 @@ export default function ExamPage() {
                 <tr
                     key={tr.task_id}
                     className={clsx(
-                        "transition-colors cursor-pointer",
+                        "exam-result-row transition-colors cursor-pointer",
                         tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
                             : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
                             : "hover:bg-gray-50/80"
@@ -937,7 +953,7 @@ export default function ExamPage() {
         );
 
         return (
-            <div className="exam-dark min-h-screen bg-[#F8F7F4]">
+            <div className="exam-dark exam-result-page min-h-screen bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
@@ -994,7 +1010,7 @@ export default function ExamPage() {
                                     return (
                                         <div
                                             key={tr.task_id}
-                                            className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
+                                            className="exam-result-card exam-result-card--checked flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
                                             style={{
                                                 backgroundColor: isCorrect ? '#d4edd4' : isWrong ? '#f5b5a8' : '#fde68a',
                                                 borderColor: isCorrect ? '#b6ddb6' : isWrong ? '#e8998a' : '#f5d06b',
@@ -1392,6 +1408,7 @@ export default function ExamPage() {
                             taskId={solutionPanelTaskId}
                             initialTab={solutionPanelInitialTab}
                             prefillCode={solutionPanelPrefillCode}
+                            textSolutionMode={solutionPanelTextMode}
                             onClose={() => {
                                 setSolutionPanelTaskId(null);
                                 clearSolutionDeepLink();
@@ -1594,7 +1611,14 @@ export default function ExamPage() {
                                             onAnnotationPanelOpenChange={setDrawingPanelOpen}
                                             showAnnotationToggle={false}
                                             annotationToolbarHostId={`exam-drawing-toolbar-${task.id}`}
+                                            onDrawingRecognized={canAnnotateExamTask ? openRecognizedDrawingSolution : undefined}
                                         />
+                                        {task && recognizedDrawingSolutions[task.id] && (
+                                            <RecognizedSolutionBlock
+                                                text={recognizedDrawingSolutions[task.id].text}
+                                                imageSrc={recognizedDrawingSolutions[task.id].imageSrc}
+                                            />
+                                        )}
                                     </div>
                                 </>
                             ) : null}
@@ -1674,6 +1698,7 @@ export default function ExamPage() {
                                             onClick={() => {
                                                 setSolutionPanelInitialTab("code");
                                                 setSolutionPanelPrefillCode("");
+                                                setSolutionPanelTextMode(false);
                                                 setSolutionPanelTaskId(task.id);
                                             }}
                                             disabled={isSubmitting}

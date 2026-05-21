@@ -4,7 +4,7 @@ import parse, { attributesToProps, domToReact } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { Check, Eraser, Loader2, Minus, PenLine, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { Check, Code2, Eraser, Loader2, Minus, PenLine, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { authFetch } from "../api/client";
 import type { TaskFile } from "../api/types";
 import { useTheme } from "../context/ThemeContext";
@@ -21,6 +21,7 @@ interface Props {
     onAnnotationPanelOpenChange?: (open: boolean) => void;
     showAnnotationToggle?: boolean;
     annotationToolbarHostId?: string;
+    onDrawingRecognized?: (text: string, rawText?: string, imageDataUrl?: string) => void;
 }
 
 type AnnotationTool = "none" | "pen" | "eraser";
@@ -292,11 +293,34 @@ function isNearStroke(stroke: AnnotationStroke, point: StrokePoint, radius: numb
     });
 }
 
-function renderStrokesToPngBlob(strokes: AnnotationStroke[], size: { width: number; height: number }): Promise<Blob> {
-    const width = Math.max(320, Math.ceil(size.width || 1));
-    const height = Math.max(220, Math.ceil(size.height || 1));
+function renderStrokesToPngBlob(
+    strokes: AnnotationStroke[],
+    size: { width: number; height: number },
+    options?: { cropToStrokes?: boolean; ocrFriendly?: boolean },
+): Promise<Blob> {
+    const allPoints = strokes.flatMap((stroke) => stroke.points);
+    const padding = options?.cropToStrokes ? 56 : 0;
+    const bounds = allPoints.length > 0 && options?.cropToStrokes
+        ? allPoints.reduce(
+            (acc, point) => ({
+                minX: Math.min(acc.minX, point.x),
+                minY: Math.min(acc.minY, point.y),
+                maxX: Math.max(acc.maxX, point.x),
+                maxY: Math.max(acc.maxY, point.y),
+            }),
+            { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+        )
+        : null;
+    const offsetX = bounds ? Math.max(0, bounds.minX - padding) : 0;
+    const offsetY = bounds ? Math.max(0, bounds.minY - padding) : 0;
+    const width = bounds
+        ? Math.max(320, Math.ceil(Math.min(size.width, bounds.maxX + padding) - offsetX))
+        : Math.max(320, Math.ceil(size.width || 1));
+    const height = bounds
+        ? Math.max(220, Math.ceil(Math.min(size.height, bounds.maxY + padding) - offsetY))
+        : Math.max(220, Math.ceil(size.height || 1));
     const maxSide = 2200;
-    const scale = Math.min(1, maxSide / Math.max(width, height));
+    const scale = options?.ocrFriendly ? Math.min(3, maxSide / Math.max(width, height)) : Math.min(1, maxSide / Math.max(width, height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(width * scale);
     canvas.height = Math.ceil(height * scale);
@@ -304,30 +328,32 @@ function renderStrokesToPngBlob(strokes: AnnotationStroke[], size: { width: numb
     if (!ctx) return Promise.reject(new Error("Canvas is not supported"));
 
     ctx.scale(scale, scale);
-    ctx.fillStyle = "#0b1724";
+    ctx.fillStyle = options?.ocrFriendly ? "#ffffff" : "#0b1724";
     ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
-    ctx.lineWidth = 1;
-    for (let x = 40; x < width; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-    }
-    for (let y = 40; y < height; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
+    if (!options?.ocrFriendly) {
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
+        ctx.lineWidth = 1;
+        for (let x = 40; x < width; x += 40) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        for (let y = 40; y < height; y += 40) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
     }
 
     strokes.forEach((stroke) => {
         if (stroke.points.length === 0) return;
         ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        stroke.points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
-        ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.width;
+        ctx.moveTo(stroke.points[0].x - offsetX, stroke.points[0].y - offsetY);
+        stroke.points.slice(1).forEach((point) => ctx.lineTo(point.x - offsetX, point.y - offsetY));
+        ctx.strokeStyle = options?.ocrFriendly ? "#050505" : stroke.color;
+        ctx.lineWidth = options?.ocrFriendly ? Math.max(3, stroke.width) : stroke.width;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
@@ -338,6 +364,39 @@ function renderStrokesToPngBlob(strokes: AnnotationStroke[], size: { width: numb
             if (blob) resolve(blob);
             else reject(new Error("Не удалось подготовить изображение"));
         }, "image/png");
+    });
+}
+
+function formatRecognizedMathText(text: string): string {
+    const normalizeLatexLine = (line: string) => line
+        .replace(/\\\[/g, "")
+        .replace(/\\\]/g, "")
+        .replace(/\$/g, "")
+        .replace(/\\cdot/g, " * ")
+        .replace(/\\times/g, " * ")
+        .replace(/\\log_\{([^}]+)\}/g, "log_$1")
+        .replace(/\^\{([^}]+)\}/g, "^($1)")
+        .replace(/_\{([^}]+)\}/g, "_$1")
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
+        .replace(/\\sqrt\{([^{}]+)\}/g, "sqrt($1)")
+        .replace(/\\left|\\right/g, "")
+        .replace(/\\,/g, " ")
+        .replace(/[ \t]+/g, " ")
+        .trim();
+
+    return text
+        .split(/\r?\n/)
+        .map((line) => normalizeLatexLine(line))
+        .filter(Boolean)
+        .join("\n\n");
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error ?? new Error("Не удалось подготовить изображение"));
+        reader.readAsDataURL(blob);
     });
 }
 
@@ -584,10 +643,13 @@ export default function TaskView({
     onAnnotationPanelOpenChange,
     showAnnotationToggle = true,
     annotationToolbarHostId,
+    onDrawingRecognized,
 }: Props) {
     const { theme } = useTheme();
     const contentRef = useRef<HTMLDivElement | null>(null);
     const planeRef = useRef<HTMLDivElement | null>(null);
+    const activeStrokeIdRef = useRef<string | null>(null);
+    const activeStrokeStartRef = useRef<StrokePoint | null>(null);
     const [tool, setTool] = useState<AnnotationTool>("none");
     const [color, setColor] = useState("#ef4444");
     const [width, setWidth] = useState(4);
@@ -598,6 +660,7 @@ export default function TaskView({
     const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
     const [internalAnnotationPanelOpen, setInternalAnnotationPanelOpen] = useState(false);
     const [savingDrawing, setSavingDrawing] = useState(false);
+    const [recognizingDrawing, setRecognizingDrawing] = useState(false);
     const [drawingSaved, setDrawingSaved] = useState(false);
     const [drawingSaveError, setDrawingSaveError] = useState<string | null>(null);
     const [annotationToolbarHost, setAnnotationToolbarHost] = useState<HTMLElement | null>(null);
@@ -791,11 +854,16 @@ export default function TaskView({
 
     const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
         if (tool === "none") return;
+        event.preventDefault();
 
         const point = getPointerPoint(event);
         if (!point) return;
 
-        event.currentTarget.setPointerCapture(event.pointerId);
+        try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+            // Some browsers can reject capture when the pointer is already gone.
+        }
 
         if (tool === "eraser") {
             eraseAtPoint(point);
@@ -803,6 +871,8 @@ export default function TaskView({
         }
 
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        activeStrokeIdRef.current = id;
+        activeStrokeStartRef.current = point;
         setActiveStrokeId(id);
         setActiveStrokeStart(point);
         setStrokes((current) => [...current, { id, color, width, points: [point] }]);
@@ -810,6 +880,11 @@ export default function TaskView({
 
     const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
         if (tool === "none") return;
+        if ((event.buttons & 1) !== 1) {
+            stopDrawing();
+            return;
+        }
+        event.preventDefault();
 
         const point = getPointerPoint(event);
         if (!point) return;
@@ -819,18 +894,22 @@ export default function TaskView({
             return;
         }
 
-        if (!activeStrokeId || event.buttons !== 1) return;
+        const currentStrokeId = activeStrokeIdRef.current;
+        if (!currentStrokeId) return;
+        const startPoint = activeStrokeStartRef.current;
         setStrokes((current) => current.map((stroke) => (
-            stroke.id === activeStrokeId
-                ? { ...stroke, points: event.shiftKey && activeStrokeStart ? [activeStrokeStart, point] : [...stroke.points, point] }
+            stroke.id === currentStrokeId
+                ? { ...stroke, points: event.shiftKey && startPoint ? [startPoint, point] : [...stroke.points, point] }
                 : stroke
         )));
     };
 
-    const stopDrawing = () => {
+    function stopDrawing() {
+        activeStrokeIdRef.current = null;
+        activeStrokeStartRef.current = null;
         setActiveStrokeId(null);
         setActiveStrokeStart(null);
-    };
+    }
 
     const saveDrawingSolution = async () => {
         if (!annotationTaskId) {
@@ -862,6 +941,48 @@ export default function TaskView({
             setDrawingSaveError(error instanceof Error ? error.message : "Не удалось сохранить решение");
         } finally {
             setSavingDrawing(false);
+        }
+    };
+
+    const recognizeDrawingSolution = async () => {
+        if (!annotationTaskId || !onDrawingRecognized) return;
+        if (strokes.length === 0) {
+            setDrawingSaveError("Сначала напишите решение в черновике");
+            return;
+        }
+
+        setRecognizingDrawing(true);
+        setDrawingSaved(false);
+        setDrawingSaveError(null);
+        try {
+            const blob = await renderStrokesToPngBlob(strokes, drawingSize, { cropToStrokes: true, ocrFriendly: true });
+            const imageDataUrl = await blobToDataUrl(blob);
+            const form = new FormData();
+            form.append("file", blob, `task-${annotationTaskId}-drawing.png`);
+            const uploadResponse = await authFetch(`/api/tasks/${annotationTaskId}/solution/upload/image`, {
+                method: "POST",
+                body: form,
+            });
+            if (!uploadResponse.ok) {
+                const error = await uploadResponse.json().catch(() => ({ detail: "Не удалось сохранить черновик" }));
+                throw new Error(error.detail || "Не удалось сохранить черновик");
+            }
+
+            const ocrResponse = await authFetch(`/api/tasks/${annotationTaskId}/solution/ocr-image`, {
+                method: "POST",
+            });
+            if (!ocrResponse.ok) {
+                const error = await ocrResponse.json().catch(() => ({ detail: "Не удалось распознать черновик" }));
+                throw new Error(error.detail || "Не удалось распознать черновик");
+            }
+
+            const data = await ocrResponse.json() as { text: string };
+            onDrawingRecognized(formatRecognizedMathText(data.text), data.text, imageDataUrl);
+            setDrawingSaved(true);
+        } catch (error) {
+            setDrawingSaveError(error instanceof Error ? error.message : "Не удалось распознать черновик");
+        } finally {
+            setRecognizingDrawing(false);
         }
     };
 
@@ -938,7 +1059,7 @@ export default function TaskView({
             <button
                 type="button"
                 onClick={saveDrawingSolution}
-                disabled={savingDrawing || strokes.length === 0 || !annotationTaskId}
+                disabled={savingDrawing || recognizingDrawing || strokes.length === 0 || !annotationTaskId}
                 title="Сохранить решение"
             >
                 {savingDrawing ? (
@@ -948,6 +1069,20 @@ export default function TaskView({
                 ) : (
                     <Save size={16} />
                 )}
+            </button>
+            <button
+                type="button"
+                className="task-annotation-recognize"
+                onClick={recognizeDrawingSolution}
+                disabled={savingDrawing || recognizingDrawing || strokes.length === 0 || !annotationTaskId || !onDrawingRecognized}
+                title={onDrawingRecognized ? "Распознать черновик в текст решения" : "Распознавание недоступно на этом экране"}
+            >
+                {recognizingDrawing ? (
+                    <Loader2 size={16} className="task-annotation-spin" />
+                ) : (
+                    <Code2 size={16} />
+                )}
+                <span>Распознать</span>
             </button>
             <button
                 type="button"
@@ -1011,7 +1146,7 @@ export default function TaskView({
                                 onPointerMove={handlePointerMove}
                                 onPointerUp={stopDrawing}
                                 onPointerCancel={stopDrawing}
-                                onPointerLeave={stopDrawing}
+                                onLostPointerCapture={stopDrawing}
                             >
                                 {strokes.map((stroke) => (
                                     <path
