@@ -6,22 +6,59 @@ import { useCurrentPreparationPlan, useNavigation } from '../hooks/useApi';
 import { TopicCategory, type TopicNav } from '../api/types';
 import { api } from '../api/client';
 
+type SubjectId = 'informatics' | 'math';
+
+const SUBJECTS: { id: SubjectId; label: string }[] = [
+  { id: 'informatics', label: 'Информатика' },
+  { id: 'math', label: 'Математика' },
+];
+
+function getTopicSubject(topic: TopicNav): SubjectId {
+  if (topic.subject === 'math' || topic.category === TopicCategory.math) return 'math';
+  return 'informatics';
+}
+
 export function TasksListPage() {
   const { data: allTopics, isLoading } = useNavigation();
   const { data: currentPlan } = useCurrentPreparationPlan();
   const queryClient = useQueryClient();
   const [newTaskNotices, setNewTaskNotices] = useState<Record<number, number>>({});
+  const [activeSubject, setActiveSubject] = useState<SubjectId>('informatics');
+
+  const subjectCounts = useMemo(() => {
+    const counts: Record<SubjectId, number> = { informatics: 0, math: 19 };
+    if (!allTopics) return counts;
+
+    const numsBySubject: Record<SubjectId, Set<number>> = {
+      informatics: new Set(),
+      math: new Set(Array.from({ length: 19 }, (_, i) => i + 1)),
+    };
+
+    for (const topic of allTopics) {
+      const subject = getTopicSubject(topic);
+      if (topic.ege_number != null) numsBySubject[subject].add(topic.ege_number);
+    }
+
+    return {
+      informatics: numsBySubject.informatics.size,
+      math: numsBySubject.math.size,
+    };
+  }, [allTopics]);
 
   const taskGroups = useMemo(() => {
     if (!allTopics) return [];
 
-    const tutorials = allTopics.filter(t => t.category === TopicCategory.tutorial);
-    const homeworks  = allTopics.filter(t => t.category === TopicCategory.homework);
+    const subjectTopics = allTopics.filter(t => getTopicSubject(t) === activeSubject);
+    const tutorials = subjectTopics.filter(t => t.category === TopicCategory.tutorial || t.category === TopicCategory.math);
+    const homeworks  = subjectTopics.filter(t => t.category === TopicCategory.homework);
 
-    const egeNums = new Set([
+    const egeNums = new Set<number>([
       ...tutorials.map(t => t.ege_number).filter((n): n is number => n != null),
       ...homeworks.map(t => t.ege_number).filter((n): n is number => n != null),
     ]);
+    if (activeSubject === 'math') {
+      for (let n = 1; n <= 19; n += 1) egeNums.add(n);
+    }
 
     return Array.from(egeNums)
       .sort((a, b) => a - b)
@@ -38,7 +75,7 @@ export function TasksListPage() {
         const explicitEnd = tut?.ege_number_end ?? hw?.ege_number_end ?? null;
         // Otherwise compute composite range from tasks' sub_tasks
         const allTasks = [...tutTopics, ...hwTopics].flatMap(t => t.tasks);
-        const isLocked = allTasks.length > 0 && allTasks.every(t => t.is_locked);
+        const isLocked = activeSubject === 'math' || (allTasks.length > 0 && allTasks.every(t => t.is_locked));
         const isTrial = allTasks.some(t => t.is_trial);
         const taskMax = allTasks.reduce<number | null>((acc, t) => {
           const m = (t as any).ege_number_max as number | null | undefined;
@@ -63,7 +100,7 @@ export function TasksListPage() {
           egeNum,
           egeLabel,
           topicIds: [...tutTopics, ...hwTopics].map(topic => topic.id),
-          title: tut?.title ?? hw?.title ?? `Задание ${egeLabel}`,
+          title: tut?.title ?? hw?.title ?? (activeSubject === 'math' ? `Математика №${egeLabel}` : `Задание ${egeLabel}`),
           tutorial: tut ? {
             id: tut.id,
             solved: tutTopics.reduce((sum, topic) => sum + topic.tasks.filter(t => t.status === 'solved').length, 0),
@@ -83,7 +120,7 @@ export function TasksListPage() {
             + hwTopics.reduce((sum, topic) => sum + (topic.new_tasks_count ?? 0), 0),
         };
       });
-  }, [allTopics]);
+  }, [allTopics, activeSubject]);
 
   useEffect(() => {
     if (isLoading || taskGroups.length === 0) return;
@@ -152,6 +189,56 @@ export function TasksListPage() {
 
   return (
     <div className="min-h-full space-y-6 bg-[#030A12] p-4 animate-in fade-in duration-500 md:p-8">
+      <div className="mx-auto max-w-[1400px] space-y-4">
+        <div className="flex gap-6 overflow-x-auto border-b border-slate-900/10 dark:border-white/10 scrollbar-hide">
+          {SUBJECTS.map(({ id, label }) => {
+            const active = activeSubject === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveSubject(id)}
+                className={`-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 pb-2.5 text-sm font-semibold transition-all duration-200 ${
+                  active
+                    ? 'border-[#21B66F] text-slate-950 dark:text-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
+                }`}
+              >
+                {label}
+                {subjectCounts[id] > 0 && (
+                  <span className={`min-w-[18px] rounded-full px-1.5 py-0.5 text-center text-[11px] font-bold ${
+                    active ? 'bg-[#21B66F] text-[#03100B]' : 'bg-slate-900/8 text-slate-700 dark:bg-white/10 dark:text-slate-300'
+                  }`}>
+                    {subjectCounts[id]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeSubject === 'math' && (
+          <div className="overflow-hidden rounded-2xl border border-amber-300/20 bg-gradient-to-r from-amber-400/14 via-emerald-400/10 to-sky-400/10 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-sm font-black uppercase tracking-wide text-amber-200">Цель: 100 подписчиков</div>
+                <p className="mt-1 text-sm font-semibold text-slate-200">
+                  Раздел математики откроется после набора 100 подписчиков. Пока доступны 19 заблокированных тем-заготовок.
+                </p>
+              </div>
+              <div className="min-w-[220px]">
+                <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-300">
+                  <span>Прогресс цели</span>
+                  <span>0 / 100</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-0 rounded-full bg-gradient-to-r from-amber-300 to-emerald-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       {isLoading ? (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 max-w-[1400px] mx-auto">
           {Array.from({ length: 8 }).map((_, i) => (

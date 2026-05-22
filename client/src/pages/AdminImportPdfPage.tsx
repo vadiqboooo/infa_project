@@ -476,6 +476,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                 body: JSON.stringify({
                     topic_title: topicTitle.trim(),
                     category,
+                    subject: category === 'math' ? 'math' : 'informatics',
                     course_type: category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType,
                     is_mock: isMock,
                     time_limit_minutes: timeLimitMinutes,

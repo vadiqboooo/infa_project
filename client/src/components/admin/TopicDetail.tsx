@@ -51,7 +51,7 @@ const BACKGROUND_PRESETS: { url: string; label: string }[] = [
   { url: '/character/фон 2.png', label: 'Фон 2' },
 ];
 import { clsx } from 'clsx';
-import type { TopicAdmin, TaskAdmin, TopicCategory, TaskDifficulty, AnswerType } from '../../api/types';
+import type { TopicAdmin, TaskAdmin, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string
@@ -441,6 +441,7 @@ export function TopicDetail({
                   setEditingTopic((prev) => ({
                     ...prev,
                     category: nextCategory,
+                    subject: nextCategory === 'math' ? 'math' : (prev.subject ?? 'informatics'),
                     course_type: isCommonCourseCategory(nextCategory)
                       ? 'common'
                       : prev.course_type === 'common' ? 'year' : prev.course_type,
@@ -454,6 +455,14 @@ export function TopicDetail({
                 <option value="variants">Вариант</option>
                 <option value="math">Математика</option>
                 <option value="mock">Пробник</option>
+              </select>
+              <select
+                value={editingTopic.subject ?? (editingTopic.category === 'math' ? 'math' : 'informatics')}
+                onChange={(e) => handleTopicFieldChange('subject', e.target.value as TopicSubject)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
+              >
+                <option value="informatics">Информатика</option>
+                <option value="math">Математика</option>
               </select>
               <select
                 value={isCommonCourseCategory(editingTopic.category) ? 'common' : (editingTopic.course_type ?? 'year')}
@@ -481,6 +490,14 @@ export function TopicDetail({
           ) : (
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-gray-900">{topic.title}</h2>
+              <span className={clsx(
+                'px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider',
+                (topic.subject === 'math' || topic.category === 'math')
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-emerald-100 text-emerald-700'
+              )}>
+                {(topic.subject === 'math' || topic.category === 'math') ? 'Математика' : 'Информатика'}
+              </span>
               {topic.ege_number != null && (
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#3F8C62]/10 text-[#3F8C62] rounded-lg">
                   <Hash size={12} />
@@ -1237,7 +1254,7 @@ function TaskEditPanel({
           </div>
         </div>
         <div>
-          <label className={labelCls}>Тема / Раздел (опционально)</label>
+          <label className={labelCls}>Название в списке заданий (опционально)</label>
           <input type="text" value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="Напр: Теория игр, Базы данных"

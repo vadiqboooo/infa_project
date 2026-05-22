@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.routers import admin, analytics, auth, billing, content, course_leads, exams, preparation, solving, stats
 
@@ -93,6 +94,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(
                 lambda sync_conn: site_visit.SiteVisit.__table__.create(sync_conn, checkfirst=True)
             )
+            await conn.execute(text("ALTER TABLE user_task_solutions ADD COLUMN IF NOT EXISTS recognized_text TEXT"))
         logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)

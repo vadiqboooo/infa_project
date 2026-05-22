@@ -27,6 +27,7 @@ import type {
     TopicAdmin,
     TopicIn,
     TopicCategory,
+    TopicSubject,
     StudentOut,
     StudentDetailOut,
     TopicStatsOut,
@@ -34,6 +35,7 @@ import type {
     PreparationPlan,
     PreparationPlanBlock,
     AnalyticsSummary,
+    AdminTestCheckoutResponse,
 } from "../api/types";
 import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
@@ -290,6 +292,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             const matchesFilter =
                 filter === 'все'
                 || (filter === 'learning' && (t.category === 'tutorial' || t.category === 'homework'))
+                || (filter === 'math' && (t.subject === 'math' || t.category === 'math'))
                 || t.category === filter;
             const egeLabel = topicEgeLabel(t).toLowerCase();
             const matchesSearch =
@@ -320,6 +323,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             title, 
             order_index: topics.length, 
             category: 'tutorial' as TopicCategory,
+            subject: 'informatics',
             course_type: 'year',
             time_limit_minutes: 60,
             is_mock: false
@@ -394,6 +398,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         if (courseType === 'summer') return 'Летний';
         if (courseType === 'common') return 'Общий';
         return 'Годовой';
+    };
+
+    const subjectLabel = (subject?: string, category?: string) => {
+        if (subject === 'math' || category === 'math') return 'Математика';
+        return 'Информатика';
+    };
+
+    const subjectColor = (subject?: string, category?: string) => {
+        if (subject === 'math' || category === 'math') return 'bg-amber-100 text-amber-700';
+        return 'bg-emerald-100 text-emerald-700';
     };
 
     return (
@@ -569,6 +583,9 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                         </div>
 
                                         <div className="flex items-center gap-2">
+                                            <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', subjectColor(topic.subject, topic.category))}>
+                                                {subjectLabel(topic.subject, topic.category)}
+                                            </span>
                                             <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
                                                 {categoryLabel(topic.category)}
                                             </span>
@@ -872,6 +889,10 @@ function SubscriptionsPanel({
     const [editName, setEditName] = useState('');
     const [editColor, setEditColor] = useState('');
     const [saving, setSaving] = useState(false);
+    const [testAmount, setTestAmount] = useState('10.00');
+    const [testPaymentLoading, setTestPaymentLoading] = useState(false);
+    const [testPaymentError, setTestPaymentError] = useState('');
+    const [testPayment, setTestPayment] = useState<AdminTestCheckoutResponse | null>(null);
 
     const handleCreate = async () => {
         if (!newName.trim()) return;
@@ -909,9 +930,81 @@ function SubscriptionsPanel({
         await onRefresh();
     };
 
+    const handleCreateTestPayment = async () => {
+        const amount = Number(testAmount.replace(',', '.'));
+        setTestPaymentError('');
+        setTestPayment(null);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setTestPaymentError('Введите сумму больше 0');
+            return;
+        }
+        setTestPaymentLoading(true);
+        try {
+            const payment = await adminFetch<AdminTestCheckoutResponse>('/billing/admin/test-checkout', apiKey, {
+                method: 'POST',
+                body: JSON.stringify({ amount: amount.toFixed(2) }),
+            });
+            setTestPayment(payment);
+            window.open(payment.confirmation_url, '_blank', 'noopener,noreferrer');
+        } catch (err: any) {
+            setTestPaymentError(err.message || 'Не удалось создать тестовую оплату');
+        } finally {
+            setTestPaymentLoading(false);
+        }
+    };
+
     return (
         <div className="flex-1 overflow-y-auto">
             <div className="max-w-4xl space-y-4">
+                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div className="max-w-xl">
+                            <h2 className="text-lg font-bold text-gray-900">Тестовая оплата</h2>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Создает платеж в текущем магазине YooKassa на указанную сумму. Подписка ученику не выдается.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                            <label className="block">
+                                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-400">Сумма, ₽</span>
+                                <input
+                                    value={testAmount}
+                                    onChange={(e) => setTestAmount(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTestPayment(); }}
+                                    inputMode="decimal"
+                                    className="w-full min-w-36 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62]"
+                                    placeholder="10.00"
+                                />
+                            </label>
+                            <button
+                                onClick={handleCreateTestPayment}
+                                disabled={testPaymentLoading}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                            >
+                                <CreditCard size={16} />
+                                {testPaymentLoading ? 'Создание...' : 'Создать оплату'}
+                            </button>
+                        </div>
+                    </div>
+                    {testPaymentError && (
+                        <p className="mt-3 text-sm font-semibold text-red-600">{testPaymentError}</p>
+                    )}
+                    {testPayment && (
+                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                            <div className="font-bold">Платеж создан: {testPayment.amount_value} {testPayment.currency}</div>
+                            <div className="mt-1 break-all text-xs text-emerald-700">YooKassa ID: {testPayment.yookassa_payment_id}</div>
+                            <a
+                                href={testPayment.confirmation_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 inline-flex font-bold text-emerald-900 underline"
+                            >
+                                Открыть страницу оплаты
+                            </a>
+                        </div>
+                    )}
+                </div>
+
                 <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
                     <div className="flex items-start justify-between gap-4 mb-5">
                         <div>
@@ -1477,6 +1570,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             title: data.title || topic.title,
             order_index: data.order_index ?? topic.order_index,
             category: (data.category as TopicCategory) || topic.category,
+            subject: (data.subject as TopicSubject) || topic.subject || 'informatics',
             course_type: data.course_type ?? topic.course_type ?? 'year',
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
@@ -1515,7 +1609,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             solution_steps: taskData.solution_steps,
             full_solution_code: taskData.full_solution_code,
             media_resources: (taskData as any).media_resources,
-            order_index: taskData.order_index
+            order_index: taskData.order_index,
+            sub_tasks: taskData.sub_tasks ?? null,
         };
         
         await adminFetch(url, apiKey, {
@@ -1555,6 +1650,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
                         full_solution_code: task.full_solution_code,
                         media_resources: (task as any).media_resources,
                         order_index: task.order_index,
+                        sub_tasks: task.sub_tasks ?? null,
                     }),
                 })
             ));

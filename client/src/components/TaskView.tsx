@@ -368,27 +368,15 @@ function renderStrokesToPngBlob(
 }
 
 function formatRecognizedMathText(text: string): string {
-    const normalizeLatexLine = (line: string) => line
-        .replace(/\\\[/g, "")
-        .replace(/\\\]/g, "")
-        .replace(/\$/g, "")
-        .replace(/\\cdot/g, " * ")
-        .replace(/\\times/g, " * ")
-        .replace(/\\log_\{([^}]+)\}/g, "log_$1")
-        .replace(/\^\{([^}]+)\}/g, "^($1)")
-        .replace(/_\{([^}]+)\}/g, "_$1")
-        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
-        .replace(/\\sqrt\{([^{}]+)\}/g, "sqrt($1)")
-        .replace(/\\left|\\right/g, "")
-        .replace(/\\,/g, " ")
-        .replace(/[ \t]+/g, " ")
-        .trim();
-
     return text
-        .split(/\r?\n/)
-        .map((line) => normalizeLatexLine(line))
-        .filter(Boolean)
-        .join("\n\n");
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .replace(/^```(?:latex|tex|text|markdown|md)?\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .split("\n")
+        .map((line) => line.replace(/[ \t]+$/g, ""))
+        .join("\n")
+        .trim();
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

@@ -8,6 +8,7 @@ class TaskNav(BaseModel):
     external_id: str | None = None
     ege_number: int | None = None
     ege_number_max: int | None = None  # max sub-task number when composite (e.g. 21 for 19-21)
+    title: str | None = None
     status: str = "not_started"  # not_started / solved / failed
     has_solution: bool = False
     is_locked: bool = False
@@ -21,6 +22,7 @@ class TopicNav(BaseModel):
     title: str
     order_index: int
     category: str = "tutorial"
+    subject: str = "informatics"
     course_type: str = "year"
     tasks: list[TaskNav] = []
     exam_id: int | None = None

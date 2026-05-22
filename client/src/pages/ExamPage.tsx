@@ -14,7 +14,7 @@ import Skeleton from "../components/Skeleton";
 import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
 import type { AnswerVal, TaskNav, TaskResult } from "../api/types";
-import { authFetch } from "../api/client";
+import { api, authFetch } from "../api/client";
 import confetti from "canvas-confetti";
 
 export default function ExamPage() {
@@ -53,7 +53,9 @@ export default function ExamPage() {
     const [solutionPanelPrefillCode, setSolutionPanelPrefillCode] = useState("");
     const [solutionPanelTextMode, setSolutionPanelTextMode] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
-    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string; imageSrc?: string }>>({});
+    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string }>>({});
+    const [solutionReviewSending, setSolutionReviewSending] = useState<Record<number, boolean>>({});
+    const [solutionReviewSent, setSolutionReviewSent] = useState<Record<number, boolean>>({});
     const solutionPanelBeforeCloseRef = useRef<(() => boolean) | null>(null);
     const appliedTaskDeepLinkRef = useRef<string | null>(null);
     const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
@@ -97,6 +99,23 @@ export default function ExamPage() {
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const { data: reviewTask, isLoading: reviewTaskLoading } = useTask(reviewTaskId);
+
+    useEffect(() => {
+        if (!task?.id) return;
+        let cancelled = false;
+        api<{ recognized_text: string | null }>(`/tasks/${task.id}/solution`)
+            .then((solution) => {
+                if (cancelled || !solution.recognized_text?.trim()) return;
+                setRecognizedDrawingSolutions(prev => prev[task.id] ? prev : ({
+                    ...prev,
+                    [task.id]: { text: solution.recognized_text ?? "" },
+                }));
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [task?.id]);
 
     const startExamMutation = useStartExam(examInfo?.id ?? 0);
     const submitExamMutation = useSubmitExam(examInfo?.id ?? 0);
@@ -238,13 +257,57 @@ export default function ExamPage() {
         setSolutionPanelTaskId(taskId);
     };
 
-    const openRecognizedDrawingSolution = (text: string, rawText?: string, imageSrc?: string) => {
+    const openRecognizedDrawingSolution = (text: string, rawText?: string) => {
         if (!task) return;
-        setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: rawText || text, imageSrc } }));
+        const displayText = rawText || text;
+        setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: displayText } }));
+        api(`/tasks/${task.id}/solution`, {
+            method: "PUT",
+            body: JSON.stringify({ recognized_text: displayText }),
+        })
+            .then(() => queryClient.invalidateQueries({ queryKey: ["task", task.id] }))
+            .catch(() => {});
         setSolutionPanelInitialTab("code");
-        setSolutionPanelPrefillCode(text);
+        setSolutionPanelPrefillCode(displayText);
         setSolutionPanelTextMode(true);
         setSolutionPanelTaskId(task.id);
+    };
+
+    const editRecognizedSolution = () => {
+        if (!task) return;
+        setSolutionPanelInitialTab("code");
+        setSolutionPanelPrefillCode(recognizedDrawingSolutions[task.id]?.text ?? "");
+        setSolutionPanelTextMode(true);
+        setSolutionPanelTaskId(task.id);
+    };
+
+    const deleteRecognizedSolution = async () => {
+        if (!task || !confirm("Удалить моё решение?")) return;
+        await api(`/tasks/${task.id}/solution`, {
+            method: "PUT",
+            body: JSON.stringify({ recognized_text: "" }),
+        });
+        setRecognizedDrawingSolutions(prev => {
+            const next = { ...prev };
+            delete next[task.id];
+            return next;
+        });
+        setSolutionReviewSent(prev => ({ ...prev, [task.id]: false }));
+        queryClient.invalidateQueries({ queryKey: ["task", task.id] });
+    };
+
+    const sendRecognizedSolutionForReview = async () => {
+        if (!task) return;
+        setSolutionReviewSending(prev => ({ ...prev, [task.id]: true }));
+        try {
+            await api(`/tasks/${task.id}/solution/help-request`, {
+                method: "POST",
+                body: JSON.stringify({ message: "Ученик отправил своё решение на проверку" }),
+            });
+            setSolutionReviewSent(prev => ({ ...prev, [task.id]: true }));
+        } finally {
+            setSolutionReviewSending(prev => ({ ...prev, [task.id]: false }));
+        }
     };
 
     // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
@@ -1419,6 +1482,19 @@ export default function ExamPage() {
                             onChanged={() => {
                                 queryClient.invalidateQueries({ queryKey: ["task", solutionPanelTaskId] });
                                 queryClient.invalidateQueries({ queryKey: ["solution-comment-notifications"] });
+                                api<{ recognized_text: string | null }>(`/tasks/${solutionPanelTaskId}/solution`)
+                                    .then((solution) => {
+                                        setRecognizedDrawingSolutions(prev => {
+                                            const next = { ...prev };
+                                            if (solution.recognized_text?.trim()) {
+                                                next[solutionPanelTaskId] = { text: solution.recognized_text };
+                                            } else {
+                                                delete next[solutionPanelTaskId];
+                                            }
+                                            return next;
+                                        });
+                                    })
+                                    .catch(() => {});
                             }}
                         />
                     </div>
@@ -1614,10 +1690,14 @@ export default function ExamPage() {
                                             onDrawingRecognized={canAnnotateExamTask ? openRecognizedDrawingSolution : undefined}
                                         />
                                         {task && recognizedDrawingSolutions[task.id] && (
-                                            <RecognizedSolutionBlock
-                                                text={recognizedDrawingSolutions[task.id].text}
-                                                imageSrc={recognizedDrawingSolutions[task.id].imageSrc}
-                                            />
+                                                <RecognizedSolutionBlock
+                                                    text={recognizedDrawingSolutions[task.id].text}
+                                                    sending={Boolean(solutionReviewSending[task.id])}
+                                                    sent={Boolean(solutionReviewSent[task.id])}
+                                                    onEdit={editRecognizedSolution}
+                                                    onDelete={deleteRecognizedSolution}
+                                                    onSendReview={sendRecognizedSolutionForReview}
+                                                />
                                         )}
                                     </div>
                                 </>

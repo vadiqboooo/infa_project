@@ -17,6 +17,7 @@ import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
 import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
 import "./TasksPage.css";
+import { api } from "../api/client";
 
 interface ChatMessage {
   id: number;
@@ -93,7 +94,9 @@ export default function TasksPage() {
     const [attachSolutionTextMode, setAttachSolutionTextMode] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
-    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string; imageSrc?: string }>>({});
+    const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string }>>({});
+    const [solutionReviewSending, setSolutionReviewSending] = useState<Record<number, boolean>>({});
+    const [solutionReviewSent, setSolutionReviewSent] = useState<Record<number, boolean>>({});
     const [examAnswers, setExamAnswers] = useState<Record<number, AnswerVal>>({});
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
@@ -219,6 +222,23 @@ export default function TasksPage() {
             egeNumber === task?.ege_number || egeNumber === currentTopic?.ege_number,
         ),
     );
+
+    useEffect(() => {
+        if (!task?.id) return;
+        let cancelled = false;
+        api<{ recognized_text: string | null }>(`/tasks/${task.id}/solution`)
+            .then((solution) => {
+                if (cancelled || !solution.recognized_text?.trim()) return;
+                setRecognizedDrawingSolutions(prev => prev[task.id] ? prev : ({
+                    ...prev,
+                    [task.id]: { text: solution.recognized_text ?? "" },
+                }));
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [task?.id]);
     const check = useCheckAnswer(openTaskId ?? 0);
 
     const reviewExamAttempt = viewingFinishedExam ? (examResult ?? examInfo?.finished_attempt ?? null) : null;
@@ -243,6 +263,24 @@ export default function TasksPage() {
     const refreshCurrentTask = () => {
         if (!currentTaskNav?.id) return;
         queryClient.invalidateQueries({ queryKey: ["task", currentTaskNav.id] });
+    };
+
+    const refreshCurrentTaskAndSolution = () => {
+        refreshCurrentTask();
+        if (!currentTaskNav?.id) return;
+        api<{ recognized_text: string | null }>(`/tasks/${currentTaskNav.id}/solution`)
+            .then((solution) => {
+                setRecognizedDrawingSolutions(prev => {
+                    const next = { ...prev };
+                    if (solution.recognized_text?.trim()) {
+                        next[currentTaskNav.id] = { text: solution.recognized_text };
+                    } else {
+                        delete next[currentTaskNav.id];
+                    }
+                    return next;
+                });
+            })
+            .catch(() => {});
     };
 
     const clearSolutionDeepLink = () => {
@@ -276,15 +314,60 @@ export default function TasksPage() {
         queryClient.invalidateQueries({ queryKey: ["task", taskId] });
     };
 
-    const openRecognizedDrawingSolution = (text: string, rawText?: string, imageSrc?: string) => {
+    const openRecognizedDrawingSolution = (text: string, rawText?: string) => {
         if (task) {
-            setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: rawText || text, imageSrc } }));
+            const displayText = rawText || text;
+            setRecognizedDrawingSolutions(prev => ({ ...prev, [task.id]: { text: displayText } }));
+            api(`/tasks/${task.id}/solution`, {
+                method: "PUT",
+                body: JSON.stringify({ recognized_text: displayText }),
+            })
+                .then(refreshCurrentTask)
+                .catch(() => {});
         }
         setMentorOpen(false);
         setAttachSolutionInitialTab("code");
-        setAttachSolutionPrefillCode(text);
+        setAttachSolutionPrefillCode(rawText || text);
         setAttachSolutionTextMode(true);
         setAttachSolutionOpen(true);
+    };
+
+    const editRecognizedSolution = () => {
+        if (!task) return;
+        setMentorOpen(false);
+        setAttachSolutionInitialTab("code");
+        setAttachSolutionPrefillCode(recognizedDrawingSolutions[task.id]?.text ?? "");
+        setAttachSolutionTextMode(true);
+        setAttachSolutionOpen(true);
+    };
+
+    const deleteRecognizedSolution = async () => {
+        if (!task || !confirm("Удалить моё решение?")) return;
+        await api(`/tasks/${task.id}/solution`, {
+            method: "PUT",
+            body: JSON.stringify({ recognized_text: "" }),
+        });
+        setRecognizedDrawingSolutions(prev => {
+            const next = { ...prev };
+            delete next[task.id];
+            return next;
+        });
+        setSolutionReviewSent(prev => ({ ...prev, [task.id]: false }));
+        refreshCurrentTask();
+    };
+
+    const sendRecognizedSolutionForReview = async () => {
+        if (!task) return;
+        setSolutionReviewSending(prev => ({ ...prev, [task.id]: true }));
+        try {
+            await api(`/tasks/${task.id}/solution/help-request`, {
+                method: "POST",
+                body: JSON.stringify({ message: "Ученик отправил своё решение на проверку" }),
+            });
+            setSolutionReviewSent(prev => ({ ...prev, [task.id]: true }));
+        } finally {
+            setSolutionReviewSending(prev => ({ ...prev, [task.id]: false }));
+        }
     };
 
     const selectTask = (index: number) => {
@@ -593,13 +676,18 @@ export default function TasksPage() {
                             {/* Task Navigation Row */}
                             <div className="-mx-4 mb-5 overflow-x-auto border-b border-white/10 bg-[#07111D]/72 px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.18)] backdrop-blur-xl scrollbar-hide md:-mx-8 md:mb-6 md:px-8">
                                 <div className="flex gap-1.5 md:gap-2 min-w-max">
-                                {tasks.map((t, idx) => (
+                                {tasks.map((t, idx) => {
+                                    const taskLabel = t.ege_number != null ? `№${t.ege_number}` : String(idx + 1);
+                                    const customTitle = t.title?.trim();
+                                    return (
                                     <button
                                         key={t.id}
                                         disabled={t.is_locked}
+                                        title={customTitle ? `${taskLabel}: ${customTitle}` : taskLabel}
                                         onClick={() => selectTask(idx)}
                                         className={clsx(
-                                            'w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex flex-col items-center justify-center relative border',
+                                            customTitle ? 'h-10 max-w-[190px] min-w-10 px-3' : 'h-10 w-10',
+                                            'shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 relative border',
                                             t.is_locked
                                                 ? 'cursor-not-allowed border-white/5 bg-white/[0.025] text-slate-700'
                                                 : idx === taskIndex
@@ -611,7 +699,12 @@ export default function TasksPage() {
                                                         : 'bg-white/[0.04] border-white/10 text-slate-400 hover:border-white/20 hover:text-white hover:-translate-y-0.5'
                                         )}
                                     >
-                                        {t.is_locked ? <Lock size={14} /> : <span>{idx + 1}</span>}
+                                        {t.is_locked ? <Lock size={14} /> : <span className="shrink-0">{taskLabel}</span>}
+                                        {!t.is_locked && customTitle && (
+                                            <span className="hidden max-w-[120px] truncate text-[11px] font-semibold opacity-90 sm:inline">
+                                                {customTitle}
+                                            </span>
+                                        )}
                                         {/* Indicator for solution existence from nav data */}
                                         {t.has_solution && (
                                             <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#07111D] bg-amber-400 text-white shadow-sm">
@@ -619,7 +712,8 @@ export default function TasksPage() {
                                             </div>
                                         )}
                                     </button>
-                                ))}
+                                );
+                                })}
                                 </div>
                             </div>
 
@@ -769,7 +863,11 @@ export default function TasksPage() {
                                                 {task && recognizedDrawingSolutions[task.id] && (
                                                     <RecognizedSolutionBlock
                                                         text={recognizedDrawingSolutions[task.id].text}
-                                                        imageSrc={recognizedDrawingSolutions[task.id].imageSrc}
+                                                        sending={Boolean(solutionReviewSending[task.id])}
+                                                        sent={Boolean(solutionReviewSent[task.id])}
+                                                        onEdit={editRecognizedSolution}
+                                                        onDelete={deleteRecognizedSolution}
+                                                        onSendReview={sendRecognizedSolutionForReview}
                                                     />
                                                 )}
                                             </div>
@@ -1054,7 +1152,7 @@ export default function TasksPage() {
                             initialTab={attachSolutionInitialTab}
                             prefillCode={attachSolutionPrefillCode}
                             textSolutionMode={attachSolutionTextMode}
-                            onChanged={refreshCurrentTask}
+                            onChanged={refreshCurrentTaskAndSolution}
                             onClose={closeAttachSolutionNow}
                             registerBeforeClose={(handler) => {
                                 attachSolutionBeforeCloseRef.current = handler;

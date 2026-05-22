@@ -49,6 +49,7 @@ type SolutionVersion = {
 interface TaskSolution {
   task_id: number;
   code: string | null;
+  recognized_text: string | null;
   file_url: string | null;
   image_url: string | null;
   updated_at: string | null;
@@ -105,7 +106,7 @@ export function TaskSolutionPanel({
       .then((data) => {
         if (cancelled) return;
         setSolution(data);
-        setCode(prefillCode || data.code || "");
+        setCode(prefillCode || (textSolutionMode ? data.recognized_text : data.code) || "");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -113,7 +114,7 @@ export function TaskSolutionPanel({
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [taskId, textSolutionMode]);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -141,7 +142,7 @@ export function TaskSolutionPanel({
           | { type: "comment_deleted"; comment_id: number };
 
         setSolution((prev) => {
-          const current = prev ?? { task_id: taskId, code: null, file_url: null, image_url: null, updated_at: null, comments: [], versions: [] };
+          const current = prev ?? { task_id: taskId, code: null, recognized_text: null, file_url: null, image_url: null, updated_at: null, comments: [], versions: [] };
           const comments = current.comments ?? [];
           if (payload.type === "comment_created") {
             return comments.some((comment) => comment.id === payload.comment.id)
@@ -174,7 +175,7 @@ export function TaskSolutionPanel({
     try {
       const data = await api<TaskSolution>(`/tasks/${taskId}/solution`, {
         method: "PUT",
-        body: JSON.stringify({ code }),
+        body: JSON.stringify(textSolutionMode ? { recognized_text: code } : { code }),
       });
       setSolution(data);
       onChanged?.();
@@ -196,8 +197,15 @@ export function TaskSolutionPanel({
         const current = prev.trim();
         return current ? `${current}\n\n${data.text}` : data.text;
       });
+      const savedSolution = await api<TaskSolution>(`/tasks/${taskId}/solution`, {
+        method: "PUT",
+        body: JSON.stringify(textSolutionMode ? { recognized_text: data.text } : { code: data.text }),
+      });
+      setSolution(savedSolution);
+      onChanged?.();
       setActiveTab("code");
-      setSaved(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
     } catch (error) {
       setOcrError(error instanceof Error ? error.message : "Не удалось распознать изображение");
     } finally {
@@ -275,7 +283,8 @@ export function TaskSolutionPanel({
   const comments = solution?.comments ?? [];
   const imageComments = comments.filter((comment) => comment.target_type === "image" && comment.image_x != null && comment.image_y != null);
   const versions = solution?.versions ?? [];
-  const isCodeDirty = code !== (solution?.code ?? "");
+  const savedText = textSolutionMode ? (solution?.recognized_text ?? "") : (solution?.code ?? "");
+  const isCodeDirty = code !== savedText;
   const shouldWarnBeforeClose = isCodeDirty && code.trim().length > 0;
   const requestClose = useCallback(() => {
     if (shouldWarnBeforeClose) {

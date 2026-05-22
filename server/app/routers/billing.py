@@ -10,10 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.payment import Payment
 from app.models.user import User
-from app.schemas.billing import CheckoutCreateIn, CheckoutCreateOut, LatestPaymentSyncOut, PaymentHistoryItem, PaymentStatusOut
+from app.schemas.billing import (
+    AdminTestCheckoutCreateIn,
+    AdminTestCheckoutCreateOut,
+    CheckoutCreateIn,
+    CheckoutCreateOut,
+    LatestPaymentSyncOut,
+    PaymentHistoryItem,
+    PaymentStatusOut,
+)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -179,6 +187,50 @@ async def create_checkout(
         payment_id=payment.id,
         yookassa_payment_id=yookassa_payment_id,
         status=payment.status,
+        confirmation_url=confirmation_url,
+    )
+
+
+@router.post(
+    "/admin/test-checkout",
+    response_model=AdminTestCheckoutCreateOut,
+    dependencies=[Depends(verify_parser_api_key)],
+)
+async def create_admin_test_checkout(body: AdminTestCheckoutCreateIn):
+    amount_value = _amount_value(body.amount)
+    idempotence_key = str(uuid4())
+    description = (body.description or "").strip() or "Тестовая оплата из админ-панели"
+
+    payload = {
+        "amount": {"value": amount_value, "currency": "RUB"},
+        "capture": True,
+        "confirmation": {
+            "type": "redirect",
+            "return_url": settings.PAYMENT_RETURN_URL,
+        },
+        "description": description,
+        "metadata": {
+            "admin_test_payment": "true",
+        },
+    }
+
+    data = await _request_yookassa(
+        "POST",
+        "/payments",
+        headers={"Idempotence-Key": idempotence_key, "Content-Type": "application/json"},
+        json=payload,
+    )
+    confirmation = data.get("confirmation") or {}
+    confirmation_url = confirmation.get("confirmation_url")
+    yookassa_payment_id = data.get("id")
+    if not confirmation_url or not yookassa_payment_id:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YooKassa did not return confirmation URL")
+
+    return AdminTestCheckoutCreateOut(
+        yookassa_payment_id=yookassa_payment_id,
+        status=str(data.get("status") or "pending"),
+        amount_value=amount_value,
+        currency="RUB",
         confirmation_url=confirmation_url,
     )
 

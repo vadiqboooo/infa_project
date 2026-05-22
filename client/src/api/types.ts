@@ -35,12 +35,14 @@ export enum TopicCategory {
 }
 
 export type TopicCourseType = "year" | "summer" | "common" | string;
+export type TopicSubject = "informatics" | "math" | string;
 
 export interface TaskNav {
     id: number;
     external_id: string | null;
     ege_number: number | null;
     ege_number_max: number | null;
+    title?: string | null;
     status: ProgressStatus;
     has_solution: boolean;
     is_locked?: boolean;
@@ -54,6 +56,7 @@ export interface TopicNav {
     title: string;
     order_index: number;
     category: TopicCategory;
+    subject: TopicSubject;
     course_type: TopicCourseType;
     tasks: TaskNav[];
     exam_id?: number;
@@ -240,6 +243,7 @@ export interface TopicAdmin {
     title: string;
     order_index: number;
     category: TopicCategory;
+    subject: TopicSubject;
     course_type: TopicCourseType;
     task_count: number;
     time_limit_minutes?: number;
@@ -282,6 +286,7 @@ export interface TopicIn {
     title: string;
     order_index: number;
     category: TopicCategory;
+    subject: TopicSubject;
     course_type: TopicCourseType;
     time_limit_minutes?: number;
     is_mock: boolean;
@@ -617,6 +622,14 @@ export interface CheckoutResponse {
     payment_id: number;
     yookassa_payment_id: string;
     status: string;
+    confirmation_url: string;
+}
+
+export interface AdminTestCheckoutResponse {
+    yookassa_payment_id: string;
+    status: string;
+    amount_value: string;
+    currency: string;
     confirmation_url: string;
 }
 

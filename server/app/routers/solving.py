@@ -42,6 +42,7 @@ router = APIRouter(prefix="/tasks", tags=["solving"])
 
 class TaskSolutionIn(BaseModel):
     code: str | None = None
+    recognized_text: str | None = None
 
 
 class TaskSolutionOcrOut(BaseModel):
@@ -79,6 +80,7 @@ class TaskSolutionVersionOut(BaseModel):
 class TaskSolutionOut(BaseModel):
     task_id: int
     code: str | None = None
+    recognized_text: str | None = None
     file_url: str | None = None
     image_url: str | None = None
     updated_at: datetime | None = None
@@ -332,6 +334,7 @@ def _solution_out(
     return TaskSolutionOut(
         task_id=task_id,
         code=solution.code,
+        recognized_text=solution.recognized_text,
         file_url=solution.file_url,
         image_url=solution.image_url,
         updated_at=solution.updated_at,
@@ -544,6 +547,7 @@ async def get_own_task_solution(task_id: int, user: User = Depends(get_current_u
             task_id=task_id,
             code=exam_solution.get("code"),
             file_url=exam_solution.get("file_url"),
+            recognized_text=None,
             comments=[],
         )
     if solution is not None:
@@ -656,10 +660,16 @@ async def save_own_task_solution(task_id: int, body: TaskSolutionIn, user: User 
     await require_task_access(task_id, user, db)
     solution = await _get_or_create_solution(db, user.id, task_id)
     previous_code = solution.code
-    solution.code = body.code
+    previous_recognized_text = solution.recognized_text
+    if body.code is not None:
+        solution.code = body.code
+    if body.recognized_text is not None:
+        solution.recognized_text = body.recognized_text
     await db.flush()
     if previous_code != solution.code:
         _add_solution_version(db, solution, "code")
+    elif previous_recognized_text != solution.recognized_text:
+        _add_solution_version(db, solution, "recognized_text")
     await db.commit()
     await db.refresh(solution)
     comments, reactions_by_comment_id = await _solution_comments_and_reactions(db, solution, user.id)
@@ -850,6 +860,20 @@ async def _recognize_solution_image_with_ai(image_path: Path) -> str:
         ],
         "temperature": 0,
     }
+    payload["messages"][0]["content"] = (
+        "Ты OCR-модуль для школьных математических решений. "
+        "Распознай рукописный или печатный текст с изображения и верни только редактируемое решение. "
+        "Не решай задачу заново, не исправляй смысл и не добавляй рассуждения от себя. "
+        "Оформи результат как Markdown с LaTeX: обычные пояснения оставляй текстом, отдельные формулы пиши в \\[...\\], "
+        "системы и кусочные функции пиши через \\begin{cases}...\\end{cases}, выравнивания через \\begin{aligned}...\\end{aligned}. "
+        "Таблицы значений возвращай Markdown-таблицами. Не используй HTML и не оборачивай ответ в code fence. "
+        "Если часть изображения не читается, пометь это как [неразборчиво]."
+    )
+    payload["messages"][1]["content"][0]["text"] = (
+        "Преобразуй это решение в аккуратный текст с LaTeX, похожий на школьный разбор: "
+        "короткие текстовые шаги, затем центрированные формулы в \\[...\\], таблицы в Markdown. "
+        "Сохрани структуру строк и доказательства насколько возможно. Верни только результат распознавания."
+    )
 
     try:
         async with httpx.AsyncClient(timeout=90) as client:

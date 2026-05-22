@@ -1,8 +1,9 @@
 """Schemas for course billing."""
 
 from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CheckoutCreateIn(BaseModel):
@@ -13,6 +14,19 @@ class CheckoutCreateOut(BaseModel):
     payment_id: int
     yookassa_payment_id: str
     status: str
+    confirmation_url: str
+
+
+class AdminTestCheckoutCreateIn(BaseModel):
+    amount: Decimal = Field(gt=0, le=Decimal("100000.00"), max_digits=8, decimal_places=2)
+    description: str | None = None
+
+
+class AdminTestCheckoutCreateOut(BaseModel):
+    yookassa_payment_id: str
+    status: str
+    amount_value: str
+    currency: str
     confirmation_url: str
 
 
