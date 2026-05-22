@@ -26,6 +26,8 @@ const queryClient = new QueryClient({
   },
 });
 
+const DEFAULT_SEO_TITLE = "Платформа для подготовки к ЕГЭ по информатике и математике, которая поможет тебе сдать ЕГЭ на высокий балл";
+
 const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
   { pattern: /^\/terms/, title: "Условия" },
   { pattern: /^\/privacy/, title: "Политика конфиденциальности" },
@@ -38,14 +40,16 @@ const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
   { pattern: /^\/tasks/, title: "Разбор" },
   { pattern: /^\/admin/, title: "Админ" },
   { pattern: /^\/notifications/, title: "Уведомления" },
-  { pattern: /^\/$|^\/dashboard/, title: "Главная" },
+  { pattern: /^\/$|^\/dashboard/, title: DEFAULT_SEO_TITLE },
 ];
 
 function PageTitle() {
   const { pathname } = useLocation();
   useEffect(() => {
     const match = PAGE_TITLES.find(({ pattern }) => pattern.test(pathname));
-    document.title = match ? `Инфа ЕГЭ — ${match.title}` : "Инфа ЕГЭ";
+    document.title = match
+      ? (match.title === DEFAULT_SEO_TITLE ? match.title : `Инфа ЕГЭ — ${match.title}`)
+      : DEFAULT_SEO_TITLE;
   }, [pathname]);
   return null;
 }

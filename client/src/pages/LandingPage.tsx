@@ -494,7 +494,11 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="lp-footer-links">
-          <a href="#">О платформе</a><a href="/terms">Условия</a><a href="/privacy">Политика</a>
+          <a href="#">О платформе</a>
+          <a href="/podgotovka-ege-informatika.html">ЕГЭ информатика</a>
+          <a href="/podgotovka-ege-matematika.html">ЕГЭ математика</a>
+          <a href="/podgotovka-ege-irkutsk.html">ЕГЭ Иркутск</a>
+          <a href="/terms">Условия</a><a href="/privacy">Политика</a>
           <button type="button" onClick={() => setShowContacts(true)}>Контакты</button>
         </div>
       </footer>
