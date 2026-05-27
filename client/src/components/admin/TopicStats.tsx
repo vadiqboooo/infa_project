@@ -3,7 +3,6 @@ import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, X, Loader2, ChevronDo
 import { clsx } from "clsx";
 import type { TopicStatsOut, GroupOut, TopicStatsStudentRow, TopicStatsTaskInfo } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
-import { StudentTaskSolutionReviewModal } from "./StudentTaskSolutionReviewModal";
 
 const API_BASE = "/api";
 
@@ -13,6 +12,7 @@ interface Props {
     onBack: () => void;
     apiKey?: string;
     onRefresh?: () => void;
+    onReviewSolution?: (student: TopicStatsStudentRow, task: TopicStatsTaskInfo) => void;
 }
 
 /** Format {"val": ...} answer to a compact display string */
@@ -295,12 +295,11 @@ function Cell({
 
 // ── TopicStats ─────────────────────────────────────────────────────────────────
 
-export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) {
+export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewSolution }: Props) {
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [analysisFor, setAnalysisFor] = useState<{ studentId: number; studentName: string; attemptId: number } | null>(null);
     const [groupFilter, setGroupFilter] = useState<number | null>(null);
     const [cellDetail, setCellDetail] = useState<{ student: TopicStatsStudentRow; task: TopicStatsTaskInfo } | null>(null);
-    const [reviewFor, setReviewFor] = useState<{ student: TopicStatsStudentRow; task: TopicStatsTaskInfo } | null>(null);
 
     const filteredStudents = groupFilter === null
         ? stats.students
@@ -480,7 +479,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                                                     const hasSolution = !!(ans?.code_solution || ans?.file_solution_url || ans?.image_solution_url);
                                                     const openDetail = () => {
                                                         if (hasSolution) {
-                                                            setReviewFor({ student, task });
+                                                            onReviewSolution?.(student, task);
                                                         } else {
                                                             setCellDetail({ student, task });
                                                         }
@@ -584,16 +583,6 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh }: Props) 
                 />
             )}
 
-            {reviewFor && (
-                <StudentTaskSolutionReviewModal
-                    studentId={reviewFor.student.student_id}
-                    taskId={reviewFor.task.task_id}
-                    studentName={reviewFor.student.student_name}
-                    apiKey={apiKey}
-                    onClose={() => setReviewFor(null)}
-                    onChanged={onRefresh}
-                />
-            )}
         </>
     );
 }

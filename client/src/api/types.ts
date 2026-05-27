@@ -410,6 +410,9 @@ export interface ImageDrawingStroke {
     points: ImageDrawingPoint[];
     color: string;
     width: number;
+    coordinate_space?: "board" | "percent" | string;
+    board_width?: number;
+    board_height?: number;
 }
 
 export interface SolutionCommentNotification {
@@ -446,6 +449,27 @@ export interface AdminHelpNotification {
     is_read?: boolean;
 }
 
+export interface TaskSolutionHelpMessage {
+    id: number;
+    author_id?: number | null;
+    author_role: "student" | "teacher" | string;
+    author_name?: string | null;
+    kind: "text" | "comment" | "system" | string;
+    text: string;
+    created_at?: string | null;
+}
+
+export interface TaskSolutionHelpThread {
+    id: number;
+    status: "open" | "student_resolved" | "teacher_resolved" | string;
+    is_resolved: boolean;
+    close_reason?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    resolved_at?: string | null;
+    messages: TaskSolutionHelpMessage[];
+}
+
 export interface StudentTaskSolutionReview {
     student_id: number;
     task_id: number;
@@ -457,10 +481,13 @@ export interface StudentTaskSolutionReview {
     user_answer?: { val: any } | null;
     correct_answer?: { val: any } | null;
     code: string | null;
+    recognized_text?: string | null;
+    board_data?: ImageDrawingStroke[] | null;
     file_url: string | null;
     image_url: string | null;
     updated_at: string | null;
     comments: TaskSolutionComment[];
+    help_thread?: TaskSolutionHelpThread | null;
 }
 
 export interface StudentTopicDetail {

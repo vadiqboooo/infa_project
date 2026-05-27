@@ -201,6 +201,27 @@ class TaskSolutionCommentOut(BaseModel):
     updated_at: datetime
 
 
+class TaskSolutionHelpMessageOut(BaseModel):
+    id: int
+    author_id: int | None = None
+    author_role: str
+    author_name: str | None = None
+    kind: str
+    text: str
+    created_at: datetime | None = None
+
+
+class TaskSolutionHelpThreadOut(BaseModel):
+    id: int
+    status: str
+    is_resolved: bool
+    close_reason: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    resolved_at: datetime | None = None
+    messages: list[TaskSolutionHelpMessageOut] = Field(default_factory=list)
+
+
 class StudentTaskSolutionReviewOut(BaseModel):
     student_id: int
     task_id: int
@@ -212,10 +233,13 @@ class StudentTaskSolutionReviewOut(BaseModel):
     user_answer: Any | None = None
     correct_answer: Any | None = None
     code: str | None = None
+    recognized_text: str | None = None
+    board_data: list[dict[str, Any]] | None = None
     file_url: str | None = None
     image_url: str | None = None
     updated_at: datetime | None = None
     comments: list[TaskSolutionCommentOut] = Field(default_factory=list)
+    help_thread: TaskSolutionHelpThreadOut | None = None
 
 
 class StudentTopicDetail(BaseModel):

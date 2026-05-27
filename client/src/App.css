@@ -519,25 +519,31 @@
 }
 
 .light .task-solve-page {
-  background: #f4faf6 !important;
-  color: #13231b;
+  background: #030a12 !important;
+  color: #e5edf5;
+}
+
+.light .task-solve-page .task-workspace-body {
+  background:
+    radial-gradient(circle at 80% 8%, rgba(16, 185, 129, 0.16), transparent 34%),
+    linear-gradient(180deg, #061018, #03080f) !important;
 }
 
 .light .task-solve-page > .relative,
 .light .task-solve-page .bg-\[\#07111D\]\/92,
 .light .task-solve-page .bg-\[\#07111D\]\/72,
 .light .task-solve-page .bg-\[\#07111D\] {
-  border-color: rgba(57, 79, 66, 0.14) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  color: #13231b !important;
-  box-shadow: 0 1px 0 rgba(57, 79, 66, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  background: rgba(7, 17, 29, 0.92) !important;
+  color: #e5edf5 !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34) !important;
 }
 
 .light .task-solve-page .bg-\[\#0A1522\] {
-  border-color: rgba(57, 79, 66, 0.14) !important;
-  background: #ffffff !important;
-  color: #13231b !important;
-  box-shadow: 0 20px 54px rgba(22, 52, 35, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  background: #0a1522 !important;
+  color: #e5edf5 !important;
+  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.28) !important;
 }
 
 .light .task-solve-page .bg-\[radial-gradient\(circle_at_50\%_0\%\,rgba\(16\,185\,129\,0\.10\)\,transparent_34\%\)\,linear-gradient\(180deg\,rgba\(3\,10\,18\,0\)\,rgba\(3\,10\,18\,0\.96\)\)\] {
@@ -555,35 +561,35 @@
 .light .task-solve-page .text-slate-100,
 .light .task-solve-page .text-slate-200,
 .light .task-solve-page .text-slate-300 {
-  color: #13231b !important;
+  color: #e5edf5 !important;
 }
 
 .light .task-solve-page .text-slate-400,
 .light .task-solve-page .text-slate-500,
 .light .task-solve-page .text-slate-600,
 .light .task-solve-page .text-slate-700 {
-  color: #5f7066 !important;
+  color: #94a3b8 !important;
 }
 
 .light .task-solve-page .text-emerald-100,
 .light .task-solve-page .text-emerald-200 {
-  color: #0d7a4a !important;
+  color: #a7f3d0 !important;
 }
 
 .light .task-solve-page .text-violet-200 {
-  color: #5b4bb7 !important;
+  color: #ddd6fe !important;
 }
 
 .light .task-solve-page .text-amber-200 {
-  color: #b45309 !important;
+  color: #fde68a !important;
 }
 
 .light .task-solve-page .text-sky-200 {
-  color: #0369a1 !important;
+  color: #bae6fd !important;
 }
 
 .light .task-solve-page .text-red-200 {
-  color: #b91c1c !important;
+  color: #fecaca !important;
 }
 
 .light .task-solve-page .bg-white\/\[0\.025\],
@@ -591,46 +597,46 @@
 .light .task-solve-page .bg-white\/\[0\.05\],
 .light .task-solve-page .bg-white\/\[0\.06\],
 .light .task-solve-page .bg-white\/10 {
-  background-color: rgba(35, 71, 49, 0.06) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 .light .task-solve-page .hover\:bg-white\/\[0\.06\]:hover,
 .light .task-solve-page .hover\:bg-white\/\[0\.10\]:hover {
-  background-color: rgba(22, 131, 79, 0.10) !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
 }
 
 .light .task-solve-page .prose-invert {
-  --tw-prose-body: #2d3e34;
-  --tw-prose-headings: #13231b;
-  --tw-prose-lead: #2d3e34;
-  --tw-prose-links: #0d7a4a;
-  --tw-prose-bold: #13231b;
-  --tw-prose-counters: #5f7066;
-  --tw-prose-bullets: #5f7066;
-  --tw-prose-hr: rgba(57, 79, 66, 0.14);
-  --tw-prose-quotes: #13231b;
-  --tw-prose-quote-borders: rgba(57, 79, 66, 0.14);
-  --tw-prose-captions: #5f7066;
-  --tw-prose-code: #24734a;
-  --tw-prose-pre-code: #13231b;
-  --tw-prose-pre-bg: rgba(35, 71, 49, 0.06);
-  --tw-prose-th-borders: rgba(57, 79, 66, 0.20);
-  --tw-prose-td-borders: rgba(57, 79, 66, 0.14);
+  --tw-prose-body: #dbe5f1;
+  --tw-prose-headings: #f8fafc;
+  --tw-prose-lead: #dbe5f1;
+  --tw-prose-links: #86efac;
+  --tw-prose-bold: #f8fafc;
+  --tw-prose-counters: #94a3b8;
+  --tw-prose-bullets: #94a3b8;
+  --tw-prose-hr: rgba(255, 255, 255, 0.10);
+  --tw-prose-quotes: #f8fafc;
+  --tw-prose-quote-borders: rgba(255, 255, 255, 0.10);
+  --tw-prose-captions: #94a3b8;
+  --tw-prose-code: #86efac;
+  --tw-prose-pre-code: #e2e8f0;
+  --tw-prose-pre-bg: rgba(255, 255, 255, 0.06);
+  --tw-prose-th-borders: rgba(255, 255, 255, 0.12);
+  --tw-prose-td-borders: rgba(255, 255, 255, 0.12);
 }
 
 .light .task-solve-page .ring-\[\#0A1522\],
 .light .task-solve-page .ring-2.ring-\[\#0A1522\] {
-  --tw-ring-color: #ffffff !important;
+  --tw-ring-color: #0a1522 !important;
 }
 
 .light .task-solve-page .border-\[\#07111D\] {
-  border-color: #ffffff !important;
+  border-color: #07111d !important;
 }
 
 .light .task-solve-page input,
 .light .task-solve-page textarea,
 .light .task-solve-page select {
-  color: #13231b !important;
+  color: #e5edf5 !important;
 }
 
 .light .input,
@@ -647,6 +653,22 @@
 .light .input-separator {
   color: #0d7a4a;
   opacity: 0.55;
+}
+
+.task-solve-page .answer-inline-row .answer-input-single {
+  padding: 0 0 4px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.task-solve-page .answer-inline-row .input {
+  border-bottom-width: 1px;
+  box-shadow: none;
+}
+
+.task-solve-page .answer-inline-row .input:focus {
+  box-shadow: none;
 }
 
 .light .exam-dark {
@@ -744,4 +766,87 @@
 .light .exam-review-pending-page .exam-result-card--pending .text-gray-400,
 .light .exam-review-pending-page .exam-result-card--pending .text-gray-300 {
   color: #8aa0bd !important;
+}
+
+.light .task-solve-page .task-solution-shell-card,
+.light .task-solve-page .task-solution-panel-dark,
+.light .task-solve-page .task-solution-panel-dark .solution-editor-shell {
+  background: #07111d !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  color: #e5edf5 !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24) !important;
+}
+
+.light .task-solve-page .task-solution-shell-card {
+  border-radius: 22px !important;
+  overflow: hidden !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark {
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-editor-shell {
+  border-radius: 0 0 20px 20px !important;
+  overflow: hidden !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header {
+  background: #0a1522 !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-editor-body {
+  background: #07111d !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-editor-frame {
+  background: #07111d !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 0 0 20px 20px !important;
+  box-shadow: none !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-editor-frame .cm-editor,
+.light .task-solve-page .task-solution-panel-dark .solution-editor-frame .cm-scroller,
+.light .task-solve-page .task-solution-panel-dark .solution-editor-frame .cm-gutters {
+  background: #07111d !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-editor-frame .cm-gutters {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.task-solution-shell-card {
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.task-solution-panel-dark {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.task-solution-panel-dark .solution-editor-frame {
+  border-radius: 0 0 20px 20px;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-white,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-100,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-200,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-300 {
+  color: #e5edf5 !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-400,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-500,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-600,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-slate-700 {
+  color: #94a3b8 !important;
+}
+
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-emerald-300,
+.light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-emerald-200 {
+  color: #a7f3d0 !important;
 }

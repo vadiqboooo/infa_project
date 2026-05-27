@@ -349,7 +349,7 @@ async def get_task(
         solution_steps=task.solution_steps,
         full_solution_code=task.full_solution_code,
         sub_tasks=task.sub_tasks,
-        has_own_solution=bool(solution and (solution.code or solution.file_url or solution.image_url)),
+        has_own_solution=bool(solution and (solution.code or solution.file_url or solution.image_url or solution.board_data)),
         solution_comments_count=comments_count,
         is_trial=task_id in access.trial_task_ids,
     )

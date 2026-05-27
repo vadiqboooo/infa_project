@@ -11,6 +11,7 @@ from app.models.task_solution_comment import UserTaskSolutionComment
 from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
 from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
+from app.models.task_solution_help_message import UserTaskSolutionHelpMessage
 from app.models.task_solution_version import UserTaskSolutionVersion
 from app.models.admin_help_notification_read import AdminHelpNotificationRead
 from app.models.preparation_plan import PreparationPlan, PreparationPlanBlock, UserPreparationPlan
@@ -33,6 +34,7 @@ __all__ = [
     "UserTaskSolutionCommentRead",
     "UserTaskSolutionCommentReaction",
     "UserTaskSolutionHelpRequest",
+    "UserTaskSolutionHelpMessage",
     "UserTaskSolutionVersion",
     "AdminHelpNotificationRead",
     "PreparationPlan",

@@ -550,6 +550,62 @@
     align-items: flex-start;
 }
 
+.task-answer-inline-panel {
+    box-sizing: border-box;
+    border: 1px solid rgba(16, 185, 129, 0.34);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.88);
+    padding: 14px;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.10);
+    backdrop-filter: blur(8px);
+}
+
+.dark .task-answer-inline-panel {
+    background: rgba(7, 17, 29, 0.98);
+    border-color: rgba(52, 211, 153, 0.32);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.light .task-solve-page .task-answer-inline-panel {
+    background: rgba(7, 17, 29, 0.98);
+    border-color: rgba(52, 211, 153, 0.32);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+}
+
+.task-answer-inline-panel .answer-inline-row {
+    min-height: 42px;
+}
+
+.task-answer-inline-panel .answer-inline-row > span:first-child {
+    color: #52645a !important;
+}
+
+.dark .task-answer-inline-panel .answer-inline-row > span:first-child {
+    color: #cbd5e1 !important;
+}
+
+.light .task-solve-page .task-answer-inline-panel .answer-inline-row > span:first-child {
+    color: #cbd5e1 !important;
+}
+
+@media (max-width: 1400px) {
+    .task-condition-card.draft-open .task-action-secondary {
+        display: none;
+    }
+
+    .task-condition-card.draft-open {
+        padding: 12px;
+    }
+
+    .task-condition-card.draft-open > div:first-child {
+        margin-bottom: 10px;
+    }
+
+    .task-condition-card.draft-open .task-answer-inline-panel {
+        max-width: none;
+    }
+}
+
 .btn-check {
     padding: var(--sp-4) var(--sp-6);
     font-size: var(--fs-md);

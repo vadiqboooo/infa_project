@@ -29,6 +29,7 @@ from app.models.task_solution import UserTaskSolution
 from app.models.task_solution_comment import UserTaskSolutionComment
 from app.models.task_solution_comment_read import UserTaskSolutionCommentRead
 from app.models.task_solution_comment_reaction import UserTaskSolutionCommentReaction
+from app.models.task_solution_help_message import UserTaskSolutionHelpMessage
 from app.models.task_solution_help_request import UserTaskSolutionHelpRequest
 from app.models.task_solution_version import UserTaskSolutionVersion
 from app.models.topic import Topic
@@ -43,6 +44,7 @@ router = APIRouter(prefix="/tasks", tags=["solving"])
 class TaskSolutionIn(BaseModel):
     code: str | None = None
     recognized_text: str | None = None
+    board_data: list[dict[str, Any]] | None = None
 
 
 class TaskSolutionOcrOut(BaseModel):
@@ -81,11 +83,13 @@ class TaskSolutionOut(BaseModel):
     task_id: int
     code: str | None = None
     recognized_text: str | None = None
+    board_data: list[dict[str, Any]] | None = None
     file_url: str | None = None
     image_url: str | None = None
     updated_at: datetime | None = None
     comments: list[TaskSolutionCommentOut] = []
     versions: list[TaskSolutionVersionOut] = []
+    help_thread: "TaskSolutionHelpThreadOut | None" = None
 
 
 class SolutionCommentNotificationOut(BaseModel):
@@ -115,6 +119,35 @@ class SolutionCommentReactionIn(BaseModel):
 
 class TaskSolutionHelpRequestIn(BaseModel):
     message: str | None = None
+
+
+class TaskSolutionHelpMessageIn(BaseModel):
+    text: str
+
+
+class TaskSolutionHelpResolveIn(BaseModel):
+    reason: str | None = None
+
+
+class TaskSolutionHelpMessageOut(BaseModel):
+    id: int
+    author_id: int | None = None
+    author_role: str
+    author_name: str | None = None
+    kind: str
+    text: str
+    created_at: datetime | None = None
+
+
+class TaskSolutionHelpThreadOut(BaseModel):
+    id: int
+    status: str
+    is_resolved: bool
+    close_reason: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    resolved_at: datetime | None = None
+    messages: list[TaskSolutionHelpMessageOut] = []
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -335,6 +368,7 @@ def _solution_out(
         task_id=task_id,
         code=solution.code,
         recognized_text=solution.recognized_text,
+        board_data=solution.board_data,
         file_url=solution.file_url,
         image_url=solution.image_url,
         updated_at=solution.updated_at,
@@ -403,6 +437,81 @@ async def _solution_versions(db: AsyncSession, solution: UserTaskSolution) -> li
         .order_by(UserTaskSolutionVersion.created_at.desc(), UserTaskSolutionVersion.id.desc())
     )
     return list(versions_result.scalars().all())
+
+
+def _user_display_name(user: User | None) -> str | None:
+    if user is None:
+        return None
+    return (
+        f"{user.first_name_real or ''} {user.last_name_real or ''}".strip()
+        or user.first_name
+        or user.login
+        or user.username
+        or f"User {user.id}"
+    )
+
+
+async def _help_thread_out(
+    db: AsyncSession,
+    help_request: UserTaskSolutionHelpRequest | None,
+) -> TaskSolutionHelpThreadOut | None:
+    if help_request is None:
+        return None
+    result = await db.execute(
+        select(UserTaskSolutionHelpMessage, User)
+        .outerjoin(User, User.id == UserTaskSolutionHelpMessage.author_id)
+        .where(UserTaskSolutionHelpMessage.help_request_id == help_request.id)
+        .order_by(UserTaskSolutionHelpMessage.created_at, UserTaskSolutionHelpMessage.id)
+    )
+    messages = [
+        TaskSolutionHelpMessageOut(
+            id=message.id,
+            author_id=message.author_id,
+            author_role=message.author_role,
+            author_name=_user_display_name(author),
+            kind=message.kind,
+            text=message.text,
+            created_at=message.created_at,
+        )
+        for message, author in result.all()
+    ]
+    return TaskSolutionHelpThreadOut(
+        id=help_request.id,
+        status=help_request.status or ("resolved" if help_request.is_resolved else "open"),
+        is_resolved=help_request.is_resolved,
+        close_reason=help_request.close_reason,
+        created_at=help_request.created_at,
+        updated_at=help_request.updated_at,
+        resolved_at=help_request.resolved_at,
+        messages=messages,
+    )
+
+
+async def _latest_help_request(
+    db: AsyncSession,
+    solution_id: int,
+    only_open: bool = False,
+) -> UserTaskSolutionHelpRequest | None:
+    query = select(UserTaskSolutionHelpRequest).where(UserTaskSolutionHelpRequest.solution_id == solution_id)
+    if only_open:
+        query = query.where(UserTaskSolutionHelpRequest.is_resolved.is_(False))
+    result = await db.execute(query.order_by(UserTaskSolutionHelpRequest.updated_at.desc(), UserTaskSolutionHelpRequest.id.desc()))
+    return result.scalars().first()
+
+
+async def _broadcast_help_thread_update(
+    db: AsyncSession,
+    solution: UserTaskSolution,
+    help_request: UserTaskSolutionHelpRequest,
+) -> None:
+    thread = await _help_thread_out(db, help_request)
+    if thread is None:
+        return
+    await solution_comment_ws_manager.broadcast(
+        solution.user_id,
+        solution.task_id,
+        {"type": "help_thread_updated", "thread": thread.model_dump(mode="json")},
+    )
 
 
 def _add_solution_version(db: AsyncSession, solution: UserTaskSolution, change_type: str) -> None:
@@ -623,8 +732,119 @@ async def request_teacher_help_for_solution(
 
     await db.flush()
     help_request_id = help_request.id
+    db.add(
+        UserTaskSolutionHelpMessage(
+            help_request_id=help_request_id,
+            author_id=user.id,
+            author_role="student",
+            kind="text",
+            text=message,
+        )
+    )
     await db.commit()
+    await db.refresh(help_request)
+    await _broadcast_help_thread_update(db, solution, help_request)
     return {"ok": True, "help_request_id": help_request_id}
+
+
+@router.get("/{task_id}/solution/help-thread", response_model=TaskSolutionHelpThreadOut | None)
+async def get_teacher_help_thread_for_solution(
+    task_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_task_access(task_id, user, db)
+    result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.user_id == user.id, UserTaskSolution.task_id == task_id)
+    )
+    solution = result.scalar_one_or_none()
+    if solution is None:
+        return None
+    return await _help_thread_out(db, await _latest_help_request(db, solution.id))
+
+
+@router.post("/{task_id}/solution/help-thread/messages", response_model=TaskSolutionHelpMessageOut)
+async def send_teacher_help_thread_message(
+    task_id: int,
+    body: TaskSolutionHelpMessageIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_task_access(task_id, user, db)
+    solution = await _get_or_create_solution(db, user.id, task_id)
+    await db.flush()
+    help_request = await _latest_help_request(db, solution.id, only_open=True)
+    if help_request is None:
+        help_request = UserTaskSolutionHelpRequest(
+            solution_id=solution.id,
+            message="Ученик открыл диалог с преподавателем",
+            status="open",
+        )
+        db.add(help_request)
+        await db.flush()
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message is empty")
+    message_row = UserTaskSolutionHelpMessage(
+        help_request_id=help_request.id,
+        author_id=user.id,
+        author_role="student",
+        kind="text",
+        text=text,
+    )
+    help_request.message = text
+    help_request.status = "open"
+    db.add(message_row)
+    await db.commit()
+    await db.refresh(message_row)
+    await db.refresh(help_request)
+    await _broadcast_help_thread_update(db, solution, help_request)
+    return TaskSolutionHelpMessageOut(
+        id=message_row.id,
+        author_id=message_row.author_id,
+        author_role=message_row.author_role,
+        author_name=_user_display_name(user),
+        kind=message_row.kind,
+        text=message_row.text,
+        created_at=message_row.created_at,
+    )
+
+
+@router.post("/{task_id}/solution/help-thread/resolve", response_model=TaskSolutionHelpThreadOut)
+async def resolve_teacher_help_thread_for_solution(
+    task_id: int,
+    body: TaskSolutionHelpResolveIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_task_access(task_id, user, db)
+    result = await db.execute(
+        select(UserTaskSolution).where(UserTaskSolution.user_id == user.id, UserTaskSolution.task_id == task_id)
+    )
+    solution = result.scalar_one_or_none()
+    if solution is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+    help_request = await _latest_help_request(db, solution.id, only_open=True)
+    if help_request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open help thread not found")
+    help_request.is_resolved = True
+    help_request.status = "student_resolved"
+    help_request.close_reason = body.reason or "student_solved"
+    help_request.closed_by_id = user.id
+    help_request.resolved_at = datetime.now(timezone.utc)
+    db.add(
+        UserTaskSolutionHelpMessage(
+            help_request_id=help_request.id,
+            author_id=user.id,
+            author_role="student",
+            kind="system",
+            text="Ученик отметил, что смог решить задачу",
+        )
+    )
+    await db.commit()
+    await db.refresh(help_request)
+    await _broadcast_help_thread_update(db, solution, help_request)
+    return await _help_thread_out(db, help_request)
 
 
 @router.websocket("/{task_id}/solution/comments/ws")
@@ -655,23 +875,76 @@ async def task_solution_comments_ws(
         solution_comment_ws_manager.disconnect(user_id, task_id, websocket)
 
 
+@router.websocket("/{task_id}/solution/help-thread/admin/ws")
+async def task_solution_help_thread_admin_ws(
+    websocket: WebSocket,
+    task_id: int,
+    student_id: int = Query(...),
+    token: str | None = Query(None),
+    api_key: str | None = Query(None),
+):
+    authorized = api_key is not None and api_key == settings.PARSER_API_KEY
+    if not authorized and token:
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+            admin_id = int(payload.get("sub", 0))
+        except (JWTError, ValueError):
+            admin_id = 0
+        async with AsyncSessionLocal() as db:
+            admin = await db.get(User, admin_id)
+            authorized = bool(admin and admin.role == "admin")
+
+    if not authorized:
+        await websocket.close(code=1008)
+        return
+
+    async with AsyncSessionLocal() as db:
+        student = await db.get(User, student_id)
+        task = await db.get(Task, task_id)
+        if student is None or task is None:
+            await websocket.close(code=1008)
+            return
+
+    await solution_comment_ws_manager.connect(student_id, task_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        solution_comment_ws_manager.disconnect(student_id, task_id, websocket)
+
+
 @router.put("/{task_id}/solution", response_model=TaskSolutionOut)
 async def save_own_task_solution(task_id: int, body: TaskSolutionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await require_task_access(task_id, user, db)
     solution = await _get_or_create_solution(db, user.id, task_id)
     previous_code = solution.code
     previous_recognized_text = solution.recognized_text
+    previous_board_data = solution.board_data
     if body.code is not None:
         solution.code = body.code
     if body.recognized_text is not None:
         solution.recognized_text = body.recognized_text
+    if body.board_data is not None:
+        solution.board_data = body.board_data
     await db.flush()
     if previous_code != solution.code:
         _add_solution_version(db, solution, "code")
     elif previous_recognized_text != solution.recognized_text:
         _add_solution_version(db, solution, "recognized_text")
+    elif previous_board_data != solution.board_data:
+        _add_solution_version(db, solution, "board_data")
     await db.commit()
     await db.refresh(solution)
+    if previous_board_data != solution.board_data:
+        await solution_comment_ws_manager.broadcast(
+            user.id,
+            task_id,
+            {
+                "type": "board_data_updated",
+                "board_data": solution.board_data or [],
+                "updated_at": solution.updated_at.isoformat() if solution.updated_at else None,
+            },
+        )
     comments, reactions_by_comment_id = await _solution_comments_and_reactions(db, solution, user.id)
     versions = await _solution_versions(db, solution)
     return _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)

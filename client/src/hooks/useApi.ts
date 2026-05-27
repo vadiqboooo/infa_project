@@ -17,6 +17,8 @@ import type {
     SolutionStep,
     SolutionCommentNotification,
     AdminHelpNotification,
+    TaskSolutionHelpMessage,
+    TaskSolutionHelpThread,
     CurrentPlanRecommendation,
     PreparationPlan,
     CheckoutResponse,
@@ -329,6 +331,45 @@ export function useRequestTeacherHelp(taskId: number) {
                 body: JSON.stringify({ message: body?.message }),
             }),
         onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
+        },
+    });
+}
+
+export function useTaskSolutionHelpThread(taskId: number, enabled: boolean = true) {
+    return useQuery<TaskSolutionHelpThread | null>({
+        queryKey: ["task-solution-help-thread", taskId],
+        queryFn: () => api<TaskSolutionHelpThread | null>(`/tasks/${taskId}/solution/help-thread`),
+        enabled,
+        refetchInterval: 5000,
+    });
+}
+
+export function useSendTaskSolutionHelpMessage(taskId: number) {
+    const qc = useQueryClient();
+    return useMutation<TaskSolutionHelpMessage, Error, { text: string }>({
+        mutationFn: (body) =>
+            api<TaskSolutionHelpMessage>(`/tasks/${taskId}/solution/help-thread/messages`, {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["task-solution-help-thread", taskId] });
+            qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
+        },
+    });
+}
+
+export function useResolveTaskSolutionHelpThread(taskId: number) {
+    const qc = useQueryClient();
+    return useMutation<TaskSolutionHelpThread, Error, { reason?: string } | void>({
+        mutationFn: (body) =>
+            api<TaskSolutionHelpThread>(`/tasks/${taskId}/solution/help-thread/resolve`, {
+                method: "POST",
+                body: JSON.stringify({ reason: body?.reason }),
+            }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["task-solution-help-thread", taskId] });
             qc.invalidateQueries({ queryKey: ["admin-help-notifications"] });
         },
     });

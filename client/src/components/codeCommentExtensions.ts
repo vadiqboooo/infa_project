@@ -13,6 +13,10 @@ export type CodeCommentRange = {
   reaction?: string | null;
 };
 
+type CodeCommentOptions = {
+  onReaction?: (commentId: number, reaction: "fixed" | "need_help") => void;
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -25,6 +29,7 @@ export function commentRangeToOffsets(view: EditorView, comment: Omit<CodeCommen
     const to = Math.max(Math.min(from + 1, doc.length), rawTo);
     return { from, to };
   }
+
   const lastLine = doc.lines;
   const fromLine = doc.line(clamp(comment.from_line, 1, lastLine));
   const toLine = doc.line(clamp(comment.to_line, 1, lastLine));
@@ -33,10 +38,6 @@ export function commentRangeToOffsets(view: EditorView, comment: Omit<CodeCommen
   const to = Math.max(from + 1, rawTo);
   return { from, to };
 }
-
-type CodeCommentOptions = {
-  onReaction?: (commentId: number, reaction: "fixed" | "need_help") => void;
-};
 
 export function createCodeCommentExtensions(comments: CodeCommentRange[], options: CodeCommentOptions = {}) {
   const commentMarks = EditorView.decorations.compute([], (state) => {
@@ -68,6 +69,7 @@ export function createCodeCommentExtensions(comments: CodeCommentRange[], option
       return pos >= from && pos <= to;
     });
     if (!comment) return null;
+
     const { from, to } = commentRangeToOffsets(view, comment);
     return {
       pos: from,
@@ -80,32 +82,36 @@ export function createCodeCommentExtensions(comments: CodeCommentRange[], option
         const body = document.createElement("div");
         body.className = "cm-solution-comment-tooltip-body";
         body.textContent = comment.text;
+        dom.append(body);
 
-        const reactions = document.createElement("div");
-        reactions.className = "cm-solution-comment-tooltip-reactions";
+        if (options.onReaction) {
+          const reactions = document.createElement("div");
+          reactions.className = "cm-solution-comment-tooltip-reactions";
 
-        const fixedButton = document.createElement("button");
-        fixedButton.type = "button";
-        fixedButton.className = `cm-solution-comment-tooltip-reaction${comment.reaction === "fixed" ? " is-active" : ""}`;
-        fixedButton.textContent = "Получилось исправить";
-        fixedButton.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          options.onReaction?.(comment.id, "fixed");
-        });
+          const fixedButton = document.createElement("button");
+          fixedButton.type = "button";
+          fixedButton.className = `cm-solution-comment-tooltip-reaction${comment.reaction === "fixed" ? " is-active" : ""}`;
+          fixedButton.textContent = "Получилось исправить";
+          fixedButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            options.onReaction?.(comment.id, "fixed");
+          });
 
-        const helpButton = document.createElement("button");
-        helpButton.type = "button";
-        helpButton.className = `cm-solution-comment-tooltip-reaction${comment.reaction === "need_help" ? " is-active" : ""}`;
-        helpButton.textContent = "Нужна помощь с ошибкой";
-        helpButton.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          options.onReaction?.(comment.id, "need_help");
-        });
+          const helpButton = document.createElement("button");
+          helpButton.type = "button";
+          helpButton.className = `cm-solution-comment-tooltip-reaction${comment.reaction === "need_help" ? " is-active" : ""}`;
+          helpButton.textContent = "Нужна помощь с ошибкой";
+          helpButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            options.onReaction?.(comment.id, "need_help");
+          });
 
-        reactions.append(fixedButton, helpButton);
-        dom.append(body, reactions);
+          reactions.append(fixedButton, helpButton);
+          dom.append(reactions);
+        }
+
         return { dom };
       },
     };
@@ -124,15 +130,15 @@ export function createCodeCommentExtensions(comments: CodeCommentRange[], option
       boxShadow: "none",
     },
     ".cm-solution-comment-tooltip": {
-      maxWidth: "320px",
-      borderRadius: "14px",
-      padding: "10px 12px",
+      maxWidth: "360px",
+      borderRadius: "16px",
+      padding: "12px 14px",
       backgroundColor: "#ffffff",
       color: "#1b261f",
-      boxShadow: "0 18px 44px rgba(15, 23, 20, 0.18)",
+      boxShadow: "0 18px 44px rgba(15, 23, 20, 0.20)",
       border: "1px solid rgba(212, 223, 214, 0.95)",
-      fontSize: "12px",
-      lineHeight: "1.5",
+      fontSize: "13px",
+      lineHeight: "1.55",
     },
     ".cm-solution-comment-tooltip-body": {
       whiteSpace: "pre-wrap",

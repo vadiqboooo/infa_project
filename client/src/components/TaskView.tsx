@@ -14,11 +14,13 @@ interface Props {
     content: string;
     title?: string;
     files?: TaskFile[];
+    children?: React.ReactNode;
     annotatable?: boolean;
     annotationKey?: string;
     annotationTaskId?: number;
     annotationPanelOpen?: boolean;
     onAnnotationPanelOpenChange?: (open: boolean) => void;
+    annotationRefreshKey?: number | string;
     showAnnotationToggle?: boolean;
     annotationToolbarHostId?: string;
     onDrawingRecognized?: (text: string, rawText?: string, imageDataUrl?: string) => void;
@@ -35,7 +37,27 @@ type AnnotationStroke = {
     id: string;
     color: string;
     width: number;
+    coordinate_space?: "board" | "percent" | string;
+    board_width?: number;
+    board_height?: number;
     points: StrokePoint[];
+};
+
+type SolutionBoardComment = {
+    target_type?: string | null;
+    image_drawing?: Array<{
+        color?: string;
+        width?: number;
+        coordinate_space?: "board" | "percent" | string;
+        board_width?: number;
+        board_height?: number;
+        points: StrokePoint[];
+    }> | null;
+};
+
+type SolutionBoardPayload = {
+    board_data?: Array<Partial<AnnotationStroke> & { points: StrokePoint[] }> | null;
+    comments?: SolutionBoardComment[];
 };
 
 type AnnotationRect = {
@@ -624,25 +646,38 @@ export default function TaskView({
     content,
     title,
     files,
+    children,
     annotatable = false,
     annotationKey,
     annotationTaskId,
     annotationPanelOpen,
     onAnnotationPanelOpenChange,
+    annotationRefreshKey,
     showAnnotationToggle = true,
     annotationToolbarHostId,
     onDrawingRecognized,
 }: Props) {
     const { theme } = useTheme();
     const contentRef = useRef<HTMLDivElement | null>(null);
+    const canvasRef = useRef<HTMLDivElement | null>(null);
     const planeRef = useRef<HTMLDivElement | null>(null);
     const activeStrokeIdRef = useRef<string | null>(null);
     const activeStrokeStartRef = useRef<StrokePoint | null>(null);
-    const [tool, setTool] = useState<AnnotationTool>("none");
+    const activePanRef = useRef<{
+        pointerId: number;
+        clientX: number;
+        clientY: number;
+        scrollLeft: number;
+        scrollTop: number;
+        pageScrollTop: number;
+        pageScrollElement: HTMLElement | null;
+    } | null>(null);
+    const [tool, setTool] = useState<AnnotationTool>("pen");
     const [color, setColor] = useState("#ef4444");
-    const [width, setWidth] = useState(4);
+    const [width, setWidth] = useState(2);
     const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
     const [strokes, setStrokes] = useState<AnnotationStroke[]>([]);
+    const [teacherStrokes, setTeacherStrokes] = useState<AnnotationStroke[]>([]);
     const [activeStrokeId, setActiveStrokeId] = useState<string | null>(null);
     const [activeStrokeStart, setActiveStrokeStart] = useState<StrokePoint | null>(null);
     const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
@@ -652,6 +687,11 @@ export default function TaskView({
     const [drawingSaved, setDrawingSaved] = useState(false);
     const [drawingSaveError, setDrawingSaveError] = useState<string | null>(null);
     const [annotationToolbarHost, setAnnotationToolbarHost] = useState<HTMLElement | null>(null);
+    const [boardSize, setBoardSize] = useState({ width: 0, height: 0 });
+    const [boardZoom, setBoardZoom] = useState(1);
+    const [canvasViewportWidth, setCanvasViewportWidth] = useState(0);
+    const [spacePressed, setSpacePressed] = useState(false);
+    const [panning, setPanning] = useState(false);
 
     const getPlaneRect = useCallback(() => {
         return planeRef.current?.getBoundingClientRect() ?? null;
@@ -659,9 +699,26 @@ export default function TaskView({
 
     const panelOpen = annotationPanelOpen ?? internalAnnotationPanelOpen;
     const drawingSize = useMemo(() => ({
-        width: contentSize.width,
-        height: panelOpen ? Math.max(contentSize.height + 640, 760) : contentSize.height,
-    }), [contentSize.height, contentSize.width, panelOpen]);
+        width: panelOpen ? Math.max(contentSize.width, boardSize.width, 960, canvasViewportWidth / boardZoom) : contentSize.width,
+        height: panelOpen ? Math.max(contentSize.height + 640, boardSize.height, 760) : contentSize.height,
+    }), [boardSize.height, boardSize.width, boardZoom, canvasViewportWidth, contentSize.height, contentSize.width, panelOpen]);
+    const teacherStrokeBaseSize = useMemo(() => {
+        const points = strokes.flatMap((stroke) => stroke.points);
+        const savedWidth = Math.max(0, ...strokes.map((stroke) => stroke.board_width ?? 0));
+        const savedHeight = Math.max(0, ...strokes.map((stroke) => stroke.board_height ?? 0));
+        return {
+            width: Math.max(100, savedWidth, ...points.map((point) => point.x)),
+            height: Math.max(100, savedHeight, ...points.map((point) => point.y)),
+        };
+    }, [strokes]);
+
+    useEffect(() => {
+        if (!panelOpen) return;
+        setBoardSize((current) => ({
+            width: Math.max(current.width, contentSize.width, 960, canvasViewportWidth / boardZoom),
+            height: Math.max(current.height, contentSize.height + 640, 760),
+        }));
+    }, [boardZoom, canvasViewportWidth, contentSize.height, contentSize.width, panelOpen]);
 
     const setPanelOpen = useCallback((open: boolean) => {
         if (!open) setTool("none");
@@ -671,6 +728,50 @@ export default function TaskView({
             setInternalAnnotationPanelOpen(open);
         }
     }, [onAnnotationPanelOpenChange]);
+
+    useEffect(() => {
+        if (panelOpen && tool === "none") {
+            setTool("pen");
+        }
+    }, [panelOpen, tool]);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !panelOpen) return;
+
+        const handleWheel = (event: WheelEvent) => {
+            if (!event.ctrlKey) return;
+            event.preventDefault();
+            setBoardZoom((value) => {
+                const delta = event.deltaY > 0 ? -0.1 : 0.1;
+                return Math.max(0.45, Math.min(2.5, Number((value + delta).toFixed(2))));
+            });
+        };
+
+        canvas.addEventListener("wheel", handleWheel, { passive: false });
+        return () => canvas.removeEventListener("wheel", handleWheel);
+    }, [panelOpen]);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !panelOpen) return;
+
+        const updateViewportWidth = () => {
+            const parentWidth = canvas.parentElement?.clientWidth ?? 0;
+            setCanvasViewportWidth(Math.max(1, parentWidth, canvas.clientWidth));
+        };
+
+        updateViewportWidth();
+        const resizeObserver = new ResizeObserver(updateViewportWidth);
+        resizeObserver.observe(canvas);
+        if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
+        window.addEventListener("resize", updateViewportWidth);
+
+        return () => {
+            resizeObserver.disconnect();
+            window.removeEventListener("resize", updateViewportWidth);
+        };
+    }, [panelOpen]);
 
     useEffect(() => {
         if (!annotationToolbarHostId) {
@@ -766,17 +867,61 @@ export default function TaskView({
 
         if (!annotatable || !storageKey) {
             setStrokes([]);
+            setTeacherStrokes([]);
             return;
         }
 
+        let cancelled = false;
         try {
             const raw = localStorage.getItem(storageKey);
             setStrokes(raw ? JSON.parse(raw) : []);
         } catch {
             setStrokes([]);
         }
-        setAnnotationsLoaded(true);
-    }, [annotatable, storageKey]);
+
+        if (annotationTaskId) {
+            authFetch(`/api/tasks/${annotationTaskId}/solution`)
+                .then(async (response) => {
+                    if (!response.ok) return null;
+                    return response.json() as Promise<SolutionBoardPayload>;
+                })
+                .then((solution) => {
+                    if (cancelled || !solution) return;
+                    if (solution.board_data?.length) {
+                        setStrokes(solution.board_data.map((stroke, index) => ({
+                            id: stroke.id || `server-${index}-${Date.now()}`,
+                            color: stroke.color || "#ef4444",
+                            width: stroke.width || 2,
+                            coordinate_space: stroke.coordinate_space,
+                            board_width: stroke.board_width,
+                            board_height: stroke.board_height,
+                            points: stroke.points || [],
+                        })));
+                    }
+                    const commentStrokes = (solution.comments ?? [])
+                        .filter((comment) => comment.target_type === "image")
+                        .flatMap((comment, commentIndex) => (comment.image_drawing ?? []).map((stroke, strokeIndex) => ({
+                            id: `teacher-${commentIndex}-${strokeIndex}`,
+                            color: stroke.color || "#f59e0b",
+                            width: stroke.width || 3,
+                            coordinate_space: stroke.coordinate_space,
+                            board_width: stroke.board_width,
+                            board_height: stroke.board_height,
+                            points: stroke.points || [],
+                        })));
+                    setTeacherStrokes(commentStrokes);
+                })
+                .finally(() => {
+                    if (!cancelled) setAnnotationsLoaded(true);
+                });
+        } else {
+            setAnnotationsLoaded(true);
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [annotationRefreshKey, annotationTaskId, annotatable, storageKey]);
 
     useEffect(() => {
         if (!annotatable || !storageKey || !annotationsLoaded) return;
@@ -813,6 +958,15 @@ export default function TaskView({
             const isEditingText = target?.closest("input, textarea, [contenteditable='true']");
             if (isEditingText) return;
 
+            if (panelOpen && event.code === "Space") {
+                event.preventDefault();
+                if (!event.repeat) {
+                    setSpacePressed(true);
+                    stopDrawing();
+                }
+                return;
+            }
+
             if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
                 event.preventDefault();
                 setStrokes((current) => current.slice(0, -1));
@@ -821,18 +975,40 @@ export default function TaskView({
             }
         };
 
+        const handleKeyUp = (event: KeyboardEvent) => {
+            if (event.code !== "Space") return;
+            setSpacePressed(false);
+            activePanRef.current = null;
+            setPanning(false);
+        };
+
         window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [annotatable]);
+        window.addEventListener("keyup", handleKeyUp);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [annotatable, panelOpen]);
 
     const getPointerPoint = (event: React.PointerEvent<SVGSVGElement>): StrokePoint | null => {
-        const plane = planeRef.current;
-        if (!plane) return null;
+        const svg = event.currentTarget;
+        const matrix = svg.getScreenCTM();
+        if (matrix) {
+            const point = svg.createSVGPoint();
+            point.x = event.clientX;
+            point.y = event.clientY;
+            const svgPoint = point.matrixTransform(matrix.inverse());
+            return {
+                x: Math.max(0, Math.min(drawingSize.width, svgPoint.x)),
+                y: Math.max(0, Math.min(drawingSize.height, svgPoint.y)),
+            };
+        }
 
-        const rect = plane.getBoundingClientRect();
+        const rect = svg.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return null;
         return {
-            x: Math.max(0, Math.min(drawingSize.width, event.clientX - rect.left)),
-            y: Math.max(0, Math.min(drawingSize.height, event.clientY - rect.top)),
+            x: Math.max(0, Math.min(drawingSize.width, ((event.clientX - rect.left) / rect.width) * drawingSize.width)),
+            y: Math.max(0, Math.min(drawingSize.height, ((event.clientY - rect.top) / rect.height) * drawingSize.height)),
         };
     };
 
@@ -840,12 +1016,62 @@ export default function TaskView({
         setStrokes((current) => current.filter((stroke) => !isNearStroke(stroke, point, 12)));
     };
 
+    const findVerticalScrollParent = (element: HTMLElement | null) => {
+        let current = element?.parentElement ?? null;
+        while (current) {
+            const style = window.getComputedStyle(current);
+            const canScrollY = /(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
+            if (canScrollY) return current;
+            current = current.parentElement;
+        }
+        return null;
+    };
+
+    const expandBoardNear = (point: StrokePoint) => {
+        if (!panelOpen) return;
+        const edge = 180;
+        const step = 720;
+        setBoardSize((current) => {
+            const width = Math.max(current.width, drawingSize.width);
+            const height = Math.max(current.height, drawingSize.height);
+            const nextWidth = point.x > width - edge ? width + step : width;
+            const nextHeight = point.y > height - edge ? height + step : height;
+            return nextWidth === current.width && nextHeight === current.height
+                ? current
+                : { width: nextWidth, height: nextHeight };
+        });
+    };
+
     const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+        if (spacePressed && panelOpen) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            event.preventDefault();
+            stopDrawing();
+            activePanRef.current = {
+                pointerId: event.pointerId,
+                clientX: event.clientX,
+                clientY: event.clientY,
+                scrollLeft: canvas.scrollLeft,
+                scrollTop: canvas.scrollTop,
+                pageScrollTop: findVerticalScrollParent(canvas)?.scrollTop ?? 0,
+                pageScrollElement: findVerticalScrollParent(canvas),
+            };
+            setPanning(true);
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+                // Some browsers can reject capture when the pointer is already gone.
+            }
+            return;
+        }
+
         if (tool === "none") return;
         event.preventDefault();
 
         const point = getPointerPoint(event);
         if (!point) return;
+        expandBoardNear(point);
 
         try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -867,6 +1093,21 @@ export default function TaskView({
     };
 
     const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+        const activePan = activePanRef.current;
+        if (activePan && activePan.pointerId === event.pointerId) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            event.preventDefault();
+            canvas.scrollLeft = activePan.scrollLeft - (event.clientX - activePan.clientX);
+            const nextScrollTop = activePan.scrollTop - (event.clientY - activePan.clientY);
+            if (canvas.scrollHeight > canvas.clientHeight) {
+                canvas.scrollTop = nextScrollTop;
+            } else if (activePan.pageScrollElement) {
+                activePan.pageScrollElement.scrollTop = activePan.pageScrollTop - (event.clientY - activePan.clientY);
+            }
+            return;
+        }
+
         if (tool === "none") return;
         if ((event.buttons & 1) !== 1) {
             stopDrawing();
@@ -876,6 +1117,7 @@ export default function TaskView({
 
         const point = getPointerPoint(event);
         if (!point) return;
+        expandBoardNear(point);
 
         if (tool === "eraser") {
             if (event.buttons === 1) eraseAtPoint(point);
@@ -899,6 +1141,34 @@ export default function TaskView({
         setActiveStrokeStart(null);
     }
 
+    function stopInteraction() {
+        activePanRef.current = null;
+        setPanning(false);
+        stopDrawing();
+    }
+
+    const boardPayload = () => strokes.map((stroke) => ({
+        ...stroke,
+        coordinate_space: "board",
+        board_width: drawingSize.width,
+        board_height: drawingSize.height,
+    }));
+
+    useEffect(() => {
+        if (!annotatable || !panelOpen || !annotationTaskId || !annotationsLoaded) return;
+        const timeoutId = window.setTimeout(() => {
+            authFetch(`/api/tasks/${annotationTaskId}/solution`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ board_data: boardPayload() }),
+            }).catch(() => {
+                // Manual save still reports errors; realtime autosave stays quiet.
+            });
+        }, 700);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [annotatable, annotationTaskId, annotationsLoaded, drawingSize.height, drawingSize.width, panelOpen, strokes]);
+
     const saveDrawingSolution = async () => {
         if (!annotationTaskId) {
             setDrawingSaveError("Не найден id задания для сохранения");
@@ -913,6 +1183,15 @@ export default function TaskView({
         setDrawingSaved(false);
         setDrawingSaveError(null);
         try {
+            const boardResponse = await authFetch(`/api/tasks/${annotationTaskId}/solution`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ board_data: boardPayload() }),
+            });
+            if (!boardResponse.ok) {
+                const error = await boardResponse.json().catch(() => ({ detail: "Не удалось сохранить доску" }));
+                throw new Error(error.detail || "Не удалось сохранить доску");
+            }
             const blob = await renderStrokesToPngBlob(strokes, drawingSize);
             const form = new FormData();
             form.append("file", blob, `task-${annotationTaskId}-drawing.png`);
@@ -943,6 +1222,11 @@ export default function TaskView({
         setDrawingSaved(false);
         setDrawingSaveError(null);
         try {
+            await authFetch(`/api/tasks/${annotationTaskId}/solution`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ board_data: boardPayload() }),
+            });
             const blob = await renderStrokesToPngBlob(strokes, drawingSize, { cropToStrokes: true, ocrFriendly: true });
             const imageDataUrl = await blobToDataUrl(blob);
             const form = new FormData();
@@ -1009,7 +1293,10 @@ export default function TaskView({
                         type="button"
                         className={color === noteColor ? "active" : ""}
                         style={{ backgroundColor: noteColor }}
-                        onClick={() => setColor(noteColor)}
+                        onClick={() => {
+                            setColor(noteColor);
+                            setTool("pen");
+                        }}
                         title={noteColor}
                     />
                 ))}
@@ -1020,12 +1307,40 @@ export default function TaskView({
                         key={noteWidth}
                         type="button"
                         className={width === noteWidth ? "active" : ""}
-                        onClick={() => setWidth(noteWidth)}
+                        onClick={() => {
+                            setWidth(noteWidth);
+                            setTool("pen");
+                        }}
                         title={`${noteWidth}px`}
                     >
                         <span style={{ width: noteWidth * 2, height: noteWidth }} />
                     </button>
                 ))}
+            </div>
+            <span className="task-annotation-divider" />
+            <div className="task-annotation-board-zoom" aria-label="Масштаб доски">
+                <button
+                    type="button"
+                    onClick={() => setBoardZoom((value) => Math.max(0.45, Number((value - 0.15).toFixed(2))))}
+                    title="Уменьшить доску"
+                >
+                    <Minus size={16} />
+                </button>
+                <button
+                    type="button"
+                    className="task-annotation-zoom-value"
+                    onClick={() => setBoardZoom(1)}
+                    title="Вернуть масштаб 100%"
+                >
+                    {Math.round(boardZoom * 100)}%
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setBoardZoom((value) => Math.min(2.5, Number((value + 0.15).toFixed(2))))}
+                    title="Приблизить доску"
+                >
+                    <Plus size={16} />
+                </button>
             </div>
             <span className="task-annotation-divider" />
             <button
@@ -1089,7 +1404,7 @@ export default function TaskView({
     ) : null;
 
     return (
-        <div className="task-view fade-in">
+        <div className={`task-view fade-in ${panelOpen ? "annotation-open" : ""}`}>
             {title && <h1 className="task-title">{title}</h1>}
             {annotatable ? (
                 <div className="task-annotator">
@@ -1110,31 +1425,38 @@ export default function TaskView({
                     )}
                     {!annotationToolbarHostId && !annotationToolbarHost && annotationToolbar}
                     <div
+                        ref={canvasRef}
                         className="task-annotation-canvas"
                         style={{
-                            width: drawingSize.width ? `${drawingSize.width}px` : undefined,
-                            minHeight: drawingSize.height ? `${drawingSize.height}px` : undefined,
+                            width: "100%",
+                            minHeight: drawingSize.height ? `${Math.ceil(drawingSize.height * boardZoom)}px` : undefined,
                         }}
                     >
                         <div
                             ref={planeRef}
-                            className="task-annotation-plane"
+                            className={`task-annotation-plane ${panelOpen ? "board-open" : ""}`}
                             style={{
-                                width: drawingSize.width ? `${drawingSize.width}px` : "100%",
+                                width: drawingSize.width ? `${Math.ceil(drawingSize.width * boardZoom)}px` : "100%",
                                 minHeight: drawingSize.height ? `${drawingSize.height}px` : undefined,
-                            }}
+                                "--task-annotation-viewport-width": canvasViewportWidth ? `${canvasViewportWidth}px` : undefined,
+                            } as React.CSSProperties}
                         >
                             {body}
+                            {children && <div className="task-view-inline-footer">{children}</div>}
                             <svg
-                                className={`task-annotation-layer ${panelOpen && tool !== "none" ? "drawing" : ""}`}
+                                className={`task-annotation-layer ${panelOpen && tool !== "none" ? "drawing" : ""} ${spacePressed ? "space-panning" : ""} ${panning ? "is-panning" : ""}`}
+                                style={{
+                                    transform: panelOpen ? `scale(${boardZoom})` : undefined,
+                                    transformOrigin: "top left",
+                                }}
                                 width={drawingSize.width || 1}
                                 height={drawingSize.height || 1}
                                 viewBox={`0 0 ${drawingSize.width || 1} ${drawingSize.height || 1}`}
                                 onPointerDown={handlePointerDown}
                                 onPointerMove={handlePointerMove}
-                                onPointerUp={stopDrawing}
-                                onPointerCancel={stopDrawing}
-                                onLostPointerCapture={stopDrawing}
+                                onPointerUp={stopInteraction}
+                                onPointerCancel={stopInteraction}
+                                onLostPointerCapture={stopInteraction}
                             >
                                 {strokes.map((stroke) => (
                                     <path
@@ -1147,11 +1469,35 @@ export default function TaskView({
                                         strokeLinejoin="round"
                                     />
                                 ))}
+                                {teacherStrokes.map((stroke) => (
+                                    <path
+                                        key={stroke.id}
+                                        d={pointsToPath(
+                                            stroke.coordinate_space === "board"
+                                                ? stroke.points
+                                                : stroke.points.map((point) => ({
+                                                    x: (point.x / 100) * teacherStrokeBaseSize.width,
+                                                    y: (point.y / 100) * teacherStrokeBaseSize.height,
+                                                }))
+                                        )}
+                                        fill="none"
+                                        stroke={stroke.color}
+                                        strokeWidth={stroke.width}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        pointerEvents="none"
+                                    />
+                                ))}
                             </svg>
                         </div>
                     </div>
                 </div>
-            ) : body}
+            ) : (
+                <>
+                    {body}
+                    {children && <div className="task-view-inline-footer">{children}</div>}
+                </>
+            )}
             {files && files.length > 0 && (
                 <div className="task-files">
                     <span className="task-files-label">Файлы к заданию:</span>

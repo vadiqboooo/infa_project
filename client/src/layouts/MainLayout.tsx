@@ -1,13 +1,28 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { BottomNav } from "../components/BottomNav";
+import { useEffect, useState } from "react";
 
 export function MainLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("main-sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("main-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+    } catch {}
+  }, [sidebarCollapsed]);
+
   return (
     <div className="flex h-screen bg-[#030A12] transition-colors">
       {/* Sidebar — hidden on mobile, visible on md+ */}
       <div className="hidden md:flex">
-        <Sidebar />
+        <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       </div>
       <main className="flex-1 overflow-y-auto relative pb-16 md:pb-0">
         <Outlet />

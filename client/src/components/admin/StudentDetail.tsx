@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Circle, BarChart2, FileText, Paperclip } from "lucide-react";
 import { clsx } from "clsx";
 import type { StudentDetailOut, StudentTaskResult, StudentTopicDetail } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
-import { StudentTaskSolutionReviewModal } from "./StudentTaskSolutionReviewModal";
 
 interface Props {
     student: StudentDetailOut;
     onBack: () => void;
     onViewTopicStats: (topicId: number) => void;
+    onReviewTaskSolution?: (task: StudentTaskResult) => void;
     apiKey?: string;
-    initialReviewTaskId?: number;
 }
 
 type Tab = "tutorial" | "homework" | "control" | "variants" | "math" | "mock";
@@ -200,26 +199,13 @@ function TopicBlock({ topic, onViewStats, onAnalyze, onReviewSolution }: {
     );
 }
 
-export function StudentDetail({ student, onBack, onViewTopicStats, apiKey, initialReviewTaskId }: Props) {
+export function StudentDetail({ student, onBack, onViewTopicStats, onReviewTaskSolution, apiKey }: Props) {
     const [tab, setTab] = useState<Tab>("tutorial");
     const [analysisFor, setAnalysisFor] = useState<{ topicName: string; attemptId: number } | null>(null);
-    const [reviewFor, setReviewFor] = useState<StudentTaskResult | null>(null);
 
     const topicsByCategory = student.topics.filter(t => t.category === tab);
     const totalSolved = student.total_solved;
     const totalPct = student.total_tasks === 0 ? 0 : Math.round((totalSolved / student.total_tasks) * 100);
-
-    useEffect(() => {
-        if (!initialReviewTaskId) return;
-        for (const topic of student.topics) {
-            const task = topic.tasks.find((item) => item.task_id === initialReviewTaskId);
-            if (task) {
-                setTab(topic.category as Tab);
-                setReviewFor(task);
-                break;
-            }
-        }
-    }, [initialReviewTaskId, student.topics]);
 
     return (
         <div className="flex flex-col h-full">
@@ -291,7 +277,7 @@ export function StudentDetail({ student, onBack, onViewTopicStats, apiKey, initi
                             key={topic.topic_id}
                             topic={topic}
                             onViewStats={() => onViewTopicStats(topic.topic_id)}
-                            onReviewSolution={(task) => setReviewFor(task)}
+                            onReviewSolution={onReviewTaskSolution}
                             onAnalyze={topic.attempt_id ? () => setAnalysisFor({
                                 topicName: topic.topic_name,
                                 attemptId: topic.attempt_id!,
@@ -310,15 +296,6 @@ export function StudentDetail({ student, onBack, onViewTopicStats, apiKey, initi
                 />
             )}
 
-            {reviewFor && (
-                <StudentTaskSolutionReviewModal
-                    studentId={student.id}
-                    taskId={reviewFor.task_id}
-                    studentName={student.name}
-                    apiKey={apiKey}
-                    onClose={() => setReviewFor(null)}
-                />
-            )}
         </div>
     );
 }

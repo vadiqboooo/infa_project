@@ -41,6 +41,7 @@ import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
 import { StudentDetail } from "../components/admin/StudentDetail";
 import { TopicStats } from "../components/admin/TopicStats";
+import { StudentTaskSolutionReviewModal } from "../components/admin/StudentTaskSolutionReviewModal";
 import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import AdminImportPdfPage from "./AdminImportPdfPage";
 import { useAuth } from "../context/AuthContext";
@@ -233,6 +234,7 @@ export default function AdminPage() {
                 <Route index element={<AdminDashboard apiKey={apiKey} />} />
                 <Route path="topics/:id/stats" element={<AdminTopicStatsPage apiKey={apiKey} />} />
                 <Route path="topics/:id" element={<AdminTopicEdit apiKey={apiKey} />} />
+                <Route path="students/:studentId/tasks/:taskId/review" element={<AdminSolutionReviewPage apiKey={apiKey} />} />
                 <Route path="students/:id" element={<AdminStudentDetailPage apiKey={apiKey} />} />
                 <Route path="import-pdf" element={<AdminImportPdfPage apiKey={apiKey} />} />
             </Routes>
@@ -1463,6 +1465,12 @@ function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
             .finally(() => setLoading(false));
     }, [id, apiKey]);
 
+    useEffect(() => {
+        const reviewTaskId = Number(searchParams.get("reviewTask")) || undefined;
+        if (!id || !reviewTaskId) return;
+        navigate(`/admin/students/${id}/tasks/${reviewTaskId}/review`, { replace: true });
+    }, [id, navigate, searchParams]);
+
     if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
     if (!student) return null;
 
@@ -1473,11 +1481,44 @@ function AdminStudentDetailPage({ apiKey }: { apiKey: string }) {
                     student={student}
                     onBack={() => navigate("/admin")}
                     onViewTopicStats={(topicId) => navigate(`/admin/topics/${topicId}/stats`)}
+                    onReviewTaskSolution={(task) => navigate(`/admin/students/${student.id}/tasks/${task.task_id}/review`)}
                     apiKey={apiKey}
-                    initialReviewTaskId={Number(searchParams.get("reviewTask")) || undefined}
                 />
             </div>
         </div>
+    );
+}
+
+function AdminSolutionReviewPage({ apiKey }: { apiKey: string }) {
+    const { studentId, taskId } = useParams();
+    const navigate = useNavigate();
+    const [studentName, setStudentName] = useState("Ученик");
+
+    useEffect(() => {
+        if (!studentId) return;
+        let cancelled = false;
+        adminFetch<StudentDetailOut>(`/admin/students/${studentId}`, apiKey)
+            .then((student) => {
+                if (!cancelled) setStudentName(student.name);
+            })
+            .catch(() => {
+                if (!cancelled) setStudentName("Ученик");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [apiKey, studentId]);
+
+    if (!studentId || !taskId) return null;
+
+    return (
+        <StudentTaskSolutionReviewModal
+            studentId={Number(studentId)}
+            taskId={Number(taskId)}
+            studentName={studentName}
+            apiKey={apiKey}
+            onClose={() => navigate(-1)}
+        />
     );
 }
 
@@ -1524,6 +1565,7 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
                     onBack={() => navigate(-1)}
                     apiKey={apiKey}
                     onRefresh={loadStats}
+                    onReviewSolution={(student, task) => navigate(`/admin/students/${student.student_id}/tasks/${task.task_id}/review`)}
                 />
             </div>
         </div>

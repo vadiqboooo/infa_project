@@ -1453,7 +1453,7 @@ export default function ExamPage() {
             {solutionPanelTaskId !== null && (
                 <div className="fixed inset-0 z-50 flex">
                     <div className="flex-1 bg-black/20" onClick={closeSolutionPanel} />
-                    <div className="w-full md:w-[620px] bg-[#f8fbf8] h-full shadow-2xl flex flex-col border-l border-[#d8eadb] p-3 sm:p-4 overflow-hidden">
+                    <div className="w-full md:w-[min(1180px,calc(100vw-48px))] bg-[#07111D] h-full shadow-2xl flex flex-col border-l border-white/10 p-3 sm:p-4 overflow-hidden">
                         <div className="mb-3 flex items-center justify-between shrink-0">
                             <div>
                                 <div className="text-sm font-black text-[#18251d]">Прикрепить решение</div>

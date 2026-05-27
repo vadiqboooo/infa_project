@@ -1,0 +1,20 @@
+.app-sidebar-collapsed nav span {
+  display: none;
+}
+
+.app-sidebar-collapsed > div:last-child > button span {
+  display: none;
+}
+
+.app-sidebar-collapsed .group p,
+.app-sidebar-collapsed .group > svg {
+  display: none;
+}
+
+.app-sidebar-collapsed .group {
+  min-width: 0;
+}
+
+.app-sidebar-collapsed .sidebar-collapse-toggle {
+  margin-top: 0.25rem;
+}

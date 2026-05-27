@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
             task_solution_comment_read,
             task_solution_comment_reaction,
             task_solution_help_request,
+            task_solution_help_message,
             task_solution_version,
         )  # noqa: ensure models are registered
         async with engine.begin() as conn:
@@ -76,6 +77,11 @@ async def lifespan(app: FastAPI):
                 )
             )
             await conn.run_sync(
+                lambda sync_conn: task_solution_help_message.UserTaskSolutionHelpMessage.__table__.create(
+                    sync_conn, checkfirst=True
+                )
+            )
+            await conn.run_sync(
                 lambda sync_conn: task_solution_version.UserTaskSolutionVersion.__table__.create(
                     sync_conn, checkfirst=True
                 )
@@ -95,6 +101,10 @@ async def lifespan(app: FastAPI):
                 lambda sync_conn: site_visit.SiteVisit.__table__.create(sync_conn, checkfirst=True)
             )
             await conn.execute(text("ALTER TABLE user_task_solutions ADD COLUMN IF NOT EXISTS recognized_text TEXT"))
+            await conn.execute(text("ALTER TABLE user_task_solutions ADD COLUMN IF NOT EXISTS board_data JSON"))
+            await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'open'"))
+            await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS closed_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+            await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS close_reason VARCHAR(64)"))
         logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)

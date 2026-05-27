@@ -160,7 +160,7 @@ export function NotificationsHoverCard({
                     if (!item.is_read) {
                       markAdminRead.mutate({ source: item.source, source_id: item.id });
                     }
-                    navigate(`/admin/students/${item.student_id}?reviewTask=${item.task_id}`);
+                    navigate(`/admin/students/${item.student_id}/tasks/${item.task_id}/review`);
                   }}
                   className={clsx(
                     "group flex w-full items-start gap-3 rounded-2xl p-3 text-left transition-colors hover:bg-amber-50",

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
 import TaskView from "../components/TaskView";
@@ -9,7 +9,7 @@ import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import ExamIntro from "../components/ExamIntro";
 import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
-import { ArrowLeft, Send, Bot, X, Code2, BookOpen, ChevronRight, CheckCircle2, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock, PenLine } from "lucide-react";
+import { ArrowLeft, Send, Bot, X, BookOpen, ChevronRight, CheckCircle2, Eye, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock, PenLine } from "lucide-react";
 import { clsx } from "clsx";
 import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer, useCurrentPreparationPlan } from "../hooks/useApi";
 import { TopicCategory, type AnswerVal, type TaskNav, type TopicNav, type ExamResult } from "../api/types";
@@ -89,11 +89,14 @@ export default function TasksPage() {
     const [showChat, setShowChat] = useState(true);
     const [mentorOpen, setMentorOpen] = useState(false);
     const [attachSolutionOpen, setAttachSolutionOpen] = useState(false);
+    const [solutionHelpMode, setSolutionHelpMode] = useState(false);
+    const [taskConditionVisibleInHelp, setTaskConditionVisibleInHelp] = useState(false);
     const [attachSolutionInitialTab, setAttachSolutionInitialTab] = useState<"code" | "file" | "image">("code");
     const [attachSolutionPrefillCode, setAttachSolutionPrefillCode] = useState("");
     const [attachSolutionTextMode, setAttachSolutionTextMode] = useState(false);
     const [solutionOpen, setSolutionOpen] = useState(false);
     const [drawingPanelOpen, setDrawingPanelOpen] = useState(false);
+    const [annotationRefreshKey, setAnnotationRefreshKey] = useState(0);
     const [recognizedDrawingSolutions, setRecognizedDrawingSolutions] = useState<Record<number, { text: string }>>({});
     const [solutionReviewSending, setSolutionReviewSending] = useState<Record<number, boolean>>({});
     const [solutionReviewSent, setSolutionReviewSent] = useState<Record<number, boolean>>({});
@@ -101,8 +104,11 @@ export default function TasksPage() {
     const [examResult, setExamResult] = useState<ExamResult | null>(null);
     const [viewingFinishedExam, setViewingFinishedExam] = useState(false);
     const attachSolutionBeforeCloseRef = useRef<(() => boolean) | null>(null);
+    const solutionWasOpenBeforeHelpRef = useRef(false);
     const appliedTaskDeepLinkRef = useRef<string | null>(null);
     const [pendingSolutionTaskId, setPendingSolutionTaskId] = useState<number | null>(null);
+    const taskNavRef = useRef<HTMLDivElement | null>(null);
+    const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     const { data: allTopics, isLoading: navLoading } = useNavigation();
     const { data: currentPlan } = useCurrentPreparationPlan();
@@ -125,15 +131,23 @@ export default function TasksPage() {
     // Multiple topics in one category are shown as extra named tabs.
     const tutorialTopics = useMemo(() => {
         if (!allTopics || !currentTopic || currentTopic.ege_number == null) return [];
+        const currentSubject = currentTopic.subject ?? (currentTopic.category === TopicCategory.math ? 'math' : 'informatics');
         return allTopics
-            .filter(t => t.category === 'tutorial' && t.ege_number === currentTopic.ege_number)
+            .filter(t => {
+                const subject = t.subject ?? (t.category === TopicCategory.math ? 'math' : 'informatics');
+                return t.category === 'tutorial' && subject === currentSubject && t.ege_number === currentTopic.ege_number;
+            })
             .sort((a, b) => (a.order_index - b.order_index) || (a.id - b.id));
     }, [allTopics, currentTopic]);
 
     const homeworkTopics = useMemo(() => {
         if (!allTopics || !currentTopic || currentTopic.ege_number == null) return [];
+        const currentSubject = currentTopic.subject ?? (currentTopic.category === TopicCategory.math ? 'math' : 'informatics');
         return allTopics
-            .filter(t => t.category === 'homework' && t.ege_number === currentTopic.ege_number)
+            .filter(t => {
+                const subject = t.subject ?? (t.category === TopicCategory.math ? 'math' : 'informatics');
+                return t.category === 'homework' && subject === currentSubject && t.ege_number === currentTopic.ege_number;
+            })
             .sort((a, b) => (a.order_index - b.order_index) || (a.id - b.id));
     }, [allTopics, currentTopic]);
 
@@ -151,6 +165,24 @@ export default function TasksPage() {
         if (!title) return baseLabel;
         return title;
     };
+
+    const modeOptions = useMemo(() => ([
+        ...tutorialTopics.map(topic => ({
+            topic,
+            path: `/tasks/${topic.id}`,
+            label: getTopicTabLabel(topic, "Разбор", tutorialTopics),
+            shortLabel: "Разбор",
+            counts: getTopicCounts(topic),
+        })),
+        ...homeworkTopics.map(topic => ({
+            topic,
+            path: `/homework/${topic.id}`,
+            label: getTopicTabLabel(topic, "Домашка", homeworkTopics),
+            shortLabel: "Домашка",
+            counts: getTopicCounts(topic),
+        })),
+    ]), [tutorialTopics, homeworkTopics]);
+    const currentModeOption = modeOptions.find((item) => item.topic.id === currentTopic?.id);
 
     useEffect(() => {
         if (allTopics && !currentTopic && id) {
@@ -172,6 +204,13 @@ export default function TasksPage() {
     useEffect(() => {
         setDrawingPanelOpen(false);
     }, [currentTaskNav?.id]);
+
+    useEffect(() => {
+        const container = taskNavRef.current;
+        if (!container) return;
+        const activeButton = container.querySelector<HTMLButtonElement>('[data-active-task="true"]');
+        activeButton?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }, [taskIndex, tasks.length]);
 
     useEffect(() => {
         if (tasks.length === 0 || !tasks[taskIndex]?.is_locked) return;
@@ -294,6 +333,9 @@ export default function TasksPage() {
 
     const closeAttachSolutionNow = () => {
         setAttachSolutionOpen(false);
+        setSolutionHelpMode(false);
+        setTaskConditionVisibleInHelp(false);
+        solutionWasOpenBeforeHelpRef.current = false;
         clearSolutionDeepLink();
     };
 
@@ -307,6 +349,8 @@ export default function TasksPage() {
             ? String(answerValue[0] ?? "")
             : "";
         setMentorOpen(false);
+        setSolutionHelpMode(false);
+        setTaskConditionVisibleInHelp(false);
         setAttachSolutionInitialTab(tab);
         setAttachSolutionPrefillCode(tab === "code" ? proofText : "");
         setAttachSolutionTextMode(false);
@@ -326,6 +370,8 @@ export default function TasksPage() {
                 .catch(() => {});
         }
         setMentorOpen(false);
+        setSolutionHelpMode(false);
+        setTaskConditionVisibleInHelp(false);
         setAttachSolutionInitialTab("code");
         setAttachSolutionPrefillCode(rawText || text);
         setAttachSolutionTextMode(true);
@@ -335,6 +381,8 @@ export default function TasksPage() {
     const editRecognizedSolution = () => {
         if (!task) return;
         setMentorOpen(false);
+        setSolutionHelpMode(false);
+        setTaskConditionVisibleInHelp(false);
         setAttachSolutionInitialTab("code");
         setAttachSolutionPrefillCode(recognizedDrawingSolutions[task.id]?.text ?? "");
         setAttachSolutionTextMode(true);
@@ -377,6 +425,8 @@ export default function TasksPage() {
             appliedTaskDeepLinkRef.current = currentTaskParam;
         }
         setAttachSolutionOpen(false);
+        setSolutionHelpMode(false);
+        setTaskConditionVisibleInHelp(false);
         clearSolutionDeepLink();
         setTaskIndex(index);
     };
@@ -393,6 +443,7 @@ export default function TasksPage() {
         ws.onmessage = () => {
             queryClient.invalidateQueries({ queryKey: ["task", currentTaskNav.id] });
             queryClient.invalidateQueries({ queryKey: ["solution-comment-notifications"] });
+            setAnnotationRefreshKey((current) => current + 1);
         };
         return () => ws.close();
     }, [currentTaskNav?.id, queryClient]);
@@ -602,11 +653,115 @@ export default function TasksPage() {
         );
     };
 
+    const renderTaskActionButtons = () => {
+        if (!task) return null;
+
+        return (
+            <>
+                {canAnnotateTask && (
+                    drawingPanelOpen ? (
+                        <div
+                            id={`task-drawing-toolbar-${task.id}`}
+                            className="min-w-0 max-w-full"
+                        />
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setDrawingPanelOpen(true)}
+                            className="relative flex items-center gap-1.5 rounded-full border border-sky-300/20 bg-sky-400/10 px-3 py-1.5 text-xs font-bold text-sky-200 transition-all hover:bg-sky-400/15"
+                        >
+                            <PenLine size={13} />
+                            Черновик
+                        </button>
+                    )
+                )}
+                {(!isVariant || !examInfo?.active_attempt) && (
+                    <button
+                        onClick={() => {
+                            if (attachSolutionOpen && solutionHelpMode) {
+                                closeAttachSolution();
+                                return;
+                            }
+                            solutionWasOpenBeforeHelpRef.current = attachSolutionOpen && !solutionHelpMode;
+                            setMentorOpen(false);
+                            setAttachSolutionInitialTab("code");
+                            setAttachSolutionPrefillCode("");
+                            setAttachSolutionTextMode(false);
+                            setSolutionHelpMode(true);
+                            setTaskConditionVisibleInHelp(true);
+                            setAttachSolutionOpen(true);
+                        }}
+                        className={clsx(
+                            "task-action-secondary relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
+                            solutionHelpMode
+                                ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                                : "text-violet-200 bg-violet-400/10 border-violet-300/20 hover:bg-violet-400/15"
+                        )}
+                    >
+                        <HelpCircle size={13} />
+                        Помощь
+                    </button>
+                )}
+                <button
+                    onClick={() => {
+                        setMentorOpen(false);
+                        setSolutionHelpMode(false);
+                        setTaskConditionVisibleInHelp(false);
+                        setAttachSolutionInitialTab("code");
+                        setAttachSolutionPrefillCode("");
+                        setAttachSolutionTextMode(false);
+                        setAttachSolutionOpen(o => !o);
+                    }}
+                    className={clsx(
+                        "task-action-secondary relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
+                        attachSolutionOpen
+                            ? "bg-[#4e8c5a] text-white border-[#4e8c5a] shadow-sm"
+                            : task.solution_comments_count
+                                ? "text-amber-200 bg-amber-400/10 border-amber-300/20 shadow-[0_8px_18px_rgba(245,158,11,0.10)] hover:bg-amber-400/15"
+                                : task.has_own_solution
+                                    ? "text-emerald-200 bg-emerald-400/12 border-emerald-300/25 shadow-[0_8px_18px_rgba(16,185,129,0.10)] hover:bg-emerald-400/18"
+                                    : "text-emerald-200 bg-emerald-400/10 border-emerald-300/20 hover:bg-emerald-400/15"
+                    )}
+                >
+                    {task.solution_comments_count ? <MessageSquare size={13} /> : <Paperclip size={13} />}
+                    {task.solution_comments_count
+                        ? `Комментарий${task.solution_comments_count > 1 ? ` (${task.solution_comments_count})` : ""}`
+                        : task.has_own_solution
+                            ? "Решение есть"
+                            : "Решение"}
+                    {task.has_own_solution && !task.solution_comments_count && (
+                        <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#3F8C62] px-1 text-[9px] font-black text-white">
+                            ✓
+                        </span>
+                    )}
+                    {task.solution_comments_count ? (
+                        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-white ring-2 ring-[#0A1522]">
+                            {task.solution_comments_count}
+                        </span>
+                    ) : null}
+                </button>
+            </>
+        );
+    };
+
+    const renderBreakdownButton = () => (
+        task?.solution_steps && task.solution_steps.length > 0 ? (
+            <button
+                onClick={() => setSolutionOpen(true)}
+                className="group/sol flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1.5 text-emerald-200 transition-all hover:border-emerald-300/35 hover:bg-emerald-400/15"
+                title="Пошаговое решение"
+            >
+                <BookOpen size={13} className="group-hover/sol:scale-110 transition-transform" />
+                <span className="text-xs font-bold uppercase tracking-tight">Разбор</span>
+            </button>
+        ) : null
+    );
+
     return (
         <div className="task-solve-page flex h-full flex-col overflow-hidden bg-[#030A12]">
             {/* Header */}
-            <div className="relative z-10 flex min-h-14 shrink-0 items-center border-b border-white/10 bg-[#07111D]/92 px-4 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl md:px-6">
-                <div className="flex items-center gap-2 md:gap-3 w-full min-w-0">
+            <div className="relative z-10 flex min-h-16 shrink-0 items-center border-b border-white/10 bg-[#07111D]/92 px-4 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl md:px-6">
+                <div className="flex w-full min-w-0 items-center gap-3">
                     <button
                         onClick={() => navigate(backPath)}
                         className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
@@ -615,32 +770,85 @@ export default function TasksPage() {
                         <span className="hidden sm:inline">Назад</span>
                     </button>
 
-                    {showModeTabs && (
-                        <div className="flex items-center gap-2 ml-2 py-2 overflow-x-auto scrollbar-hide">
-                            {tutorialTopics.map(topic => (
-                                <CategoryTab
-                                    key={topic.id}
-                                    label={getTopicTabLabel(topic, "Разбор", tutorialTopics)}
-                                    counts={getTopicCounts(topic)}
-                                    isActive={currentTopic?.id === topic.id}
-                                    disabled={false}
-                                    onClick={() => navigate(`/tasks/${topic.id}`)}
-                                />
-                            ))}
-                            {homeworkTopics.map(topic => (
-                                <CategoryTab
-                                    key={topic.id}
-                                    label={getTopicTabLabel(topic, "Домашка", homeworkTopics)}
-                                    counts={getTopicCounts(topic)}
-                                    isActive={currentTopic?.id === topic.id}
-                                    disabled={false}
-                                    onClick={() => navigate(`/homework/${topic.id}`)}
-                                />
-                            ))}
+                    {showModeTabs && modeOptions.length > 1 && currentModeOption && (
+                        <div className="relative shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setModeMenuOpen((value) => !value)}
+                                className="inline-flex h-10 items-center gap-2 rounded-full border border-transparent bg-transparent px-2 text-sm font-black text-emerald-100 transition hover:text-white"
+                            >
+                                <span>{currentModeOption.shortLabel}</span>
+                                <span className="text-xs text-emerald-200">
+                                    {currentModeOption.counts.total}
+                                </span>
+                                <ChevronRight className="h-4 w-4 rotate-90 text-emerald-200" />
+                            </button>
+                            {modeMenuOpen && (
+                                <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#07111D] p-1 shadow-[0_18px_44px_rgba(0,0,0,0.34)]">
+                                    {modeOptions.map(({ topic, path, label, counts }) => (
+                                        <button
+                                            key={topic.id}
+                                            type="button"
+                                            onClick={() => {
+                                                setModeMenuOpen(false);
+                                                navigate(path);
+                                            }}
+                                            className={clsx(
+                                                "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition",
+                                                topic.id === currentTopic?.id
+                                                    ? "bg-emerald-400/14 text-emerald-100"
+                                                    : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
+                                            )}
+                                        >
+                                            <span className="min-w-0 truncate">{label}</span>
+                                            <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs">{counts.total}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    <div className="ml-auto flex items-center gap-2 md:gap-3 shrink-0">
+                    <div ref={taskNavRef} className="ml-2 min-w-0 flex-1 overflow-x-auto px-3 py-3 scrollbar-hide">
+                        <div className="flex min-w-max gap-1.5 md:gap-2">
+                            {tasks.map((t, idx) => {
+                                const taskLabel = String(idx + 1);
+                                const egeLabel = t.ege_number != null ? `№${t.ege_number}` : taskLabel;
+                                const customTitle = t.title?.trim();
+                                const isActiveTask = idx === taskIndex;
+                                return (
+                                    <button
+                                        key={t.id}
+                                        data-active-task={isActiveTask ? "true" : undefined}
+                                        disabled={t.is_locked}
+                                        title={customTitle ? `${egeLabel}: ${customTitle}` : `Задание ${egeLabel}`}
+                                        onClick={() => selectTask(idx)}
+                                        className={clsx(
+                                            "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold transition-all",
+                                            t.is_locked
+                                                ? "cursor-not-allowed border-white/5 bg-white/[0.025] text-slate-700"
+                                                : isActiveTask
+                                                    ? "border-emerald-300/45 bg-emerald-400/18 text-emerald-100 shadow-[0_0_0_4px_rgba(16,185,129,0.10),0_0_26px_rgba(16,185,129,0.32),0_12px_24px_rgba(0,0,0,0.22)]"
+                                                    : t.status === "solved"
+                                                        ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-200"
+                                                        : t.status === "failed"
+                                                            ? "border-red-300/20 bg-red-400/10 text-red-200"
+                                                            : "border-white/10 bg-white/[0.04] text-slate-400 hover:-translate-y-0.5 hover:border-white/20 hover:text-white"
+                                        )}
+                                    >
+                                        {t.is_locked ? <Lock size={14} /> : taskLabel}
+                                        {t.has_solution && (
+                                            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#07111D] bg-amber-400 text-white shadow-sm">
+                                                <BookOpen size={8} />
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="ml-auto flex shrink-0 items-center gap-2 md:gap-3">
                         {isVariant && examInfo?.active_attempt ? (
                             <>
                                 <ExamTimer
@@ -657,76 +865,28 @@ export default function TasksPage() {
                                 </button>
                             </>
                         ) : null}
-                        <span className="hidden items-center gap-1 rounded-full border border-violet-300/15 bg-violet-400/10 px-2.5 py-1 text-xs font-bold text-violet-200 sm:flex">
-                            <Code2 size={11} />
-                            Python
-                        </span>
                     </div>
                 </div>
             </div>
-
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
                 <div
-                    className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.10),transparent_34%),linear-gradient(180deg,rgba(3,10,18,0),rgba(3,10,18,0.96))] p-4 pt-0 md:p-8 md:pt-0"
+                    className="task-workspace-body flex-1 overflow-y-auto bg-[radial-gradient(circle_at_80%_8%,rgba(16,185,129,0.16),transparent_34%),linear-gradient(180deg,#061018,#03080f)] p-0"
                     style={{ minWidth: 0 }}
                 >
                     {!isVariant || !examInfo || (examInfo.active_attempt && !examResult) || viewingFinishedExam ? (
                         <>
-                            {/* Task Navigation Row */}
-                            <div className="-mx-4 mb-5 overflow-x-auto border-b border-white/10 bg-[#07111D]/72 px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.18)] backdrop-blur-xl scrollbar-hide md:-mx-8 md:mb-6 md:px-8">
-                                <div className="flex gap-1.5 md:gap-2 min-w-max">
-                                {tasks.map((t, idx) => {
-                                    const taskLabel = t.ege_number != null ? `№${t.ege_number}` : String(idx + 1);
-                                    const customTitle = t.title?.trim();
-                                    return (
-                                    <button
-                                        key={t.id}
-                                        disabled={t.is_locked}
-                                        title={customTitle ? `${taskLabel}: ${customTitle}` : taskLabel}
-                                        onClick={() => selectTask(idx)}
-                                        className={clsx(
-                                            customTitle ? 'h-10 max-w-[190px] min-w-10 px-3' : 'h-10 w-10',
-                                            'shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 relative border',
-                                            t.is_locked
-                                                ? 'cursor-not-allowed border-white/5 bg-white/[0.025] text-slate-700'
-                                                : idx === taskIndex
-                                                ? 'bg-emerald-400/18 border-emerald-300/45 text-emerald-100 shadow-[0_0_0_4px_rgba(16,185,129,0.10),0_0_26px_rgba(16,185,129,0.32),0_12px_24px_rgba(0,0,0,0.22)]'
-                                                : t.status === 'solved'
-                                                    ? 'bg-emerald-400/10 text-emerald-200 border-emerald-300/20'
-                                                    : t.status === 'failed'
-                                                        ? 'bg-red-400/10 text-red-200 border-red-300/20'
-                                                        : 'bg-white/[0.04] border-white/10 text-slate-400 hover:border-white/20 hover:text-white hover:-translate-y-0.5'
-                                        )}
-                                    >
-                                        {t.is_locked ? <Lock size={14} /> : <span className="shrink-0">{taskLabel}</span>}
-                                        {!t.is_locked && customTitle && (
-                                            <span className="hidden max-w-[120px] truncate text-[11px] font-semibold opacity-90 sm:inline">
-                                                {customTitle}
-                                            </span>
-                                        )}
-                                        {/* Indicator for solution existence from nav data */}
-                                        {t.has_solution && (
-                                            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#07111D] bg-amber-400 text-white shadow-sm">
-                                                <BookOpen size={8} />
-                                            </div>
-                                        )}
-                                    </button>
-                                );
-                                })}
-                                </div>
-                            </div>
-
                             {/* Content */}
                             <div className="flex flex-col lg:flex-row gap-6 items-start">
                                 {/* Left: Task Card */}
-                                <div className="relative min-h-[300px] w-full flex-1 overflow-hidden rounded-[22px] border border-white/10 bg-[#0A1522] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] md:p-6">
+                                <div className="relative min-h-[300px] w-full min-w-0 flex-1 overflow-hidden rounded-[22px] border border-white/10 bg-[#07111D]/92 p-4 text-slate-100 shadow-[0_24px_80px_rgba(0,0,0,0.34)] md:p-6">
                                     <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-green-500 to-transparent" />
                                     {taskLoading ? (
                                         <Skeleton />
                                     ) : task ? (
                                         <>
-                                            <div className="flex items-center gap-2 mb-5 flex-wrap">
+                                            {false && (
+                                            <div className="hidden">
                                                 <span className={clsx(
                                                     'px-2.5 py-1 rounded-full text-xs font-bold border',
                                                     task.difficulty === 'easy' ? 'bg-emerald-400/12 text-emerald-200 border-emerald-300/20' :
@@ -764,12 +924,22 @@ export default function TasksPage() {
                                                     {(!isVariant || !examInfo?.active_attempt) && (
                                                         <button
                                                             onClick={() => {
-                                                                setAttachSolutionOpen(false);
-                                                                setMentorOpen(o => !o);
+                                                                if (attachSolutionOpen && solutionHelpMode) {
+                                                                    closeAttachSolution();
+                                                                    return;
+                                                                }
+                                                                solutionWasOpenBeforeHelpRef.current = attachSolutionOpen && !solutionHelpMode;
+                                                                setMentorOpen(false);
+                                                                setAttachSolutionInitialTab("code");
+                                                                setAttachSolutionPrefillCode("");
+                                                                setAttachSolutionTextMode(false);
+                                                                setSolutionHelpMode(true);
+                                                                setTaskConditionVisibleInHelp(true);
+                                                                setAttachSolutionOpen(true);
                                                             }}
                                                             className={clsx(
                                                                 "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border",
-                                                                mentorOpen
+                                                                solutionHelpMode
                                                                     ? "bg-violet-600 text-white border-violet-600 shadow-sm"
                                                                     : "text-violet-200 bg-violet-400/10 border-violet-300/20 hover:bg-violet-400/15"
                                                             )}
@@ -781,6 +951,8 @@ export default function TasksPage() {
                                                     <button
                                                             onClick={() => {
                                                                 setMentorOpen(false);
+                                                                setSolutionHelpMode(false);
+                                                                setTaskConditionVisibleInHelp(false);
                                                                 setAttachSolutionInitialTab("code");
                                                                 setAttachSolutionPrefillCode("");
                                                                 setAttachSolutionTextMode(false);
@@ -826,6 +998,7 @@ export default function TasksPage() {
                                                     )}
                                                 </div>
                                             </div>
+                                            )}
                                             {isPlanTask && currentPlan?.plan && (
                                                 <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
                                                     <div className="flex items-start gap-3">
@@ -847,189 +1020,359 @@ export default function TasksPage() {
                                                     </Link>
                                                 </div>
                                             )}
-                                            <div className="prose prose-invert max-w-none leading-relaxed text-slate-200">
-                                                <TaskView
-                                                    content={task.content_html}
-                                                    files={task.media_resources?.files}
-                                                    annotatable={canAnnotateTask}
-                                                    annotationKey={`task:${task.id}`}
-                                                    annotationTaskId={task.id}
-                                                    annotationPanelOpen={drawingPanelOpen}
-                                                    onAnnotationPanelOpenChange={setDrawingPanelOpen}
-                                                    showAnnotationToggle={false}
-                                                    annotationToolbarHostId={`task-drawing-toolbar-${task.id}`}
-                                                    onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
-                                                />
-                                                {task && recognizedDrawingSolutions[task.id] && (
-                                                    <RecognizedSolutionBlock
-                                                        text={recognizedDrawingSolutions[task.id].text}
-                                                        sending={Boolean(solutionReviewSending[task.id])}
-                                                        sent={Boolean(solutionReviewSent[task.id])}
-                                                        onEdit={editRecognizedSolution}
-                                                        onDelete={deleteRecognizedSolution}
-                                                        onSendReview={sendRecognizedSolutionForReview}
-                                                    />
-                                                )}
-                                            </div>
-
-                                            {/* Answer section — bottom of task card */}
-                                            <div className="mt-7 max-w-full rounded-[18px] border border-white/10 bg-white/[0.04] p-4 md:max-w-[56%]">
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
-                                                            {task.sub_tasks && task.sub_tasks.length > 0
-                                                                ? `Ответ${task.ege_number ? ` к заданию ${task.ege_number}` : ''}`
-                                                                : 'Ваш ответ'}
-                                                        </div>
-                                                        <AnswerInput
-                                                            type={task.answer_type || 'single_number'}
-                                                            egeNumber={task.ege_number}
-                                                            isMath={currentTopic?.category === "math"}
-                                                            value={
-                                                                isVariant && viewingFinishedExam
-                                                                    ? (reviewExamAnswers[task.id] ?? 0)
-                                                                    : isVariant && examInfo?.active_attempt
-                                                                        ? (examAnswers[task.id] ?? 0)
-                                                                        : (savedAnswers[task.id] ?? 0)
-                                                            }
-                                                            onChange={(val) => {
-                                                                if (isVariant && examInfo?.active_attempt) {
-                                                                    handleExamAnswerChange(task.id, val);
-                                                                } else {
-                                                                    setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
-                                                                    setCheckResult(null);
-                                                                    setPartialCorrect(null);
-                                                                    setExpectedAnswer(null);
-                                                                }
-                                                            }}
-                                                            disabled={check.isPending || viewingFinishedExam}
-                                                            feedback={partialCorrect}
-                                                        />
-                                                        {currentTopic?.category === "math" && (task.ege_number === 14 || task.ege_number === 17) && !viewingFinishedExam && (
-                                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openProofSolutionPanel(
-                                                                        task.id,
-                                                                        isVariant && examInfo?.active_attempt
-                                                                            ? (examAnswers[task.id] ?? "")
-                                                                            : (savedAnswers[task.id] ?? ""),
-                                                                        "code",
-                                                                    )}
-                                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15"
-                                                                >
-                                                                    <Paperclip size={13} />
-                                                                    Прикрепить написанное решение
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openProofSolutionPanel(task.id, "", "image")}
-                                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300/20 bg-sky-400/10 px-3 py-2 text-xs font-black text-sky-200 transition hover:bg-sky-400/15"
-                                                                >
-                                                                    <PenLine size={13} />
-                                                                    Прикрепить фото
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                        {subResults && subResults[0] !== undefined && (
-                                                            <div className={clsx(
-                                                                "mt-1.5 text-xs font-medium",
-                                                                subResults[0] ? "text-emerald-600" : "text-red-500"
-                                                            )}>
-                                                                {subResults[0] ? "✓ Верно" : "✕ Неверно"}
-                                                            </div>
-                                                        )}
+                                            {!solutionHelpMode && attachSolutionOpen && !taskConditionVisibleInHelp && (
+                                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Условие задачи</div>
+                                                        {renderBreakdownButton()}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTaskConditionVisibleInHelp(true)}
+                                                        className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.06] px-4 text-xs font-black text-slate-200 hover:bg-white/[0.10]"
+                                                    >
+                                                        <Eye size={14} />
+                                                        Показать условие
+                                                    </button>
                                                     </div>
-                                                    {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (!task.sub_tasks || task.sub_tasks.length === 0) && (
-                                                        <button
-                                                            onClick={handleCheck}
-                                                            disabled={check.isPending}
-                                                            className="mt-5 px-5 py-2 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all shrink-0"
-                                                        >
-                                                            {check.isPending ? "..." : "Проверить"}
-                                                        </button>
-                                                    )}
+                                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                                        {renderTaskActionButtons()}
+                                                    </div>
                                                 </div>
-
-                                                {/* Sub-tasks */}
-                                                {task.sub_tasks && task.sub_tasks.length > 0 && (
-                                                    <div className="mt-6 space-y-6">
-                                                        {task.sub_tasks.map((sub, sIdx) => {
-                                                            const key = `${task.id}:${sIdx}`;
-                                                            const subOk = subResults?.[sIdx + 1];
-                                                            return (
-                                                                <div key={sIdx} className="border-t border-white/10 pt-5">
-                                                                    <div className="prose prose-invert prose-sm mb-3 max-w-none leading-relaxed text-slate-200">
-                                                                        {sub.number != null && (
-                                                                            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                                                Задание {sub.number}
-                                                                            </div>
-                                                                        )}
-                                                                        <TaskView
-                                                                            content={sub.content_html}
-                                                                            annotatable={canAnnotateTask}
-                                                                            annotationKey={`task:${task.id}:sub:${sIdx}`}
-                                                                            annotationTaskId={task.id}
-                                                                            onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
-                                                                        />
-                                                                    </div>
-                                                                    <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
-                                                                        Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
-                                                                    </div>
-                                                                    <AnswerInput
-                                                                        type={sub.answer_type || 'single_number'}
-                                                                        egeNumber={sub.number ?? undefined}
-                                                                        isMath={currentTopic?.category === "math"}
-                                                                        value={savedSubAnswers[key] ?? 0}
-                                                                        onChange={(val) => {
-                                                                            setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
-                                                                            setCheckResult(null);
-                                                                            setSubResults(null);
-                                                                        }}
-                                                                        disabled={check.isPending || viewingFinishedExam}
-                                                                    />
-                                                                    {subOk !== undefined && (
-                                                                        <div className={clsx(
-                                                                            "mt-1.5 text-xs font-medium",
-                                                                            subOk ? "text-emerald-600" : "text-red-500"
-                                                                        )}>
-                                                                            {subOk ? "✓ Верно" : "✕ Неверно"}
-                                                                        </div>
+                                            )}
+                                            {!solutionHelpMode && (!attachSolutionOpen || taskConditionVisibleInHelp) && (
+                                                <div className={clsx(
+                                                    "task-condition-card mb-6 w-full min-w-0 rounded-[18px] border border-white/10 bg-[radial-gradient(circle_at_100%_100%,rgba(16,185,129,0.10),transparent_34%),#08131D] p-5",
+                                                    drawingPanelOpen && "draft-open"
+                                                )}>
+                                                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <div className="task-condition-heading text-xs font-black uppercase tracking-[0.12em] text-slate-400">Условие задачи</div>
+                                                            {renderBreakdownButton()}
+                                                            {attachSolutionOpen && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setTaskConditionVisibleInHelp(false)}
+                                                                    className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 text-xs font-black text-slate-300 hover:bg-white/[0.08]"
+                                                                >
+                                                                    <Eye size={14} />
+                                                                    Скрыть условие
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center justify-end gap-2">
+                                                            {renderTaskActionButtons()}
+                                                        </div>
+                                                    </div>
+                                                    <div className="prose prose-invert max-w-none leading-relaxed text-slate-200">
+                                                        <TaskView
+                                                            content={task.content_html}
+                                                            files={task.media_resources?.files}
+                                                            annotatable={canAnnotateTask}
+                                                            annotationKey={`task:${task.id}`}
+                                                            annotationTaskId={task.id}
+                                                            annotationRefreshKey={annotationRefreshKey}
+                                                            annotationPanelOpen={drawingPanelOpen}
+                                                            onAnnotationPanelOpenChange={setDrawingPanelOpen}
+                                                            showAnnotationToggle={false}
+                                                            annotationToolbarHostId={`task-drawing-toolbar-${task.id}`}
+                                                            onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
+                                                        >
+                                                            <div className="task-answer-inline-panel w-full max-w-[544px]">
+                                                                <div className="flex flex-wrap items-end gap-3">
+                                                                    <label className="answer-inline-row flex min-w-0 flex-1 items-end gap-2">
+                                                                        <span className="shrink-0 text-base font-normal text-slate-700">
+                                                                            {task.sub_tasks && task.sub_tasks.length > 0
+                                                                                ? `Ответ${task.ege_number ? ` к заданию ${task.ege_number}` : ''}:`
+                                                                                : 'Ответ:'}
+                                                                        </span>
+                                                                        <span className="min-w-[180px] flex-1">
+                                                                            <AnswerInput
+                                                                                type={task.answer_type || 'single_number'}
+                                                                                egeNumber={task.ege_number}
+                                                                                isMath={currentTopic?.category === "math"}
+                                                                                value={
+                                                                                    isVariant && viewingFinishedExam
+                                                                                        ? (reviewExamAnswers[task.id] ?? 0)
+                                                                                        : isVariant && examInfo?.active_attempt
+                                                                                            ? (examAnswers[task.id] ?? 0)
+                                                                                            : (savedAnswers[task.id] ?? 0)
+                                                                                }
+                                                                                onChange={(val) => {
+                                                                                    if (isVariant && examInfo?.active_attempt) {
+                                                                                        handleExamAnswerChange(task.id, val);
+                                                                                    } else {
+                                                                                        setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
+                                                                                        setCheckResult(null);
+                                                                                        setPartialCorrect(null);
+                                                                                        setExpectedAnswer(null);
+                                                                                    }
+                                                                                }}
+                                                                                disabled={check.isPending || viewingFinishedExam}
+                                                                                feedback={partialCorrect}
+                                                                            />
+                                                                        </span>
+                                                                    </label>
+                                                                    {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (!task.sub_tasks || task.sub_tasks.length === 0) && (
+                                                                        <button
+                                                                            onClick={handleCheck}
+                                                                            disabled={check.isPending}
+                                                                            className="h-10 px-5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all shrink-0"
+                                                                        >
+                                                                            {check.isPending ? "..." : "Проверить"}
+                                                                        </button>
                                                                     )}
                                                                 </div>
-                                                            );
-                                                        })}
-                                                        {!viewingFinishedExam && (
-                                                            <button
-                                                                onClick={handleCheck}
-                                                                disabled={check.isPending}
-                                                                className="px-5 py-2.5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all"
-                                                            >
-                                                                {check.isPending ? "Проверяю..." : "Проверить все ответы"}
-                                                            </button>
+                                                                {checkResult === 'correct' && (
+                                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
+                                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>
+                                                                        Правильный ответ!
+                                                                    </div>
+                                                                )}
+                                                                {checkResult === 'wrong' && (
+                                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-300/20 bg-red-400/10 p-2.5 text-sm font-medium text-red-200">
+                                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-xs">×</div>
+                                                                        Неверно. Попробуйте ещё раз.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </TaskView>
+                                                        {task && recognizedDrawingSolutions[task.id] && (
+                                                            <RecognizedSolutionBlock
+                                                                text={recognizedDrawingSolutions[task.id].text}
+                                                                sending={Boolean(solutionReviewSending[task.id])}
+                                                                sent={Boolean(solutionReviewSent[task.id])}
+                                                                onEdit={editRecognizedSolution}
+                                                                onDelete={deleteRecognizedSolution}
+                                                                onSendReview={sendRecognizedSolutionForReview}
+                                                            />
                                                         )}
                                                     </div>
-                                                )}
+                                                    {false && (
+                                                    <div className="mt-5 w-full max-w-[620px]">
+                                                        <div className="flex flex-wrap items-end gap-3">
+                                                            <label className="answer-inline-row flex min-w-0 flex-1 items-end gap-2">
+                                                                <span className="shrink-0 text-sm font-bold text-slate-700">
+                                                                    {task.sub_tasks && task.sub_tasks.length > 0
+                                                                        ? `Ответ${task.ege_number ? ` к заданию ${task.ege_number}` : ''}:`
+                                                                        : 'Ответ:'}
+                                                                </span>
+                                                                <span className="min-w-[180px] flex-1">
+                                                                    <AnswerInput
+                                                                        type={task.answer_type || 'single_number'}
+                                                                        egeNumber={task.ege_number}
+                                                                        isMath={currentTopic?.category === "math"}
+                                                                        value={
+                                                                            isVariant && viewingFinishedExam
+                                                                                ? (reviewExamAnswers[task.id] ?? 0)
+                                                                                : isVariant && examInfo?.active_attempt
+                                                                                    ? (examAnswers[task.id] ?? 0)
+                                                                                    : (savedAnswers[task.id] ?? 0)
+                                                                        }
+                                                                        onChange={(val) => {
+                                                                            if (isVariant && examInfo?.active_attempt) {
+                                                                                handleExamAnswerChange(task.id, val);
+                                                                            } else {
+                                                                                setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
+                                                                                setCheckResult(null);
+                                                                                setPartialCorrect(null);
+                                                                                setExpectedAnswer(null);
+                                                                            }
+                                                                        }}
+                                                                        disabled={check.isPending || viewingFinishedExam}
+                                                                        feedback={partialCorrect}
+                                                                    />
+                                                                </span>
+                                                            </label>
+                                                                {currentTopic?.category === "math" && (task.ege_number === 14 || task.ege_number === 17) && !viewingFinishedExam && (
+                                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => openProofSolutionPanel(
+                                                                                task.id,
+                                                                                isVariant && examInfo?.active_attempt
+                                                                                    ? (examAnswers[task.id] ?? "")
+                                                                                    : (savedAnswers[task.id] ?? ""),
+                                                                                "code",
+                                                                            )}
+                                                                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-200 transition hover:bg-emerald-400/15"
+                                                                        >
+                                                                            <Paperclip size={13} />
+                                                                            Прикрепить написанное решение
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => openProofSolutionPanel(task.id, "", "image")}
+                                                                            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300/20 bg-sky-400/10 px-3 py-2 text-xs font-black text-sky-200 transition hover:bg-sky-400/15"
+                                                                        >
+                                                                            <PenLine size={13} />
+                                                                            Прикрепить фото
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                                {subResults && subResults[0] !== undefined && (
+                                                                    <div className={clsx(
+                                                                        "mt-1.5 text-xs font-medium",
+                                                                        subResults[0] ? "text-emerald-600" : "text-red-500"
+                                                                    )}>
+                                                                        {subResults[0] ? "✓ Верно" : "✕ Неверно"}
+                                                                    </div>
+                                                                )}
+                                                            {!viewingFinishedExam && (!isVariant || !examInfo?.active_attempt) && (!task.sub_tasks || task.sub_tasks.length === 0) && (
+                                                                <button
+                                                                    onClick={handleCheck}
+                                                                    disabled={check.isPending}
+                                                                    className="h-10 px-5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all shrink-0"
+                                                                >
+                                                                    {check.isPending ? "..." : "Проверить"}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        {task.sub_tasks && task.sub_tasks.length > 0 && (
+                                                            <div className="mt-6 space-y-6">
+                                                                {task.sub_tasks.map((sub, sIdx) => {
+                                                                    const key = `${task.id}:${sIdx}`;
+                                                                    const subOk = subResults?.[sIdx + 1];
+                                                                    return (
+                                                                        <div key={sIdx} className="border-t border-white/10 pt-5">
+                                                                            <div className="prose prose-invert prose-sm mb-3 max-w-none leading-relaxed text-slate-200">
+                                                                                {sub.number != null && (
+                                                                                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                                                        Задание {sub.number}
+                                                                                    </div>
+                                                                                )}
+                                                                                <TaskView
+                                                                                    content={sub.content_html}
+                                                                                    annotatable={canAnnotateTask}
+                                                                                    annotationKey={`task:${task.id}:sub:${sIdx}`}
+                                                                                    annotationTaskId={task.id}
+                                                                                    annotationRefreshKey={annotationRefreshKey}
+                                                                                    onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                                                                                Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
+                                                                            </div>
+                                                                            <AnswerInput
+                                                                                type={sub.answer_type || 'single_number'}
+                                                                                egeNumber={sub.number ?? undefined}
+                                                                                isMath={currentTopic?.category === "math"}
+                                                                                value={savedSubAnswers[key] ?? 0}
+                                                                                onChange={(val) => {
+                                                                                    setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
+                                                                                    setCheckResult(null);
+                                                                                    setSubResults(null);
+                                                                                }}
+                                                                                disabled={check.isPending || viewingFinishedExam}
+                                                                            />
+                                                                            {subOk !== undefined && (
+                                                                                <div className={clsx(
+                                                                                    "mt-1.5 text-xs font-medium",
+                                                                                    subOk ? "text-emerald-600" : "text-red-500"
+                                                                                )}>
+                                                                                    {subOk ? "✓ Верно" : "✕ Неверно"}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                                {!viewingFinishedExam && (
+                                                                    <button
+                                                                        onClick={handleCheck}
+                                                                        disabled={check.isPending}
+                                                                        className="px-5 py-2.5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all"
+                                                                    >
+                                                                        {check.isPending ? "Проверяю..." : "Проверить все ответы"}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {checkResult === 'correct' && (
+                                                            <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
+                                                                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>
+                                                                Правильный ответ!
+                                                            </div>
+                                                        )}
+                                                        {checkResult === 'wrong' && (
+                                                            <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-300/20 bg-red-400/10 p-2.5 text-sm font-medium text-red-200">
+                                                                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-xs">×</div>
+                                                                Неверно. Попробуйте ещё раз.
+                                                            </div>
+                                                        )}
+                                                        {task.status === 'solved' && checkResult !== 'correct' && (
+                                                            <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-emerald-200">
+                                                                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-[10px]">✓</div>
+                                                                Вы уже решили эту задачу
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    )}
+                                                </div>
+                                            )}
 
-                                                {checkResult === 'correct' && (
-                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
-                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>
-                                                        Правильный ответ!
-                                                    </div>
-                                                )}
-                                                {checkResult === 'wrong' && (
-                                                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-300/20 bg-red-400/10 p-2.5 text-sm font-medium text-red-200">
-                                                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-xs">✕</div>
-                                                        Неверно. Попробуйте ещё раз.
-                                                    </div>
-                                                )}
-                                                {task.status === 'solved' && checkResult !== 'correct' && (
-                                                    <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-emerald-200">
-                                                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/20 text-[10px]">✓</div>
-                                                        Вы уже решили эту задачу
-                                                    </div>
-                                                )}
-                                            </div>
+                                            {/* Answer section — bottom of task card */}
+                                            {attachSolutionOpen && task && (
+                                                <div className="task-solution-shell-card mt-6 w-full min-w-0 overflow-hidden rounded-[22px] border border-white/10 bg-[#07111D] shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+                                                    <TaskSolutionPanel
+                                                        key={`${task.id}:${attachSolutionInitialTab}:${attachSolutionPrefillCode}`}
+                                                        taskId={task.id}
+                                                        initialTab={attachSolutionInitialTab}
+                                                        prefillCode={attachSolutionPrefillCode}
+                                                        textSolutionMode={attachSolutionTextMode}
+                                                        onChanged={refreshCurrentTaskAndSolution}
+                                                        onClose={closeAttachSolutionNow}
+                                                        helpMode={solutionHelpMode}
+                                                        conditionHidden={solutionHelpMode && !taskConditionVisibleInHelp}
+                                                        onShowCondition={() => setTaskConditionVisibleInHelp(true)}
+                                                        onHelpClose={() => {
+                                                            setSolutionHelpMode(false);
+                                                            setTaskConditionVisibleInHelp(false);
+                                                            if (!solutionWasOpenBeforeHelpRef.current) {
+                                                                setAttachSolutionOpen(false);
+                                                            }
+                                                            solutionWasOpenBeforeHelpRef.current = false;
+                                                        }}
+                                                        topContent={solutionHelpMode && taskConditionVisibleInHelp ? (
+                                                            <div className="w-full min-w-0 rounded-[14px] border border-white/10 bg-[radial-gradient(circle_at_100%_100%,rgba(16,185,129,0.10),transparent_34%),#08131D] p-5">
+                                                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Условие задачи</div>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setTaskConditionVisibleInHelp(false)}
+                                                                            className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 text-xs font-black text-slate-300 hover:bg-white/[0.08]"
+                                                                        >
+                                                                            <Eye size={14} />
+                                                                            Скрыть условие
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                                                                        {renderTaskActionButtons()}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="prose prose-invert max-w-none leading-relaxed text-slate-200">
+                                                                    <TaskView
+                                                                        content={task.content_html}
+                                                                        files={task.media_resources?.files}
+                                                                        annotatable={canAnnotateTask}
+                                                                        annotationKey={`task:${task.id}:help`}
+                                                                        annotationTaskId={task.id}
+                                                                        annotationRefreshKey={annotationRefreshKey}
+                                                                        annotationPanelOpen={drawingPanelOpen}
+                                                                        onAnnotationPanelOpenChange={setDrawingPanelOpen}
+                                                                        showAnnotationToggle={false}
+                                                                        annotationToolbarHostId={`task-drawing-toolbar-${task.id}`}
+                                                                        onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ) : undefined}
+                                                        registerBeforeClose={(handler) => {
+                                                            attachSolutionBeforeCloseRef.current = handler;
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+
                                         </>
                                     ) : (
                                         <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
@@ -1132,8 +1475,8 @@ export default function TasksPage() {
                         />
                     </div>
                 )}
-                {attachSolutionOpen && task && (
-                    <div className="flex h-full w-full shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#07111D] p-3 sm:p-4 md:w-[580px] md:max-w-[58vw]">
+                {false && attachSolutionOpen && task && (
+                    <div className="flex h-full w-full shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[#07111D] p-3 sm:p-4 md:w-[min(1180px,calc(100vw-64px))] md:max-w-[78vw]">
                         <div className="mb-3 flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-black text-white">Прикрепить решение</div>
@@ -1175,3 +1518,5 @@ export default function TasksPage() {
         </div>
     );
 }
+
+

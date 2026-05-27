@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Crosshair, BookOpen, Bot, Zap,
-  Route, Sparkles, BookMarked, MessageCircle, TrendingUp, GraduationCap,
+  Bot, Sparkles,
   User, CheckCircle2, ShieldCheck,
+  CalendarCheck, ClipboardCheck, BrainCircuit,
+  Pencil, MousePointer2, Square, Type, Undo2, ThumbsUp, Users,
 } from 'lucide-react';
 import { LoginModal } from '../components/LoginModal';
 import './LandingPage.css';
 
-const IC = { size: 26, color: 'rgba(255,255,255,0.85)', strokeWidth: 1.8 } as const;
-const IC_SM = { size: 22, color: '#62aa78', strokeWidth: 1.8 } as const;
 const SELF_EMPLOYED_NAME = import.meta.env.VITE_SELF_EMPLOYED_NAME?.trim();
 const SELF_EMPLOYED_INN = import.meta.env.VITE_SELF_EMPLOYED_INN?.trim();
 
@@ -33,7 +32,7 @@ export default function LandingPage() {
   const [leadStatus, setLeadStatus] = useState('');
   const [leadError, setLeadError] = useState('');
   const [leadLoading, setLeadLoading] = useState(false);
-  const [summerBannerOpen, setSummerBannerOpen] = useState(true);
+  const [summerBannerOpen, setSummerBannerOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heroContentRef = useRef<HTMLDivElement>(null);
 
@@ -159,41 +158,107 @@ export default function LandingPage() {
           Информатика ЕГЭ
         </div>
         <div className="lp-nav-links">
-          <a href="#how"      onClick={e => { e.preventDefault(); scrollTo('how'); }}>Как работает</a>
-          <a href="#features" onClick={e => { e.preventDefault(); scrollTo('features'); }}>Возможности</a>
+          <a href="#platform" onClick={e => { e.preventDefault(); scrollTo('platform'); }}>Возможности</a>
           <a href="#ai"       onClick={e => { e.preventDefault(); scrollTo('ai'); }}>ИИ-ассистент</a>
           <a href="#subscription" onClick={e => { e.preventDefault(); scrollTo('subscription'); }}>Подписка</a>
         </div>
-        <button className="lp-nav-cta" onClick={() => openAuth('login')}>Войти</button>
+        <div className="lp-nav-actions">
+          <button className="lp-nav-login" onClick={() => openAuth('login')}>Войти</button>
+          <button className="lp-nav-cta" onClick={() => setSummerBannerOpen(true)}>Летний курс</button>
+        </div>
       </nav>
 
       {/* HERO */}
       <section className="lp-hero">
         <canvas ref={canvasRef} className="lp-canvas" />
         <div className="lp-hero-glow" />
-        <div className="lp-hero-content" ref={heroContentRef}>
-          <div className="lp-tag"><span className="lp-tag-dot" />Подготовка к ЕГЭ 2026-2027</div>
-          <h1 className="lp-h1">
-            Сдай ЕГЭ по <em>информатике и математике</em>
-            <span className="lp-h1-line2">на 90+ баллов</span>
-          </h1>
-          <p className="lp-hero-sub">
-            Персональный план обучения, ИИ-ассистент который разберёт каждую ошибку, и опытный преподаватель — всё в одном месте.
-          </p>
-          <div className="lp-hero-btns">
-            <button className="lp-btn-primary" onClick={() => openAuth('login')}>Войти в платформу →</button>
-            <button className="lp-btn-secondary" onClick={() => scrollTo('how')}>Как это работает</button>
+        <div className="lp-planet lp-planet-earth" aria-hidden="true" />
+        <div className="lp-planet lp-planet-galaxy" aria-hidden="true" />
+        <div className="lp-hero-shell" ref={heroContentRef}>
+          <div className="lp-hero-content">
+            <div className="lp-tag"><span className="lp-tag-dot" />Подготовка к ЕГЭ 2026-2027</div>
+            <h1 className="lp-h1">
+              Актуальные задания
+              <em>по информатике и математике</em>
+              <span className="lp-h1-line2">в одной платформе</span>
+            </h1>
+            <p className="lp-hero-sub">
+              Только актуальные задания ЕГЭ, ИИ-разбор ошибок и персональный план подготовки
+            </p>
+            <div className="lp-hero-benefits" aria-label="Преимущества платформы">
+              <div className="lp-hero-benefit">
+                <span><CalendarCheck size={20} /></span>
+                <p>Только актуальные задания ЕГЭ</p>
+              </div>
+              <div className="lp-hero-benefit">
+                <span><ClipboardCheck size={20} /></span>
+                <p>ИИ-разбор ошибок и подсказки</p>
+              </div>
+              <div className="lp-hero-benefit">
+                <span><BrainCircuit size={20} /></span>
+                <p>Персональный план под твой уровень</p>
+              </div>
+            </div>
+            <div className="lp-hero-btns">
+              <button className="lp-btn-primary" onClick={() => openAuth('register')}>Начать подготовку →</button>
+              <button className="lp-btn-secondary" onClick={() => scrollTo('platform')}>Посмотреть возможности</button>
+            </div>
           </div>
-        </div>
 
-        <div className="lp-stats">
-          <div className="lp-stat"><div className="lp-stat-num" data-count="2400">0</div><div className="lp-stat-lbl">учеников</div></div>
-          <div className="lp-stat-div" />
-          <div className="lp-stat"><div className="lp-stat-num" data-count="87">0</div><div className="lp-stat-lbl">средний балл</div></div>
-          <div className="lp-stat-div" />
-          <div className="lp-stat"><div className="lp-stat-num" data-count="27">0</div><div className="lp-stat-lbl">тем и заданий</div></div>
-          <div className="lp-stat-div" />
-          <div className="lp-stat"><div className="lp-stat-num" data-count="98">0</div><div className="lp-stat-lbl">% довольных</div></div>
+          <div className="lp-hero-visual" aria-hidden="true">
+            <div className="lp-visual-aura" />
+            <div className="lp-orbit-line" />
+            <div className="lp-depth-card" />
+            <div className="lp-task-window">
+              <div className="lp-window-dots"><span /><span /><span /></div>
+              <div className="lp-task-kicker">ЕГЭ информатика</div>
+              <h2>Задание 12</h2>
+              <div className="lp-task-lines">
+                <i className="is-wide" />
+                <i />
+                <i className="is-short" />
+                <i className="is-medium" />
+              </div>
+              <div className="lp-task-progress">
+                <span />
+              </div>
+              <div className="lp-solution-chip">
+                <Sparkles size={16} />
+                <div>
+                  <strong>Решение</strong>
+                  <span>+1 балл</span>
+                </div>
+              </div>
+            </div>
+            <div className="lp-ai-window">
+              <div className="lp-ai-window-title">
+                <Bot size={19} />
+                <strong>ИИ-ассистент</strong>
+                <span><Sparkles size={17} /></span>
+              </div>
+              <p>Объяснение:</p>
+              <div className="lp-ai-lines">
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+              <div className="lp-ai-footer">
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+
+          <div className="lp-stats">
+            <div className="lp-stat"><div className="lp-stat-num" data-count="2400">0</div><div className="lp-stat-lbl">учеников</div></div>
+            <div className="lp-stat-div" />
+            <div className="lp-stat"><div className="lp-stat-num" data-count="87">0</div><div className="lp-stat-lbl">средний балл</div></div>
+            <div className="lp-stat-div" />
+            <div className="lp-stat"><div className="lp-stat-num" data-count="27">0</div><div className="lp-stat-lbl">тем и разделов</div></div>
+            <div className="lp-stat-div" />
+            <div className="lp-stat"><div className="lp-stat-num" data-count="98">0</div><div className="lp-stat-lbl">довольных учеников</div></div>
+          </div>
         </div>
 
         <div className="lp-scroll-hint">
@@ -264,66 +329,93 @@ export default function LandingPage() {
             {leadError && <div className="lp-summer-status is-error">{leadError}</div>}
           </div>
         </aside>
-      ) : (
-        <button
-          type="button"
-          className="lp-summer-reopen"
-          onClick={() => setSummerBannerOpen(true)}
-        >
-          Летний курс
-        </button>
-      )}
+      ) : null}
 
-      {/* HOW IT WORKS */}
-      <section id="how" className="lp-section lp-how">
+      {/* PLATFORM DEMO */}
+      <section id="platform" className="lp-section lp-platform-demo">
         <div className="lp-inner">
-          <div className="lp-how-header lp-reveal">
-            <div className="lp-section-tag">Как это работает</div>
-            <h2 className="lp-section-h2">От нуля до результата<br/>за 4 простых шага</h2>
-            <p className="lp-section-sub">Никакой воды — только чёткий путь к высокому баллу</p>
+          <div className="lp-product-header lp-reveal">
+            <div className="lp-product-kicker">Как выглядит обучение</div>
+            <h2 className="lp-product-title">
+              Сомневаешься, <span>начать сейчас?</span>
+            </h2>
+            <p className="lp-product-sub">
+              Рассказываю про уникальные возможности платформы и покажу,<br />
+              как они помогут тебе достичь результатов быстрее.
+            </p>
           </div>
-          <div className="lp-steps">
-            {[
-              { icon: <Crosshair {...IC} />, title: 'Диагностика',               text: 'Проходишь входной тест, ИИ определяет слабые места и составляет персональный план',          delay: '0s' },
-              { icon: <BookOpen   {...IC} />, title: 'Разбор с преподавателем',   text: 'Видеоразборы сложных задач от опытного педагога с объяснением каждого шага',                   delay: '0.12s' },
-              { icon: <Bot        {...IC} />, title: 'Практика с ИИ',             text: 'Решаешь задачи, ИИ мгновенно находит ошибку и объясняет как её исправить',                      delay: '0.24s' },
-              { icon: <Zap        {...IC} />, title: 'Результат',                  text: 'Отслеживаешь прогресс, получаешь мотивацию и сдаёшь ЕГЭ уверенно',                             delay: '0.36s' },
-            ].map((s, i) => (
-              <div key={i} className="lp-step" style={{ transitionDelay: s.delay }}>
-                <div className="lp-step-circle">
-                  {s.icon}
-                  <div className="lp-step-num">{i + 1}</div>
+
+          <div className="lp-product-demo lp-reveal">
+            <div className="lp-board-panel">
+              <div className="lp-task-strip">
+                <div>
+                  <div className="lp-task-strip-top">
+                    <span>Задание 13</span>
+                    <b>Черновик</b>
+                  </div>
+                  <p>IP-адрес узла 192.168.10.5, маска 255.255.255.0. Найдите адрес сети.</p>
                 </div>
-                <div className="lp-step-title">{s.title}</div>
-                <div className="lp-step-text">{s.text}</div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* FEATURES */}
-      <section id="features" className="lp-section lp-features">
-        <div className="lp-inner">
-          <div className="lp-features-header lp-reveal">
-            <div className="lp-section-tag">Возможности платформы</div>
-            <h2 className="lp-section-h2">Всё что нужно<br/>для высокого балла</h2>
-          </div>
-          <div className="lp-grid">
-            {[
-              { icon: <Route          {...IC_SM} />, title: 'Персональный план обучения', text: 'ИИ анализирует твои ответы и строит маршрут: сначала слабые темы, потом сложные. Никакого лишнего материала.', delay: '0s' },
-              { icon: <Sparkles      {...IC_SM} />, title: 'ИИ-ассистент 24/7',         text: 'Задай любой вопрос в любое время. ИИ разберёт ошибку, объяснит тему и покажет правильный путь решения.',    delay: '0.08s' },
-              { icon: <BookMarked    {...IC_SM} />, title: 'Разборы преподавателя',      text: 'Видео и текстовые разборы каждой задачи от опытного педагога. Понимаешь не только ответ, но и логику.',       delay: '0.16s' },
-              { icon: <MessageCircle {...IC_SM} />, title: 'Чат без ограничений',        text: 'Общайся с другими учениками и преподавателями. Нет глупых вопросов — есть только путь к знаниям.',           delay: '0.24s' },
-              { icon: <TrendingUp    {...IC_SM} />, title: 'Статистика и мотивация',     text: 'Видишь прогресс по каждой теме. Стрики, достижения и напоминания помогают не бросить на полпути.',            delay: '0.32s' },
-              { icon: <GraduationCap {...IC_SM} />, title: '27 тем — все задания ЕГЭ',  text: 'От IP-адресов до логических уравнений. Карточки с разборами и самостоятельными заданиями по каждой теме.',    delay: '0.40s' },
-            ].map((f, i) => (
-              <div key={i} className="lp-card" style={{ transitionDelay: f.delay }}>
-                <div className="lp-card-icon">{f.icon}</div>
-                <div className="lp-card-title">{f.title}</div>
-                <div className="lp-card-text">{f.text}</div>
+              <div className="lp-whiteboard">
+                <div className="lp-board-toolbar" aria-hidden="true">
+                  <button className="is-active"><Pencil size={18} /></button>
+                  <button><MousePointer2 size={17} /></button>
+                  <button><Square size={16} /></button>
+                  <button><Type size={17} /></button>
+                  <button><Undo2 size={17} /></button>
+                </div>
+
+                <div className="lp-hand-notes" aria-hidden="true">
+                  <div className="lp-note-ip">192.168.10.5</div>
+                  <div className="lp-note-and">AND 255.255.255.0</div>
+                  <div className="lp-note-arrow is-a">↓</div>
+                  <div className="lp-note-arrow is-b">↓</div>
+                  <div className="lp-note-arrow is-c">↓</div>
+                  <div className="lp-note-binary is-one">11000000.10101000.00001010.00000101</div>
+                  <div className="lp-note-binary is-two">11111111.11111111.11111111.<span>00000000</span></div>
+                  <div className="lp-note-binary is-three">11000000.10101000.00001010.00000000</div>
+                  <div className="lp-note-answer">192.168.10.0</div>
+                  <div className="lp-board-glow-dot" />
+                </div>
               </div>
-            ))}
+            </div>
+
+            <aside className="lp-assistant-card">
+              <div className="lp-assistant-head">
+                <div className="lp-assistant-icon"><Bot size={18} /></div>
+                <h3>ИИ-ассистент</h3>
+                <span><Sparkles size={18} /></span>
+              </div>
+              <div className="lp-assistant-body">
+                <p className="lp-assistant-label">Объяснение:</p>
+                <p>Маска 255.255.255.0 означает, что первые 24 бита — это сеть, а последние 8 бит — часть узла.</p>
+                <p>При побитовом И (AND) оставляем биты сети, а биты узла обнуляем.</p>
+                <div className="lp-answer-block">Ответ: <strong>192.168.10.0</strong></div>
+                <div className="lp-feedback"><ThumbsUp size={15} />Это объяснение помогло?</div>
+              </div>
+            </aside>
+          </div>
+
+          <div className="lp-feature-row lp-reveal">
+            <article className="lp-feature-card">
+              <div className="lp-feature-index">01</div>
+              <div className="lp-feature-icon"><Pencil size={34} /></div>
+              <h3>Пиши решение</h3>
+              <p>Задача и доска для хода решения, формул и цветных пометок.</p>
+            </article>
+            <article className="lp-feature-card">
+              <div className="lp-feature-index">02</div>
+              <div className="lp-feature-icon"><Bot size={34} /></div>
+              <h3>Спроси ИИ</h3>
+              <p>Ассистент видит контекст и объясняет следующий шаг.</p>
+            </article>
+            <article className="lp-feature-card">
+              <div className="lp-feature-index">03</div>
+              <div className="lp-feature-icon"><Users size={34} /></div>
+              <h3>Подключи преподавателя</h3>
+              <p>Учитель отвечает в чате и делает пометки на доске.</p>
+            </article>
           </div>
         </div>
       </section>

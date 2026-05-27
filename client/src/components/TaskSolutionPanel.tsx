@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClipboardEvent as ReactClipboardEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ClipboardEvent as ReactClipboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
-import { githubDark } from "@uiw/codemirror-theme-github";
-import { AlertCircle, Code2, ExternalLink, Eye, FileUp, HelpCircle, History, ImageUp, Loader2, Maximize2, MessageSquare, Save, X } from "lucide-react";
+import { githubLight } from "@uiw/codemirror-theme-github";
+import { AlertCircle, Bot, CheckCircle2, Code2, ExternalLink, Eye, FileUp, HelpCircle, History, ImageUp, Loader2, Maximize2, MessageSquare, Save, Send, UserRound, X } from "lucide-react";
 import { api, authFetch } from "../api/client";
+import { AIMode, type TaskSolutionHelpThread } from "../api/types";
 import { createCodeCommentExtensions } from "./codeCommentExtensions";
-import { useRequestTeacherHelp } from "../hooks/useApi";
+import { useAIAssist, useRequestTeacherHelp, useResolveTaskSolutionHelpThread, useSendTaskSolutionHelpMessage, useTaskSolutionHelpThread } from "../hooks/useApi";
 
 type SolutionComment = {
   id: number;
@@ -66,6 +68,11 @@ export function TaskSolutionPanel({
   onChanged,
   onClose,
   registerBeforeClose,
+  helpMode = false,
+  conditionHidden = false,
+  onShowCondition,
+  onHelpClose,
+  topContent,
 }: {
   taskId: number;
   disabled?: boolean;
@@ -75,6 +82,11 @@ export function TaskSolutionPanel({
   onChanged?: () => void;
   onClose?: () => void;
   registerBeforeClose?: (handler: (() => boolean) | null) => void;
+  helpMode?: boolean;
+  conditionHidden?: boolean;
+  onShowCondition?: () => void;
+  onHelpClose?: () => void;
+  topContent?: ReactNode;
 }) {
   const [solution, setSolution] = useState<TaskSolution | null>(null);
   const [code, setCode] = useState("");
@@ -84,6 +96,17 @@ export function TaskSolutionPanel({
   const [recognizing, setRecognizing] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [helpRequested, setHelpRequested] = useState(false);
+  const [helpChatOpen, setHelpChatOpen] = useState(false);
+  const [helpPanelOpen, setHelpPanelOpen] = useState(helpMode);
+  const [helpTab, setHelpTab] = useState<"ai" | "teacher">("ai");
+  const [aiMessages, setAiMessages] = useState<Array<{ role: "ai" | "user"; text: string; code?: string }>>([
+    {
+      role: "ai",
+      text: "Привет! Я помогу разобраться в задаче. Отправь решение или вопрос, а я проверю ход мысли и подскажу, что улучшить.",
+    },
+  ]);
+  const [aiMessage, setAiMessage] = useState("");
+  const [helpMessage, setHelpMessage] = useState("");
   const [showComments, setShowComments] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
@@ -93,7 +116,12 @@ export function TaskSolutionPanel({
   const [imageDragActive, setImageDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const queryClient = useQueryClient();
   const helpRequest = useRequestTeacherHelp(taskId);
+  const helpThreadQuery = useTaskSolutionHelpThread(taskId, !loading);
+  const sendHelpMessage = useSendTaskSolutionHelpMessage(taskId);
+  const resolveHelpThread = useResolveTaskSolutionHelpThread(taskId);
+  const aiAssist = useAIAssist(taskId);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +130,17 @@ export function TaskSolutionPanel({
     setCode("");
     setSaved(false);
     setHelpRequested(false);
+    setHelpChatOpen(false);
+    setHelpPanelOpen(helpMode);
+    setHelpTab("ai");
+    setAiMessage("");
+    setAiMessages([
+      {
+        role: "ai",
+        text: "Привет! Я помогу разобраться в задаче. Отправь решение или вопрос, а я проверю ход мысли и подскажу, что улучшить.",
+      },
+    ]);
+    setHelpMessage("");
     api<TaskSolution>(`/tasks/${taskId}/solution`)
       .then((data) => {
         if (cancelled) return;
@@ -115,6 +154,11 @@ export function TaskSolutionPanel({
       cancelled = true;
     };
   }, [taskId, textSolutionMode]);
+
+  useEffect(() => {
+    setHelpPanelOpen(helpMode);
+    if (helpMode) setHelpTab("ai");
+  }, [helpMode]);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -139,7 +183,15 @@ export function TaskSolutionPanel({
         const payload = JSON.parse(event.data) as
           | { type: "comment_created"; comment: SolutionComment }
           | { type: "comment_updated"; comment: SolutionComment }
-          | { type: "comment_deleted"; comment_id: number };
+          | { type: "comment_deleted"; comment_id: number }
+          | { type: "help_thread_updated"; thread: TaskSolutionHelpThread };
+
+        if (payload.type === "help_thread_updated") {
+          queryClient.setQueryData(["task-solution-help-thread", taskId], payload.thread);
+          queryClient.invalidateQueries({ queryKey: ["admin-help-notifications"] });
+          onChanged?.();
+          return;
+        }
 
         setSolution((prev) => {
           const current = prev ?? { task_id: taskId, code: null, recognized_text: null, file_url: null, image_url: null, updated_at: null, comments: [], versions: [] };
@@ -167,7 +219,7 @@ export function TaskSolutionPanel({
     };
 
     return () => ws.close();
-  }, [taskId]);
+  }, [onChanged, queryClient, taskId]);
 
   async function saveCode() {
     setSaving(true);
@@ -276,6 +328,51 @@ export function TaskSolutionPanel({
       message: "Ученик попросил помощь у преподавателя по этому решению",
     });
     setHelpRequested(true);
+    setHelpPanelOpen(true);
+    setHelpTab("teacher");
+    helpThreadQuery.refetch();
+  }
+
+  async function sendForTeacherReview() {
+    await helpRequest.mutateAsync({
+      message: "Ученик отправил своё решение на проверку",
+    });
+    setHelpRequested(true);
+    setHelpPanelOpen(true);
+    setHelpTab("teacher");
+    helpThreadQuery.refetch();
+  }
+
+  async function sendAiMessage() {
+    const text = aiMessage.trim();
+    const attachedCode = code.trim();
+    if ((!text && !attachedCode) || aiAssist.isPending) return;
+
+    setAiMessage("");
+    setAiMessages((current) => [...current, { role: "user", text: text || "Проверь моё решение.", code: attachedCode || undefined }]);
+    try {
+      const response = await aiAssist.mutateAsync({
+        user_query: text || "Проверь моё решение и дай подсказки без полного решения.",
+        mode: AIMode.tutorial,
+        user_code: attachedCode || undefined,
+      });
+      setAiMessages((current) => [...current, { role: "ai", text: response.hint }]);
+    } catch {
+      setAiMessages((current) => [...current, { role: "ai", text: "Не удалось получить ответ. Попробуй ещё раз." }]);
+    }
+  }
+
+  async function sendHelpThreadMessage() {
+    const text = helpMessage.trim();
+    if (!text) return;
+    await sendHelpMessage.mutateAsync({ text });
+    setHelpMessage("");
+    helpThreadQuery.refetch();
+  }
+
+  async function markHelpThreadResolved() {
+    await resolveHelpThread.mutateAsync({ reason: "student_solved" });
+    helpThreadQuery.refetch();
   }
 
   const fileHref = solution?.file_url ? `/api${solution.file_url}` : null;
@@ -283,6 +380,9 @@ export function TaskSolutionPanel({
   const comments = solution?.comments ?? [];
   const imageComments = comments.filter((comment) => comment.target_type === "image" && comment.image_x != null && comment.image_y != null);
   const versions = solution?.versions ?? [];
+  const helpThread = helpThreadQuery.data ?? null;
+  const helpThreadOpen = Boolean(helpThread && !helpThread.is_resolved);
+  const showHelpColumn = helpPanelOpen;
   const savedText = textSolutionMode ? (solution?.recognized_text ?? "") : (solution?.code ?? "");
   const isCodeDirty = code !== savedText;
   const shouldWarnBeforeClose = isCodeDirty && code.trim().length > 0;
@@ -346,59 +446,213 @@ export function TaskSolutionPanel({
     return () => document.removeEventListener("paste", onPaste, true);
   }, [activeTab, handleImagePaste]);
 
+  const solutionTabs = [
+    { key: "code" as const, label: textSolutionMode ? "Решение" : "Код", icon: Code2 },
+    { key: "file" as const, label: "Файл", icon: FileUp },
+    { key: "image" as const, label: "Картинка", icon: ImageUp },
+  ];
+
+  const renderSolutionTabs = (compact = false) => (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      {solutionTabs.map((tab) => {
+        const Icon = tab.icon;
+        const active = activeTab === tab.key;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`inline-flex items-center gap-2 rounded-[14px] text-xs font-black transition shadow-sm ${
+              compact ? "h-8 px-3" : "h-9 px-3"
+            } ${
+              active
+                ? "bg-emerald-500/16 text-emerald-300 ring-1 ring-emerald-400/35 shadow-[0_10px_24px_rgba(16,185,129,0.12)]"
+                : "bg-transparent text-slate-500 shadow-none hover:bg-white/[0.05] hover:text-slate-300"
+            }`}
+          >
+            <Icon size={compact ? 13 : 15} />
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[18px] bg-[#07111D]">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-white/10 px-5 py-4 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={`task-solution-panel-dark relative flex min-h-[520px] w-full min-w-0 flex-1 flex-col overflow-hidden ${showHelpColumn ? "rounded-none bg-[#07111D]" : "rounded-[20px] bg-white"}`}>
+      <div className={`${showHelpColumn ? "hidden" : "flex"} solution-panel-header shrink-0 border-b border-slate-200/80 bg-white px-5 py-3`}>
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            {[
-              { key: "code" as const, label: "Код", icon: Code2 },
-              { key: "file" as const, label: "Файл", icon: FileUp },
-              { key: "image" as const, label: "Картинка", icon: ImageUp },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const displayLabel = tab.key === "code" && textSolutionMode ? "Решение" : tab.label;
-              const active = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-black transition shadow-sm ${
-                    active
-                      ? "bg-emerald-500 text-white shadow-[0_10px_24px_rgba(16,185,129,0.20)]"
-                      : "bg-transparent text-slate-400 shadow-none hover:bg-white/[0.06] hover:text-emerald-200"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {displayLabel}
-                </button>
-              );
-            })}
+            <div className="flex min-w-0 items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.75)]" />
+            <div className="truncate text-sm font-black text-slate-950">Моё решение</div>
+            </div>
+            {renderSolutionTabs(true)}
           </div>
           <div className="flex items-center gap-2">
+          {conditionHidden && onShowCondition && (
             <button
-              onClick={requestTeacherHelp}
-              disabled={disabled || loading || helpRequest.isPending || helpRequested}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 px-4 text-xs font-black text-amber-200 shadow-sm hover:bg-amber-400/15 disabled:opacity-55"
+              type="button"
+              onClick={onShowCondition}
+              className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.06] px-4 text-xs font-black text-slate-200 hover:bg-white/[0.10]"
             >
-              {helpRequest.isPending ? <Loader2 size={13} className="animate-spin" /> : <HelpCircle size={13} />}
-              {helpRequested ? "Запрос отправлен" : "Попросить помощи"}
+              <Eye size={14} />
+              Показать условие
+            </button>
+          )}
+            <button
+              onClick={() => {
+                setHelpPanelOpen((value) => !value);
+                setHelpTab("ai");
+              }}
+              disabled={disabled || loading || helpRequest.isPending}
+              className="inline-flex h-10 items-center gap-2 rounded-[14px] border border-emerald-400/30 bg-emerald-500/12 px-4 text-xs font-black text-emerald-300 shadow-sm hover:bg-emerald-500/18 disabled:opacity-55"
+            >
+              <HelpCircle size={13} />
+              Помощь
+            </button>
+            <button
+              type="button"
+              onClick={sendForTeacherReview}
+              disabled={disabled || loading || helpRequest.isPending}
+              className="inline-flex h-10 items-center gap-2 rounded-[14px] border border-slate-800 bg-slate-900/45 px-4 text-xs font-black text-slate-600 hover:bg-slate-900 disabled:opacity-45"
+            >
+              {helpRequest.isPending ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                На проверку
             </button>
             {loading && <Loader2 size={16} className="animate-spin text-emerald-300" />}
           </div>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-5 py-5 sm:px-6">
+      {false && helpChatOpen && helpThread && (
+        <div className="shrink-0 border-b border-amber-300/15 bg-[#0A1522] px-5 py-4 sm:px-6">
+          <div className="grid gap-3 lg:grid-cols-[1fr_260px]">
+            <div className="max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-[#07111D] p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-xs font-black uppercase tracking-wider text-amber-200">Диалог с преподавателем</div>
+                <div className={`rounded-full px-2 py-1 text-[10px] font-black ${helpThread.is_resolved ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-200"}`}>
+                  {helpThread.is_resolved ? "Вопрос решён" : "Открыт"}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {helpThread.messages.length === 0 ? (
+                  <div className="rounded-lg bg-white/[0.04] px-3 py-2 text-xs text-slate-500">Сообщений пока нет.</div>
+                ) : helpThread.messages.map((message) => {
+                  const mine = message.author_role === "student";
+                  return (
+                    <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[82%] rounded-xl px-3 py-2 text-xs leading-relaxed ${message.kind === "system" ? "bg-white/[0.04] text-slate-400" : mine ? "bg-emerald-500/20 text-emerald-50" : "bg-amber-400/12 text-amber-50"}`}>
+                        {message.kind !== "system" && (
+                          <div className="mb-1 text-[10px] font-black uppercase tracking-wide opacity-60">
+                            {mine ? "Вы" : message.author_name || "Преподаватель"}
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap">{message.text}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={helpMessage}
+                onChange={(event) => setHelpMessage(event.target.value)}
+                disabled={helpThread.is_resolved || sendHelpMessage.isPending}
+                rows={4}
+                placeholder={helpThread.is_resolved ? "Диалог закрыт" : "Напишите преподавателю, что именно не получается"}
+                className="min-h-24 resize-none rounded-xl border border-white/10 bg-[#07111D] px-3 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={sendHelpThreadMessage}
+                disabled={helpThread.is_resolved || sendHelpMessage.isPending || !helpMessage.trim()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white disabled:opacity-50"
+              >
+                {sendHelpMessage.isPending ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+                Отправить
+              </button>
+              {!helpThread.is_resolved && (
+                <button
+                  type="button"
+                  onClick={markHelpThreadResolved}
+                  disabled={resolveHelpThread.isPending}
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-xs font-black text-slate-300 hover:bg-white/[0.07] disabled:opacity-50"
+                >
+                  Я решил задачу
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid min-h-0 w-full min-w-0 flex-1 bg-transparent ${showHelpColumn ? "gap-3 lg:grid-cols-[minmax(0,1fr)_430px]" : "grid-cols-1"}`}>
+      <div className={`${showHelpColumn ? "flex min-h-0 min-w-0 flex-col gap-2" : "flex min-h-0 min-w-0 flex-col"}`}>
+        {showHelpColumn && topContent}
+        <div className={`${showHelpColumn ? "overflow-hidden rounded-[14px] border border-white/10 bg-[#07111D]" : ""} solution-editor-shell flex min-h-0 min-w-0 flex-1 flex-col`}>
+        {showHelpColumn && (
+          <div className="solution-panel-header shrink-0 border-b border-white/10 bg-[#0B1722]/95">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.75)]" />
+                <div className="truncate text-sm font-black text-white">Моё решение</div>
+              </div>
+              {renderSolutionTabs(true)}
+              </div>
+              <div className="flex items-center gap-2">
+                {conditionHidden && onShowCondition && (
+                  <button
+                    type="button"
+                    onClick={onShowCondition}
+                    className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.06] px-4 text-xs font-black text-slate-200 hover:bg-white/[0.10]"
+                  >
+                    <Eye size={14} />
+                    Показать условие
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setHelpPanelOpen((value) => !value);
+                    setHelpTab("ai");
+                  }}
+                  disabled={disabled || loading || helpRequest.isPending}
+                  className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-emerald-400/30 bg-emerald-500/12 px-4 text-xs font-black text-emerald-300 shadow-sm hover:bg-emerald-500/18 disabled:opacity-55"
+                >
+                  <HelpCircle size={13} />
+                  Помощь
+                </button>
+                <button
+                  type="button"
+                  onClick={sendForTeacherReview}
+                  disabled={disabled || loading || helpRequest.isPending}
+                  className="inline-flex h-9 items-center gap-2 rounded-[14px] border border-slate-800 bg-slate-900/45 px-4 text-xs font-black text-slate-600 hover:bg-slate-900 disabled:opacity-45"
+                >
+                  {helpRequest.isPending ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                  На проверку
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[14px] border border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white"
+                  title="Меню"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="solution-editor-body flex min-h-0 flex-1 flex-col bg-white">
         {activeTab === "code" && (
-          <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-xl border border-white/10 bg-[#0A1522]">
+          <div className="solution-editor-frame relative min-h-[430px] flex-1 overflow-hidden rounded-none border border-transparent bg-white shadow-none">
             <button
               type="button"
               onClick={saveCode}
               disabled={disabled || loading || saving}
               title="Сохранить код"
-              className={`absolute right-12 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-[#111E2C] shadow-sm hover:bg-white/[0.08] disabled:opacity-50 ${
+              className={`absolute right-12 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50 disabled:opacity-50 ${
                 !isCodeDirty && code.trim().length > 0
                   ? "text-emerald-300"
                   : "text-slate-400 hover:text-emerald-300"
@@ -410,7 +664,7 @@ export function TaskSolutionPanel({
               type="button"
               onClick={() => setHistoryOpen((value) => !value)}
               title="История решений"
-              className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-[#111E2C] text-slate-400 shadow-sm hover:bg-white/[0.08] hover:text-emerald-300"
+              className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm hover:bg-slate-50 hover:text-emerald-500"
             >
               <History size={15} />
             </button>
@@ -419,7 +673,7 @@ export function TaskSolutionPanel({
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
                 disabled={disabled || loading}
-                className="h-full min-h-[280px] w-full resize-none bg-[#0A1522] px-5 py-14 text-[15px] leading-7 text-slate-100 outline-none placeholder:text-slate-600 disabled:opacity-60"
+                className="h-full min-h-[430px] w-full resize-none bg-white px-5 py-14 text-[15px] leading-7 text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
                 placeholder="Введите или отредактируйте текст решения..."
               />
             ) : (
@@ -429,7 +683,7 @@ export function TaskSolutionPanel({
               onChange={setCode}
               editable={!disabled && !loading}
               extensions={[python(), ...commentExtensions]}
-              theme={githubDark}
+              theme={githubLight}
               basicSetup={{
                 lineNumbers: true,
                 foldGutter: false,
@@ -440,8 +694,8 @@ export function TaskSolutionPanel({
                 closeBrackets: true,
               }}
               height="100%"
-              minHeight="280px"
-              maxHeight="calc(100dvh - 330px)"
+              minHeight="430px"
+              maxHeight="calc(100dvh - 260px)"
               placeholder="# Вставьте код или текст своего решения..."
               style={{
                 fontSize: "14px",
@@ -453,7 +707,7 @@ export function TaskSolutionPanel({
         )}
 
         {activeTab === "file" && (
-          <div className="flex min-h-[280px] flex-1 flex-col justify-center rounded-xl border border-white/10 bg-white/[0.04] p-6">
+          <div className="flex min-h-[300px] flex-1 flex-col justify-center rounded-[16px] border border-white/10 bg-white/[0.035] p-6">
             <div className="mx-auto flex max-w-sm flex-col items-center text-center">
               <FileUp size={34} className="mb-3 text-emerald-300" />
               <div className="text-sm font-black text-white">Прикрепить файл решения</div>
@@ -485,7 +739,7 @@ export function TaskSolutionPanel({
             className={`flex min-h-[280px] flex-1 flex-col justify-center rounded-xl border p-6 transition ${
               imageDragActive
                 ? "border-emerald-300/40 bg-emerald-400/10 shadow-[0_0_0_4px_rgba(16,185,129,0.10)]"
-                : "border-white/10 bg-white/[0.04]"
+                : "border-white/10 bg-white/[0.035]"
             }`}
             onPasteCapture={handleImagePaste}
             onDragEnter={(event) => {
@@ -675,13 +929,206 @@ export function TaskSolutionPanel({
               Открыть файл
             </a>
           )}
-          {activeTab === "code" && imageHref && (
-            <button type="button" onClick={() => setImagePreviewOpen(true)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300 hover:underline">
-              <ImageUp size={12} />
-              Открыть фото
-            </button>
-          )}
         </div>
+        </div>
+        </div>
+      </div>
+      {showHelpColumn && (
+        <aside className="flex min-h-[720px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[radial-gradient(circle_at_100%_10%,rgba(16,185,129,0.18),transparent_38%),#061119]">
+          <div className="shrink-0 border-b border-white/10 px-7 pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-8">
+                <button
+                  type="button"
+                  onClick={() => setHelpTab("ai")}
+                  className={`inline-flex h-11 items-center border-b-2 px-0 text-sm font-black transition ${helpTab === "ai" ? "border-emerald-400 text-emerald-300" : "border-transparent text-slate-500 hover:text-slate-200"}`}
+                >
+                  AI Наставник
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHelpTab("teacher")}
+                  className={`inline-flex h-11 items-center border-b-2 px-0 text-sm font-black transition ${helpTab === "teacher" ? "border-emerald-400 text-emerald-300" : "border-transparent text-slate-500 hover:text-slate-200"}`}
+                >
+                  Преподаватель
+                </button>
+              </div>              <div className="flex shrink-0 items-center gap-2">
+                {helpThread && helpTab === "teacher" && (
+                  <div className={`rounded-full px-2.5 py-1 text-[10px] font-black ${helpThread.is_resolved ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-200"}`}>
+                    {helpThread.is_resolved ? "Решён" : "Открыт"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHelpPanelOpen(false);
+                    setHelpTab("ai");
+                    onHelpClose?.();
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] border border-white/10 bg-white/[0.05] text-slate-400 transition hover:bg-white/[0.09] hover:text-white"
+                  title="Закрыть чат"
+                  aria-label="Закрыть чат"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {helpTab === "ai" ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                <div className="space-y-6">
+                  {aiMessages.map((message, index) => {
+                    const mine = message.role === "user";
+                    return (
+                      <div key={index} className={`flex items-start gap-3 ${mine ? "justify-end" : "justify-start"}`}>
+                        {!mine && (
+                          <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25 shadow-[0_0_18px_rgba(16,185,129,0.24)]">
+                            <Bot size={18} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className={`max-w-[310px] rounded-[14px] border border-white/[0.06] px-4 py-3 text-sm leading-relaxed shadow-[0_16px_38px_rgba(0,0,0,0.18)] ${mine ? "bg-[#16222D] text-slate-100" : "bg-white/[0.07] text-slate-100"}`}>
+                            {message.code && (
+                              <pre className="mb-2 max-h-40 overflow-auto rounded-xl bg-black/20 p-3 text-[11px] leading-relaxed text-slate-200">{message.code}</pre>
+                            )}
+                            <div className="whitespace-pre-wrap">{message.text}</div>
+                          </div>
+                          <div className={`mt-1 text-[10px] text-slate-600 ${mine ? "text-right" : "text-left"}`}>
+                            {mine ? "21:49" : index === 0 ? "21:48" : "21:49"}
+                          </div>
+                        </div>
+                        {mine && (
+                          <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-[#061119] shadow-[0_0_18px_rgba(16,185,129,0.24)]">
+                            Я
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {aiAssist.isPending && (
+                    <div className="ml-12 max-w-[310px] rounded-[14px] bg-white/[0.07] px-4 py-3 text-sm text-slate-400">Проверяю решение...</div>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 px-5 pb-5">
+                <div className="flex gap-2 rounded-[14px] border border-white/10 bg-[#07111D]/95 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                  <input
+                    value={aiMessage}
+                    onChange={(event) => setAiMessage(event.target.value)}
+                    onKeyDown={(event) => event.key === "Enter" && sendAiMessage()}
+                    disabled={aiAssist.isPending}
+                    placeholder="Напиши сообщение..."
+                    className="min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-100 outline-none placeholder:text-slate-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendAiMessage}
+                    disabled={aiAssist.isPending || (!aiMessage.trim() && !code.trim())}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-[0_10px_22px_rgba(16,185,129,0.22)] hover:bg-emerald-400 disabled:opacity-45"
+                  >
+                    {aiAssist.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : helpThread ? (
+            <>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+                <div className="space-y-6">
+                  {helpThread.messages.length === 0 ? (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-4 text-sm text-slate-500">
+                      Сообщений пока нет.
+                    </div>
+                  ) : helpThread.messages.map((message) => {
+                const mine = message.author_role === "student";
+                return (
+                  <div key={message.id} className={`relative flex items-start gap-3 ${mine ? "justify-end" : "justify-start"}`}>
+                    {!mine && (
+                    <div className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${message.kind === "system" ? "bg-white/[0.07] text-slate-400" : "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25"}`}>
+                      {message.kind === "system" ? "i" : mine ? "Я" : "П"}
+                    </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-xs font-black text-slate-200">
+                          {message.kind === "system" ? "Событие" : mine ? "Вы" : message.author_name || "Преподаватель"}
+                        </div>
+                        {message.created_at && (
+                          <div className="shrink-0 text-[10px] font-semibold text-slate-600">
+                            {new Date(message.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
+                      </div>
+                      <div className={`mt-1 max-w-[310px] whitespace-pre-wrap rounded-[14px] border border-white/[0.06] px-4 py-3 text-sm leading-relaxed ${message.kind === "system" ? "bg-white/[0.04] text-slate-400" : mine ? "bg-[#123F37] text-emerald-50" : "bg-white/[0.07] text-slate-100"}`}>
+                        {message.text}
+                      </div>
+                    </div>
+                    {mine && (
+                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-[#061119]">
+                        Я
+                      </div>
+                    )}
+                  </div>
+                );
+                  })}
+                </div>
+              </div>
+
+              <div className="shrink-0 px-5 pb-5">
+                <textarea
+                  value={helpMessage}
+                  onChange={(event) => setHelpMessage(event.target.value)}
+                  disabled={helpThread.is_resolved || sendHelpMessage.isPending}
+                  rows={3}
+                  placeholder={helpThread.is_resolved ? "Диалог закрыт" : "Напишите, что именно не получается"}
+                  className="min-h-20 w-full resize-none rounded-[14px] border border-white/10 bg-[#07111D] px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-400/40 disabled:opacity-50"
+                />
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={sendHelpThreadMessage}
+                    disabled={helpThread.is_resolved || sendHelpMessage.isPending || !helpMessage.trim()}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    {sendHelpMessage.isPending ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+                    Отправить
+                  </button>
+                  {!helpThread.is_resolved && (
+                    <button
+                      type="button"
+                      onClick={markHelpThreadResolved}
+                      disabled={resolveHelpThread.isPending}
+                      className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-xs font-black text-slate-300 hover:bg-white/[0.07] disabled:opacity-50"
+                    >
+                      Я решил задачу
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col justify-center p-5">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                <div className="text-sm font-black text-white">Диалог с преподавателем ещё не создан</div>
+                <div className="mt-2 text-sm leading-relaxed text-slate-400">
+                  Можно отправить решение на проверку или попросить преподавателя помочь с конкретным местом.
+                </div>
+                <button
+                  type="button"
+                  onClick={requestTeacherHelp}
+                  disabled={helpRequest.isPending}
+                  className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white hover:bg-emerald-400 disabled:opacity-50"
+                >
+                  {helpRequest.isPending ? <Loader2 size={13} className="animate-spin" /> : <HelpCircle size={13} />}
+                  Попросить помощи
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
+      )}
       </div>
 
       <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => upload("file", e.target.files?.[0])} />
@@ -783,3 +1230,4 @@ export function TaskSolutionPanel({
     </div>
   );
 }
+
