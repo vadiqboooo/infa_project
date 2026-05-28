@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot, Sparkles,
-  User, CheckCircle2, ShieldCheck,
+  CheckCircle2, ShieldCheck,
   CalendarCheck, ClipboardCheck, BrainCircuit,
   Pencil, MousePointer2, Square, Type, Undo2, ThumbsUp, Users,
 } from 'lucide-react';
@@ -159,7 +159,6 @@ export default function LandingPage() {
         </div>
         <div className="lp-nav-links">
           <a href="#platform" onClick={e => { e.preventDefault(); scrollTo('platform'); }}>Возможности</a>
-          <a href="#ai"       onClick={e => { e.preventDefault(); scrollTo('ai'); }}>ИИ-ассистент</a>
           <a href="#subscription" onClick={e => { e.preventDefault(); scrollTo('subscription'); }}>Подписка</a>
         </div>
         <div className="lp-nav-actions">
@@ -178,7 +177,7 @@ export default function LandingPage() {
           <div className="lp-hero-content">
             <div className="lp-tag"><span className="lp-tag-dot" />Подготовка к ЕГЭ 2026-2027</div>
             <h1 className="lp-h1">
-              Актуальные задания
+              Подготовка к ЕГЭ
               <em>по информатике и математике</em>
               <span className="lp-h1-line2">в одной платформе</span>
             </h1>
@@ -345,132 +344,136 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="lp-product-demo lp-reveal">
-            <div className="lp-board-panel">
-              <div className="lp-task-strip">
-                <div>
-                  <div className="lp-task-strip-top">
-                    <span>Задание 13</span>
-                    <b>Черновик</b>
+          <div className="lp-product-stage lp-reveal" aria-label="Демонстрация работы платформы">
+            <article className="lp-product-demo lp-product-slide is-one">
+              <div className="lp-board-panel">
+                <div className="lp-task-strip">
+                  <div>
+                    <div className="lp-task-strip-top">
+                      <span>Задание 13</span>
+                      <b>Черновик</b>
+                    </div>
+                    <p>IP-адрес узла 192.168.10.5, маска 255.255.255.0. Найдите адрес сети.</p>
                   </div>
-                  <p>IP-адрес узла 192.168.10.5, маска 255.255.255.0. Найдите адрес сети.</p>
+                </div>
+
+                <div className="lp-whiteboard">
+                  <div className="lp-board-toolbar" aria-hidden="true">
+                    <button className="is-active"><Pencil size={18} /></button>
+                    <button><MousePointer2 size={17} /></button>
+                    <button><Square size={16} /></button>
+                    <button><Type size={17} /></button>
+                    <button><Undo2 size={17} /></button>
+                  </div>
+
+                  <div className="lp-hand-notes" aria-hidden="true">
+                    <div className="lp-note-ip">192.168.10.5</div>
+                    <div className="lp-note-and">AND 255.255.255.0</div>
+                    <div className="lp-note-arrow is-a">↓</div>
+                    <div className="lp-note-arrow is-b">↓</div>
+                    <div className="lp-note-arrow is-c">↓</div>
+                    <div className="lp-note-binary is-one">11000000.10101000.00001010.00000101</div>
+                    <div className="lp-note-binary is-two">11111111.11111111.11111111.<span>00000000</span></div>
+                    <div className="lp-note-binary is-three">11000000.10101000.00001010.00000000</div>
+                    <div className="lp-note-answer">192.168.10.0</div>
+                    <div className="lp-board-glow-dot" />
+                  </div>
                 </div>
               </div>
+            </article>
 
-              <div className="lp-whiteboard">
-                <div className="lp-board-toolbar" aria-hidden="true">
-                  <button className="is-active"><Pencil size={18} /></button>
-                  <button><MousePointer2 size={17} /></button>
-                  <button><Square size={16} /></button>
-                  <button><Type size={17} /></button>
-                  <button><Undo2 size={17} /></button>
+            <article className="lp-product-demo lp-product-slide is-two">
+              <div className="lp-board-panel">
+                <div className="lp-task-strip">
+                  <div>
+                    <div className="lp-task-strip-top">
+                      <span>ИИ видит контекст</span>
+                      <b>Разбор ошибки</b>
+                    </div>
+                    <p>Ассистент проверяет решение на доске и подсказывает следующий шаг без готового списывания.</p>
+                  </div>
                 </div>
 
-                <div className="lp-hand-notes" aria-hidden="true">
-                  <div className="lp-note-ip">192.168.10.5</div>
-                  <div className="lp-note-and">AND 255.255.255.0</div>
-                  <div className="lp-note-arrow is-a">↓</div>
-                  <div className="lp-note-arrow is-b">↓</div>
-                  <div className="lp-note-arrow is-c">↓</div>
-                  <div className="lp-note-binary is-one">11000000.10101000.00001010.00000101</div>
-                  <div className="lp-note-binary is-two">11111111.11111111.11111111.<span>00000000</span></div>
-                  <div className="lp-note-binary is-three">11000000.10101000.00001010.00000000</div>
-                  <div className="lp-note-answer">192.168.10.0</div>
+                <div className="lp-whiteboard lp-whiteboard-chat">
+                  <div className="lp-board-toolbar" aria-hidden="true">
+                    <button><Pencil size={18} /></button>
+                    <button className="is-active"><MousePointer2 size={17} /></button>
+                    <button><Square size={16} /></button>
+                    <button><Type size={17} /></button>
+                    <button><Undo2 size={17} /></button>
+                  </div>
+                  <div className="lp-context-card is-student"><span className="lp-typed-text">Я получил 192.168.10.5. Где ошибка?</span></div>
+                  <div className="lp-context-card is-ai"><span className="lp-typed-text">Ты оставил биты узла. Маска /24 обнуляет последний октет.</span></div>
+                  <div className="lp-context-card is-hint"><span className="lp-typed-text">00000101 AND 00000000 = 00000000</span></div>
                   <div className="lp-board-glow-dot" />
                 </div>
               </div>
-            </div>
+            </article>
 
-            <aside className="lp-assistant-card">
-              <div className="lp-assistant-head">
-                <div className="lp-assistant-icon"><Bot size={18} /></div>
-                <h3>ИИ-ассистент</h3>
-                <span><Sparkles size={18} /></span>
+            <article className="lp-product-demo lp-product-slide is-three">
+              <div className="lp-board-panel">
+                <div className="lp-task-strip">
+                  <div>
+                    <div className="lp-task-strip-top">
+                      <span>Проверка преподавателя</span>
+                      <b>Онлайн</b>
+                    </div>
+                    <p>Учитель подключается к решению, оставляет пометки на доске и отвечает в чате.</p>
+                  </div>
+                </div>
+
+                <div className="lp-whiteboard lp-whiteboard-teacher">
+                  <div className="lp-board-toolbar" aria-hidden="true">
+                    <button className="is-active"><Pencil size={18} /></button>
+                    <button><MousePointer2 size={17} /></button>
+                    <button><Square size={16} /></button>
+                    <button><Type size={17} /></button>
+                    <button><Undo2 size={17} /></button>
+                  </div>
+                  <div className="lp-student-solution" aria-hidden="true">
+                    <div className="lp-student-line">192.168.10.5</div>
+                    <div className="lp-student-line is-muted">маска 255.255.255.0</div>
+                    <div className="lp-student-answer">Ответ: 192.168.10.5</div>
+                  </div>
+                  <div className="lp-teacher-highlight" aria-hidden="true" />
+                  <div className="lp-teacher-mark is-one">последний октет должен стать 0</div>
+                  <div className="lp-teacher-mark is-two">правильно: 192.168.10.0</div>
+                  <div className="lp-teacher-cursor" aria-hidden="true" />
+                  <div className="lp-teacher-chat">
+                    <div className="lp-teacher-msg is-student">Проверьте, я правильно нашёл сеть?</div>
+                    <div className="lp-teacher-msg is-teacher">Почти. Маска /24 оставляет сеть и обнуляет узел.</div>
+                    <div className="lp-teacher-msg is-student is-followup">То есть последний октет должен стать 0?</div>
+                    <div className="lp-teacher-msg is-teacher is-second">Да. Исправь ответ на 192.168.10.0.</div>
+                    <div className="lp-teacher-msg is-student is-final">Понял, записал исправленный ответ.</div>
+                    <div className="lp-help-status">Преподаватель на связи</div>
+                  </div>
+                </div>
               </div>
-              <div className="lp-assistant-body">
-                <p className="lp-assistant-label">Объяснение:</p>
-                <p>Маска 255.255.255.0 означает, что первые 24 бита — это сеть, а последние 8 бит — часть узла.</p>
-                <p>При побитовом И (AND) оставляем биты сети, а биты узла обнуляем.</p>
-                <div className="lp-answer-block">Ответ: <strong>192.168.10.0</strong></div>
-                <div className="lp-feedback"><ThumbsUp size={15} />Это объяснение помогло?</div>
-              </div>
-            </aside>
+            </article>
           </div>
 
           <div className="lp-feature-row lp-reveal">
-            <article className="lp-feature-card">
+            <article className="lp-feature-card is-one">
               <div className="lp-feature-index">01</div>
+              <div className="lp-feature-line" />
               <div className="lp-feature-icon"><Pencil size={34} /></div>
               <h3>Пиши решение</h3>
               <p>Задача и доска для хода решения, формул и цветных пометок.</p>
             </article>
-            <article className="lp-feature-card">
+            <article className="lp-feature-card is-two">
               <div className="lp-feature-index">02</div>
+              <div className="lp-feature-line" />
               <div className="lp-feature-icon"><Bot size={34} /></div>
               <h3>Спроси ИИ</h3>
               <p>Ассистент видит контекст и объясняет следующий шаг.</p>
             </article>
-            <article className="lp-feature-card">
+            <article className="lp-feature-card is-three">
               <div className="lp-feature-index">03</div>
+              <div className="lp-feature-line" />
               <div className="lp-feature-icon"><Users size={34} /></div>
               <h3>Подключи преподавателя</h3>
               <p>Учитель отвечает в чате и делает пометки на доске.</p>
             </article>
-          </div>
-        </div>
-      </section>
-
-      {/* AI BLOCK */}
-      <section id="ai" className="lp-section lp-ai">
-        <div className="lp-ai-inner">
-          <div className="lp-reveal">
-            <div className="lp-section-tag">ИИ-ассистент</div>
-            <h2 className="lp-section-h2">Никогда не останешься<br/>один с задачей</h2>
-            <p className="lp-section-sub" style={{ marginBottom: 32 }}>
-              Застрял на задаче в 23:00? ИИ разберёт шаг за шагом, найдёт ошибку в твоём решении и объяснит почему именно так — без осуждения, сколько угодно раз.
-            </p>
-            <ul className="lp-checklist">
-              {['Объяснит любую тему простым языком', 'Найдёт ошибку в коде или вычислениях', 'Проверит решение и даст обратную связь', 'Подберёт похожие задачи для закрепления'].map((t, i) => (
-                <li key={i} className="lp-check"><span className="lp-check-ico">✓</span>{t}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="lp-reveal" style={{ transitionDelay: '0.15s' }}>
-            <div className="lp-chat">
-              <div className="lp-chat-head">
-                <div className="lp-chat-dot" />
-                <div className="lp-chat-title">ИИ-ассистент</div>
-                <div className="lp-chat-online">онлайн</div>
-              </div>
-              <div className="lp-msg is-user">
-                <div className="lp-av is-user"><User size={14} color="rgba(255,255,255,0.7)" strokeWidth={2} /></div>
-                <div className="lp-bubble is-user">Не понимаю задание 13. IP-адрес 192.168.10.5, маска 255.255.255.0. Как найти адрес сети?</div>
-              </div>
-              <div className="lp-msg">
-                <div className="lp-av is-bot"><Bot size={14} color="#62aa78" strokeWidth={2} /></div>
-                <div className="lp-bubble is-bot">
-                  Отлично, разберём! Маска <code>255.255.255.0</code> означает, что первые 3 октета — это сеть, последний — хост.<br/><br/>
-                  Применяем AND побитово:<br/>
-                  <code>192.168.10.5 AND 255.255.255.0 = 192.168.10.0</code><br/><br/>
-                  Адрес сети: <strong>192.168.10.0</strong>
-                </div>
-              </div>
-              <div className="lp-msg is-user">
-                <div className="lp-av is-user"><User size={14} color="rgba(255,255,255,0.7)" strokeWidth={2} /></div>
-                <div className="lp-bubble is-user">А если маска /26?</div>
-              </div>
-              <div className="lp-msg">
-                <div className="lp-av is-bot"><Bot size={14} color="#62aa78" strokeWidth={2} /></div>
-                <div className="lp-typing"><div className="lp-dot"/><div className="lp-dot"/><div className="lp-dot"/></div>
-              </div>
-              <div className="lp-chat-input">
-                <div className="lp-input-ph">Задай вопрос ассистенту...</div>
-                <div className="lp-send-btn">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -557,6 +560,10 @@ export default function LandingPage() {
                 <a href="https://t.me/rancheasy" target="_blank" rel="noreferrer">@rancheasy</a>
               </div>
               <div className="lp-contact-row">
+                <span>Регион</span>
+                <strong>Иркутск, Россия</strong>
+              </div>
+              <div className="lp-contact-row">
                 <span>Статус для приема платежей</span>
                 <strong>самозанятый</strong>
               </div>
@@ -583,6 +590,9 @@ export default function LandingPage() {
               <div>ИНН {SELF_EMPLOYED_INN}</div>
             ) : null}
             <div>Статус: самозанятый</div>
+            <div>Иркутск, Россия</div>
+            <a href="mailto:vadiqbozhko@gmail.com">vadiqbozhko@gmail.com</a>
+            <a href="https://t.me/rancheasy" target="_blank" rel="noreferrer">@rancheasy</a>
           </div>
         </div>
         <div className="lp-footer-links">

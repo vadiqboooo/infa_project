@@ -26,7 +26,7 @@ const queryClient = new QueryClient({
   },
 });
 
-const DEFAULT_SEO_TITLE = "Платформа для подготовки к ЕГЭ по информатике и математике, которая поможет тебе сдать ЕГЭ на высокий балл";
+const DEFAULT_SEO_TITLE = "Подготовка к ЕГЭ по информатике и математике | RanchEasy";
 
 const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
   { pattern: /^\/terms/, title: "Условия" },

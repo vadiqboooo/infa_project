@@ -4,7 +4,7 @@ import parse, { attributesToProps, domToReact } from "html-react-parser";
 import type { HTMLReactParserOptions } from "html-react-parser";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { Check, Code2, Eraser, Loader2, Minus, PenLine, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { Check, Circle, Code2, Eraser, Loader2, Minus, MousePointer2, PenLine, Plus, RectangleHorizontal, RotateCcw, Save, Shapes, Trash2, X } from "lucide-react";
 import { authFetch } from "../api/client";
 import type { TaskFile } from "../api/types";
 import { useTheme } from "../context/ThemeContext";
@@ -26,7 +26,9 @@ interface Props {
     onDrawingRecognized?: (text: string, rawText?: string, imageDataUrl?: string) => void;
 }
 
-type AnnotationTool = "none" | "pen" | "eraser";
+type AnnotationTool = "none" | "select" | "pen" | "eraser" | "shape";
+type AnnotationShape = "rectangle" | "parallelogram" | "trapezoid" | "circle";
+type ResizeHandle = "nw" | "ne" | "se" | "sw";
 
 type StrokePoint = {
     x: number;
@@ -37,6 +39,7 @@ type AnnotationStroke = {
     id: string;
     color: string;
     width: number;
+    kind?: "pen" | AnnotationShape;
     coordinate_space?: "board" | "percent" | string;
     board_width?: number;
     board_height?: number;
@@ -71,6 +74,12 @@ type AnnotationRect = {
 
 const NOTE_COLORS = ["#ffffff", "#111827", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7"];
 const NOTE_WIDTHS = [2, 4, 7, 11];
+const SHAPE_TOOLS: { shape: AnnotationShape; label: string }[] = [
+    { shape: "rectangle", label: "Прямоугольник" },
+    { shape: "parallelogram", label: "Параллелограмм" },
+    { shape: "trapezoid", label: "Трапеция" },
+    { shape: "circle", label: "Круг" },
+];
 
 // Маппинг HTML-сущностей на LaTeX-команды для логических операций
 const HTML_ENTITY_TO_LATEX: Record<string, string> = {
@@ -306,7 +315,95 @@ function pointsToPath(points: StrokePoint[]): string {
     return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
 }
 
+function getStrokeBounds(stroke: AnnotationStroke) {
+    return stroke.points.reduce(
+        (acc, point) => ({
+            minX: Math.min(acc.minX, point.x),
+            minY: Math.min(acc.minY, point.y),
+            maxX: Math.max(acc.maxX, point.x),
+            maxY: Math.max(acc.maxY, point.y),
+        }),
+        { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+    );
+}
+
+function isShapeStroke(stroke: AnnotationStroke): stroke is AnnotationStroke & { kind: AnnotationShape } {
+    return Boolean(stroke.kind && stroke.kind !== "pen" && stroke.points.length >= 2);
+}
+
+function getShapeBounds(stroke: AnnotationStroke) {
+    const bounds = getStrokeBounds(stroke);
+    return {
+        x: bounds.minX,
+        y: bounds.minY,
+        width: Math.max(0, bounds.maxX - bounds.minX),
+        height: Math.max(0, bounds.maxY - bounds.minY),
+        right: bounds.maxX,
+        bottom: bounds.maxY,
+    };
+}
+
+function getResizeHandles(stroke: AnnotationStroke) {
+    const bounds = getShapeBounds(stroke);
+    return [
+        { handle: "nw" as const, x: bounds.x, y: bounds.y },
+        { handle: "ne" as const, x: bounds.right, y: bounds.y },
+        { handle: "se" as const, x: bounds.right, y: bounds.bottom },
+        { handle: "sw" as const, x: bounds.x, y: bounds.bottom },
+    ];
+}
+
+function shapeToPath(shape: AnnotationShape, start: StrokePoint, end: StrokePoint): string {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    const width = maxX - minX;
+    const height = maxY - minY;
+    if (width < 1 || height < 1) return "";
+
+    if (shape === "circle") {
+        const rx = width / 2;
+        const ry = height / 2;
+        const cx = minX + rx;
+        const cy = minY + ry;
+        return [
+            `M ${(cx - rx).toFixed(1)} ${cy.toFixed(1)}`,
+            `A ${rx.toFixed(1)} ${ry.toFixed(1)} 0 1 0 ${(cx + rx).toFixed(1)} ${cy.toFixed(1)}`,
+            `A ${rx.toFixed(1)} ${ry.toFixed(1)} 0 1 0 ${(cx - rx).toFixed(1)} ${cy.toFixed(1)}`,
+        ].join(" ");
+    }
+
+    if (shape === "parallelogram") {
+        const skew = Math.min(width * 0.28, 56);
+        return `M ${(minX + skew).toFixed(1)} ${minY.toFixed(1)} L ${maxX.toFixed(1)} ${minY.toFixed(1)} L ${(maxX - skew).toFixed(1)} ${maxY.toFixed(1)} L ${minX.toFixed(1)} ${maxY.toFixed(1)} Z`;
+    }
+
+    if (shape === "trapezoid") {
+        const inset = Math.min(width * 0.22, 52);
+        return `M ${(minX + inset).toFixed(1)} ${minY.toFixed(1)} L ${(maxX - inset).toFixed(1)} ${minY.toFixed(1)} L ${maxX.toFixed(1)} ${maxY.toFixed(1)} L ${minX.toFixed(1)} ${maxY.toFixed(1)} Z`;
+    }
+
+    return `M ${minX.toFixed(1)} ${minY.toFixed(1)} L ${maxX.toFixed(1)} ${minY.toFixed(1)} L ${maxX.toFixed(1)} ${maxY.toFixed(1)} L ${minX.toFixed(1)} ${maxY.toFixed(1)} Z`;
+}
+
+function strokeToPath(stroke: AnnotationStroke): string {
+    const kind = stroke.kind;
+    if (kind && kind !== "pen" && stroke.points.length >= 2) {
+        return shapeToPath(kind, stroke.points[0], stroke.points[stroke.points.length - 1]);
+    }
+    return pointsToPath(stroke.points);
+}
+
 function isNearStroke(stroke: AnnotationStroke, point: StrokePoint, radius: number): boolean {
+    if (stroke.kind && stroke.kind !== "pen" && stroke.points.length >= 2) {
+        const bounds = getStrokeBounds(stroke);
+        const threshold = radius + stroke.width;
+        return point.x >= bounds.minX - threshold
+            && point.x <= bounds.maxX + threshold
+            && point.y >= bounds.minY - threshold
+            && point.y <= bounds.maxY + threshold;
+    }
     const threshold = radius + stroke.width;
     return stroke.points.some((strokePoint) => {
         const dx = strokePoint.x - point.x;
@@ -371,13 +468,44 @@ function renderStrokesToPngBlob(
 
     strokes.forEach((stroke) => {
         if (stroke.points.length === 0) return;
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x - offsetX, stroke.points[0].y - offsetY);
-        stroke.points.slice(1).forEach((point) => ctx.lineTo(point.x - offsetX, point.y - offsetY));
         ctx.strokeStyle = options?.ocrFriendly ? "#050505" : stroke.color;
         ctx.lineWidth = options?.ocrFriendly ? Math.max(3, stroke.width) : stroke.width;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
+        ctx.beginPath();
+        if (stroke.kind && stroke.kind !== "pen" && stroke.points.length >= 2) {
+            const start = { x: stroke.points[0].x - offsetX, y: stroke.points[0].y - offsetY };
+            const end = { x: stroke.points[stroke.points.length - 1].x - offsetX, y: stroke.points[stroke.points.length - 1].y - offsetY };
+            const minX = Math.min(start.x, end.x);
+            const maxX = Math.max(start.x, end.x);
+            const minY = Math.min(start.y, end.y);
+            const maxY = Math.max(start.y, end.y);
+            const shapeWidth = maxX - minX;
+            const shapeHeight = maxY - minY;
+            if (shapeWidth < 1 || shapeHeight < 1) return;
+            if (stroke.kind === "circle") {
+                ctx.ellipse(minX + shapeWidth / 2, minY + shapeHeight / 2, shapeWidth / 2, shapeHeight / 2, 0, 0, Math.PI * 2);
+            } else if (stroke.kind === "parallelogram") {
+                const skew = Math.min(shapeWidth * 0.28, 56);
+                ctx.moveTo(minX + skew, minY);
+                ctx.lineTo(maxX, minY);
+                ctx.lineTo(maxX - skew, maxY);
+                ctx.lineTo(minX, maxY);
+                ctx.closePath();
+            } else if (stroke.kind === "trapezoid") {
+                const inset = Math.min(shapeWidth * 0.22, 52);
+                ctx.moveTo(minX + inset, minY);
+                ctx.lineTo(maxX - inset, minY);
+                ctx.lineTo(maxX, maxY);
+                ctx.lineTo(minX, maxY);
+                ctx.closePath();
+            } else {
+                ctx.rect(minX, minY, shapeWidth, shapeHeight);
+            }
+        } else {
+            ctx.moveTo(stroke.points[0].x - offsetX, stroke.points[0].y - offsetY);
+            stroke.points.slice(1).forEach((point) => ctx.lineTo(point.x - offsetX, point.y - offsetY));
+        }
         ctx.stroke();
     });
 
@@ -661,8 +789,16 @@ export default function TaskView({
     const contentRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLDivElement | null>(null);
     const planeRef = useRef<HTMLDivElement | null>(null);
+    const penButtonRef = useRef<HTMLButtonElement | null>(null);
     const activeStrokeIdRef = useRef<string | null>(null);
     const activeStrokeStartRef = useRef<StrokePoint | null>(null);
+    const activeShapeEditRef = useRef<{
+        strokeId: string;
+        mode: "move" | "resize";
+        handle?: ResizeHandle;
+        startPoint: StrokePoint;
+        originalPoints: StrokePoint[];
+    } | null>(null);
     const activePanRef = useRef<{
         pointerId: number;
         clientX: number;
@@ -673,6 +809,9 @@ export default function TaskView({
         pageScrollElement: HTMLElement | null;
     } | null>(null);
     const [tool, setTool] = useState<AnnotationTool>("pen");
+    const [penMenuOpen, setPenMenuOpen] = useState(false);
+    const [penMenuPosition, setPenMenuPosition] = useState({ left: 0, top: 0 });
+    const [shapeTool, setShapeTool] = useState<AnnotationShape>("rectangle");
     const [color, setColor] = useState("#ef4444");
     const [width, setWidth] = useState(2);
     const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
@@ -680,6 +819,7 @@ export default function TaskView({
     const [teacherStrokes, setTeacherStrokes] = useState<AnnotationStroke[]>([]);
     const [activeStrokeId, setActiveStrokeId] = useState<string | null>(null);
     const [activeStrokeStart, setActiveStrokeStart] = useState<StrokePoint | null>(null);
+    const [selectedStrokeId, setSelectedStrokeId] = useState<string | null>(null);
     const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
     const [internalAnnotationPanelOpen, setInternalAnnotationPanelOpen] = useState(false);
     const [savingDrawing, setSavingDrawing] = useState(false);
@@ -734,6 +874,27 @@ export default function TaskView({
             setTool("pen");
         }
     }, [panelOpen, tool]);
+
+    const updatePenMenuPosition = useCallback(() => {
+        const button = penButtonRef.current;
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        setPenMenuPosition({
+            left: Math.max(12, Math.min(rect.left, window.innerWidth - 320)),
+            top: rect.bottom + 10,
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!penMenuOpen) return;
+        updatePenMenuPosition();
+        window.addEventListener("resize", updatePenMenuPosition);
+        window.addEventListener("scroll", updatePenMenuPosition, true);
+        return () => {
+            window.removeEventListener("resize", updatePenMenuPosition);
+            window.removeEventListener("scroll", updatePenMenuPosition, true);
+        };
+    }, [penMenuOpen, updatePenMenuPosition]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -892,6 +1053,7 @@ export default function TaskView({
                             id: stroke.id || `server-${index}-${Date.now()}`,
                             color: stroke.color || "#ef4444",
                             width: stroke.width || 2,
+                            kind: stroke.kind,
                             coordinate_space: stroke.coordinate_space,
                             board_width: stroke.board_width,
                             board_height: stroke.board_height,
@@ -1016,6 +1178,31 @@ export default function TaskView({
         setStrokes((current) => current.filter((stroke) => !isNearStroke(stroke, point, 12)));
     };
 
+    const findShapeAtPoint = (point: StrokePoint): AnnotationStroke | null => {
+        for (let index = strokes.length - 1; index >= 0; index -= 1) {
+            const stroke = strokes[index];
+            if (!isShapeStroke(stroke)) continue;
+            const bounds = getShapeBounds(stroke);
+            const pad = Math.max(8, stroke.width + 6);
+            if (
+                point.x >= bounds.x - pad
+                && point.x <= bounds.right + pad
+                && point.y >= bounds.y - pad
+                && point.y <= bounds.bottom + pad
+            ) {
+                return stroke;
+            }
+        }
+        return null;
+    };
+
+    const findResizeHandleAtPoint = (stroke: AnnotationStroke | undefined, point: StrokePoint): ResizeHandle | null => {
+        if (!stroke || !isShapeStroke(stroke)) return null;
+        const hitRadius = 12;
+        const hit = getResizeHandles(stroke).find((item) => Math.hypot(item.x - point.x, item.y - point.y) <= hitRadius);
+        return hit?.handle ?? null;
+    };
+
     const findVerticalScrollParent = (element: HTMLElement | null) => {
         let current = element?.parentElement ?? null;
         while (current) {
@@ -1068,6 +1255,7 @@ export default function TaskView({
 
         if (tool === "none") return;
         event.preventDefault();
+        setPenMenuOpen(false);
 
         const point = getPointerPoint(event);
         if (!point) return;
@@ -1077,6 +1265,25 @@ export default function TaskView({
             event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
             // Some browsers can reject capture when the pointer is already gone.
+        }
+
+        if (tool === "select") {
+            const selectedStroke = strokes.find((stroke) => stroke.id === selectedStrokeId);
+            const handle = findResizeHandleAtPoint(selectedStroke, point);
+            const targetStroke = handle && selectedStroke ? selectedStroke : findShapeAtPoint(point);
+            if (!targetStroke) {
+                setSelectedStrokeId(null);
+                return;
+            }
+            setSelectedStrokeId(targetStroke.id);
+            activeShapeEditRef.current = {
+                strokeId: targetStroke.id,
+                mode: handle ? "resize" : "move",
+                handle: handle ?? undefined,
+                startPoint: point,
+                originalPoints: targetStroke.points.map((strokePoint) => ({ ...strokePoint })),
+            };
+            return;
         }
 
         if (tool === "eraser") {
@@ -1089,7 +1296,8 @@ export default function TaskView({
         activeStrokeStartRef.current = point;
         setActiveStrokeId(id);
         setActiveStrokeStart(point);
-        setStrokes((current) => [...current, { id, color, width, points: [point] }]);
+        setStrokes((current) => [...current, { id, color, width, kind: tool === "shape" ? shapeTool : "pen", points: [point] }]);
+        if (tool === "shape") setSelectedStrokeId(id);
     };
 
     const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -1110,6 +1318,7 @@ export default function TaskView({
 
         if (tool === "none") return;
         if ((event.buttons & 1) !== 1) {
+            activeShapeEditRef.current = null;
             stopDrawing();
             return;
         }
@@ -1119,6 +1328,50 @@ export default function TaskView({
         if (!point) return;
         expandBoardNear(point);
 
+        const activeShapeEdit = activeShapeEditRef.current;
+        if (activeShapeEdit) {
+            const dx = point.x - activeShapeEdit.startPoint.x;
+            const dy = point.y - activeShapeEdit.startPoint.y;
+            setStrokes((current) => current.map((stroke) => {
+                if (stroke.id !== activeShapeEdit.strokeId) return stroke;
+                if (activeShapeEdit.mode === "move") {
+                    return {
+                        ...stroke,
+                        points: activeShapeEdit.originalPoints.map((originalPoint) => ({
+                            x: Math.max(0, Math.min(drawingSize.width, originalPoint.x + dx)),
+                            y: Math.max(0, Math.min(drawingSize.height, originalPoint.y + dy)),
+                        })),
+                    };
+                }
+                const bounds = activeShapeEdit.originalPoints.reduce(
+                    (acc, originalPoint) => ({
+                        minX: Math.min(acc.minX, originalPoint.x),
+                        minY: Math.min(acc.minY, originalPoint.y),
+                        maxX: Math.max(acc.maxX, originalPoint.x),
+                        maxY: Math.max(acc.maxY, originalPoint.y),
+                    }),
+                    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+                );
+                const minSize = 10;
+                let nextMinX = bounds.minX;
+                let nextMinY = bounds.minY;
+                let nextMaxX = bounds.maxX;
+                let nextMaxY = bounds.maxY;
+                if (activeShapeEdit.handle?.includes("w")) nextMinX = Math.min(point.x, bounds.maxX - minSize);
+                if (activeShapeEdit.handle?.includes("e")) nextMaxX = Math.max(point.x, bounds.minX + minSize);
+                if (activeShapeEdit.handle?.includes("n")) nextMinY = Math.min(point.y, bounds.maxY - minSize);
+                if (activeShapeEdit.handle?.includes("s")) nextMaxY = Math.max(point.y, bounds.minY + minSize);
+                return {
+                    ...stroke,
+                    points: [
+                        { x: Math.max(0, Math.min(drawingSize.width, nextMinX)), y: Math.max(0, Math.min(drawingSize.height, nextMinY)) },
+                        { x: Math.max(0, Math.min(drawingSize.width, nextMaxX)), y: Math.max(0, Math.min(drawingSize.height, nextMaxY)) },
+                    ],
+                };
+            }));
+            return;
+        }
+
         if (tool === "eraser") {
             if (event.buttons === 1) eraseAtPoint(point);
             return;
@@ -1127,11 +1380,11 @@ export default function TaskView({
         const currentStrokeId = activeStrokeIdRef.current;
         if (!currentStrokeId) return;
         const startPoint = activeStrokeStartRef.current;
-        setStrokes((current) => current.map((stroke) => (
-            stroke.id === currentStrokeId
-                ? { ...stroke, points: event.shiftKey && startPoint ? [startPoint, point] : [...stroke.points, point] }
-                : stroke
-        )));
+        setStrokes((current) => current.map((stroke) => {
+            if (stroke.id !== currentStrokeId) return stroke;
+            if (stroke.kind && stroke.kind !== "pen") return { ...stroke, points: startPoint ? [startPoint, point] : [point] };
+            return { ...stroke, points: event.shiftKey && startPoint ? [startPoint, point] : [...stroke.points, point] };
+        }));
     };
 
     function stopDrawing() {
@@ -1143,6 +1396,7 @@ export default function TaskView({
 
     function stopInteraction() {
         activePanRef.current = null;
+        activeShapeEditRef.current = null;
         setPanning(false);
         stopDrawing();
     }
@@ -1269,51 +1523,64 @@ export default function TaskView({
             className={`task-annotation-toolbar ${annotationToolbarHost ? "in-header" : ""}`}
             aria-label="Панель заметок"
         >
-            <button
-                type="button"
-                className={tool === "pen" ? "active" : ""}
-                onClick={() => setTool((current) => current === "pen" ? "none" : "pen")}
-                title="Карандаш"
-            >
-                <PenLine size={16} />
-            </button>
+            <div className="task-annotation-pen-control">
+                <button
+                    ref={penButtonRef}
+                    type="button"
+                    className={tool === "pen" ? "active" : ""}
+                    onClick={() => {
+                        setTool("pen");
+                        updatePenMenuPosition();
+                        setPenMenuOpen((open) => !open);
+                    }}
+                    title="Карандаш"
+                >
+                    <PenLine size={16} />
+                </button>
+            </div>
             <button
                 type="button"
                 className={tool === "eraser" ? "active" : ""}
-                onClick={() => setTool((current) => current === "eraser" ? "none" : "eraser")}
+                onClick={() => {
+                    setPenMenuOpen(false);
+                    setTool((current) => current === "eraser" ? "none" : "eraser");
+                }}
                 title="Ластик"
             >
                 <Eraser size={16} />
             </button>
             <span className="task-annotation-divider" />
-            <div className="task-annotation-swatches" aria-label="Цвет">
-                {NOTE_COLORS.map((noteColor) => (
+            <button
+                type="button"
+                className={tool === "select" ? "active" : ""}
+                onClick={() => {
+                    setPenMenuOpen(false);
+                    setTool((current) => current === "select" ? "none" : "select");
+                }}
+                title="Выбрать и переместить фигуру"
+            >
+                <MousePointer2 size={16} />
+            </button>
+            <div className="task-annotation-shapes" aria-label="Фигуры">
+                {SHAPE_TOOLS.map(({ shape, label }) => (
                     <button
-                        key={noteColor}
+                        key={shape}
                         type="button"
-                        className={color === noteColor ? "active" : ""}
-                        style={{ backgroundColor: noteColor }}
+                        className={tool === "shape" && shapeTool === shape ? "active" : ""}
                         onClick={() => {
-                            setColor(noteColor);
-                            setTool("pen");
+                            setPenMenuOpen(false);
+                            setShapeTool(shape);
+                            setTool("shape");
                         }}
-                        title={noteColor}
-                    />
-                ))}
-            </div>
-            <div className="task-annotation-widths" aria-label="Размер">
-                {NOTE_WIDTHS.map((noteWidth) => (
-                    <button
-                        key={noteWidth}
-                        type="button"
-                        className={width === noteWidth ? "active" : ""}
-                        onClick={() => {
-                            setWidth(noteWidth);
-                            setTool("pen");
-                        }}
-                        title={`${noteWidth}px`}
+                        title={label}
                     >
-                        <span style={{ width: noteWidth * 2, height: noteWidth }} />
+                        {shape === "circle" ? (
+                            <Circle size={16} />
+                        ) : shape === "rectangle" ? (
+                            <RectangleHorizontal size={16} />
+                        ) : (
+                            <Shapes size={16} />
+                        )}
                     </button>
                 ))}
             </div>
@@ -1385,7 +1652,6 @@ export default function TaskView({
                 ) : (
                     <Code2 size={16} />
                 )}
-                <span>Распознать</span>
             </button>
             <button
                 type="button"
@@ -1403,8 +1669,54 @@ export default function TaskView({
         </div>
     ) : null;
 
+    const penSettingsMenu = panelOpen && penMenuOpen && typeof document !== "undefined" ? createPortal(
+        <div
+            className="task-annotation-pen-menu"
+            role="menu"
+            aria-label="Настройки карандаша"
+            style={{
+                left: penMenuPosition.left,
+                top: penMenuPosition.top,
+            }}
+        >
+            <div className="task-annotation-swatches" aria-label="Цвет">
+                {NOTE_COLORS.map((noteColor) => (
+                    <button
+                        key={noteColor}
+                        type="button"
+                        className={color === noteColor ? "active" : ""}
+                        style={{ backgroundColor: noteColor }}
+                        onClick={() => {
+                            setColor(noteColor);
+                            setTool("pen");
+                        }}
+                        title={noteColor}
+                    />
+                ))}
+            </div>
+            <div className="task-annotation-widths" aria-label="Размер">
+                {NOTE_WIDTHS.map((noteWidth) => (
+                    <button
+                        key={noteWidth}
+                        type="button"
+                        className={width === noteWidth ? "active" : ""}
+                        onClick={() => {
+                            setWidth(noteWidth);
+                            setTool("pen");
+                        }}
+                        title={`${noteWidth}px`}
+                    >
+                        <span style={{ width: noteWidth * 2, height: noteWidth }} />
+                    </button>
+                ))}
+            </div>
+        </div>,
+        document.body,
+    ) : null;
+
     return (
         <div className={`task-view fade-in ${panelOpen ? "annotation-open" : ""}`}>
+            {penSettingsMenu}
             {title && <h1 className="task-title">{title}</h1>}
             {annotatable ? (
                 <div className="task-annotator">
@@ -1461,7 +1773,7 @@ export default function TaskView({
                                 {strokes.map((stroke) => (
                                     <path
                                         key={stroke.id}
-                                        d={pointsToPath(stroke.points)}
+                                        d={strokeToPath(stroke)}
                                         fill="none"
                                         stroke={stroke.color}
                                         strokeWidth={stroke.width}
@@ -1472,14 +1784,15 @@ export default function TaskView({
                                 {teacherStrokes.map((stroke) => (
                                     <path
                                         key={stroke.id}
-                                        d={pointsToPath(
-                                            stroke.coordinate_space === "board"
+                                        d={strokeToPath({
+                                            ...stroke,
+                                            points: stroke.coordinate_space === "board"
                                                 ? stroke.points
                                                 : stroke.points.map((point) => ({
                                                     x: (point.x / 100) * teacherStrokeBaseSize.width,
                                                     y: (point.y / 100) * teacherStrokeBaseSize.height,
-                                                }))
-                                        )}
+                                                })),
+                                        })}
                                         fill="none"
                                         stroke={stroke.color}
                                         strokeWidth={stroke.width}
@@ -1488,6 +1801,26 @@ export default function TaskView({
                                         pointerEvents="none"
                                     />
                                 ))}
+                                {(() => {
+                                    const selectedStroke = strokes.find((stroke) => stroke.id === selectedStrokeId);
+                                    if (!selectedStroke || !isShapeStroke(selectedStroke)) return null;
+                                    const bounds = getShapeBounds(selectedStroke);
+                                    return (
+                                        <g className="task-annotation-selection" pointerEvents="none">
+                                            <rect
+                                                x={bounds.x}
+                                                y={bounds.y}
+                                                width={bounds.width}
+                                                height={bounds.height}
+                                                rx={6}
+                                                ry={6}
+                                            />
+                                            {getResizeHandles(selectedStroke).map((item) => (
+                                                <circle key={item.handle} cx={item.x} cy={item.y} r={6} />
+                                            ))}
+                                        </g>
+                                    );
+                                })()}
                             </svg>
                         </div>
                     </div>
