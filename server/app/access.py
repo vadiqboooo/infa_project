@@ -12,6 +12,7 @@ from app.models.preparation_plan import PreparationPlan, UserPreparationPlan
 from app.models.task import Task
 from app.models.topic import Topic
 from app.models.user import User
+from app.models.group import user_groups
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class ContentAccess:
     subscription_plan: str
     course_type: str
     has_subscription: bool
+    has_group_access: bool
     trial_task_ids: set[int]
     can_access_all: bool = False
 
@@ -65,6 +67,10 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
     plan = active_subscription_plan(user)
     course_type = await active_content_course_type(user, db, plan)
     has_subscription = plan in {"summer", "year"}
+    groups_result = await db.execute(
+        select(user_groups.c.group_id).where(user_groups.c.user_id == user.id).limit(1)
+    )
+    has_group_access = groups_result.scalar_one_or_none() is not None
     trial_task_ids: set[int] = set()
 
     if not has_subscription:
@@ -101,12 +107,19 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
         subscription_plan=plan,
         course_type=course_type,
         has_subscription=has_subscription,
+        has_group_access=has_group_access,
         trial_task_ids=trial_task_ids,
         can_access_all=user.role == "admin" and course_type not in {"year", "summer"},
     )
 
 
-def can_access_task(task_id: int, access: ContentAccess) -> bool:
+def can_access_topic_group(topic: Topic, access: ContentAccess) -> bool:
+    return access.has_group_access and bool(getattr(topic, "open_to_groups", False))
+
+
+def can_access_task(task_id: int, access: ContentAccess, topic: Topic | None = None) -> bool:
+    if topic is not None and can_access_topic_group(topic, access):
+        return True
     return access.has_subscription or task_id in access.trial_task_ids
 
 
@@ -120,7 +133,7 @@ def can_access_topic_course(topic: Topic, access: ContentAccess) -> bool:
 def can_access_topic(topic: Topic, access: ContentAccess) -> bool:
     if not can_access_topic_course(topic, access):
         return False
-    if access.has_subscription:
+    if access.has_subscription or can_access_topic_group(topic, access):
         return True
     if topic.category in {"control", "variants", "math", "mock"}:
         return False
@@ -135,7 +148,7 @@ async def require_task_access(task_id: int, user: User, db: AsyncSession) -> Con
         .where(Task.id == task_id)
     )
     task = task_result.scalar_one_or_none()
-    if task is None or not can_access_topic_course(task.topic, access) or not can_access_task(task_id, access):
+    if task is None or not can_access_topic_course(task.topic, access) or not can_access_task(task_id, access, task.topic):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",
@@ -154,8 +167,8 @@ async def require_exam_access(user: User, db: AsyncSession) -> ContentAccess:
 
 
 async def require_exam_topic_access(topic: Topic, user: User, db: AsyncSession) -> ContentAccess:
-    access = await require_exam_access(user, db)
-    if not can_access_topic_course(topic, access):
+    access = await get_content_access(user, db)
+    if not can_access_topic_course(topic, access) or not (access.has_subscription or can_access_topic_group(topic, access)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",

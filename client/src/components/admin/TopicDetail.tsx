@@ -474,6 +474,15 @@ export function TopicDetail({
                 <option value="summer">Летний</option>
                 <option value="common">Общий</option>
               </select>
+              <label className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-100 rounded-lg text-xs font-bold text-teal-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(editingTopic.open_to_groups)}
+                  onChange={(e) => handleTopicFieldChange('open_to_groups', e.target.checked)}
+                  className="h-3.5 w-3.5 accent-teal-600"
+                />
+                Для групп
+              </label>
               <button
                 onClick={handleSaveTopicHeader}
                 className="p-1.5 bg-[#3F8C62] text-white rounded-lg hover:bg-[#357A54] transition-colors"
@@ -508,6 +517,12 @@ export function TopicDetail({
                 <Clock size={12} />
                 <span className="text-[10px] font-bold">{topic.time_limit_minutes || 60} мин</span>
               </div>
+              {topic.open_to_groups && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded-lg">
+                  <User size={12} />
+                  <span className="text-[10px] font-bold">Для групп</span>
+                </div>
+              )}
               <span
                 className={clsx(
                   'px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider',

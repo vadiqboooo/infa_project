@@ -210,7 +210,7 @@ async def get_navigation(
                 title=t.title,
                 status=progress_map.get(t.id, "not_started"),
                 has_solution=bool(t.solution_steps and len(t.solution_steps) > 0),
-                is_locked=not can_access_task(t.id, access),
+                is_locked=not can_access_task(t.id, access, topic),
                 is_trial=t.id in access.trial_task_ids,
             )
             for t in topic.tasks
@@ -238,6 +238,7 @@ async def get_navigation(
             max_score=len(exam.tasks) if exam and exam.tasks else len(topic.tasks),
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
+            open_to_groups=topic.open_to_groups,
             ege_number=topic.ege_number,
             ege_number_end=topic.ege_number_end,
             analysis_published=attempt_id in published_ids if attempt_id else False,

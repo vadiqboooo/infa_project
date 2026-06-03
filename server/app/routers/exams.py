@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.access import require_exam_access, require_exam_topic_access
+from app.access import require_exam_topic_access
 from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
@@ -44,6 +44,15 @@ async def _require_exam_course_access(exam: Exam, user: User, db: AsyncSession):
     if topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     await require_exam_topic_access(topic, user, db)
+
+
+async def _require_attempt_exam_access(attempt: ExamAttempt, user: User, db: AsyncSession) -> Exam:
+    exam_result = await db.execute(select(Exam).where(Exam.id == attempt.exam_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
+    await _require_exam_course_access(exam, user, db)
+    return exam
 
 
 @router.get("/by-topic/{topic_id}")
@@ -499,7 +508,7 @@ async def upload_task_file_solution(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -542,7 +551,7 @@ async def analyze_exam_attempt(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     results_json = attempt.results_json or {}
     task_results = results_json.get("task_results", [])
@@ -654,7 +663,7 @@ async def save_task_code_solution(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     code = body.get("code", "")
     results = dict(attempt.results_json or {})
@@ -692,7 +701,7 @@ async def check_task_code(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     # Find task result
     task_result_entry = None
@@ -791,7 +800,7 @@ async def submit_for_review(
     attempt = attempt_result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=404, detail="Finished attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     results = dict(attempt.results_json or {})
     results["submitted_for_review"] = True
@@ -814,9 +823,10 @@ async def get_published_analysis(
             ExamAttempt.user_id == user.id,
         )
     )
-    if attempt_res.scalar_one_or_none() is None:
+    attempt = attempt_res.scalar_one_or_none()
+    if attempt is None:
         raise HTTPException(status_code=404, detail="Attempt not found")
-    await require_exam_access(user, db)
+    await _require_attempt_exam_access(attempt, user, db)
 
     analysis_res = await db.execute(
         select(ExamAnalysis).where(

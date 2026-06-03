@@ -17,6 +17,7 @@ class TopicIn(BaseModel):
     course_type: str = "year"
     time_limit_minutes: int | None = 60
     is_mock: bool = False
+    open_to_groups: bool = False
     ege_number: int | None = None
     ege_number_end: int | None = None
     image_position: str | None = None  # 'cover' | 'left' | 'right' | 'background'
@@ -35,6 +36,7 @@ class TopicOut(BaseModel):
     task_count: int = 0
     time_limit_minutes: int | None = 60
     is_mock: bool = False
+    open_to_groups: bool = False
     ege_number: int | None = None
     ege_number_end: int | None = None
     has_image: bool = False

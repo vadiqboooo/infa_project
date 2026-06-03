@@ -67,6 +67,7 @@ export interface TopicNav {
     max_score?: number;
     time_limit_minutes?: number;
     is_mock: boolean;
+    open_to_groups?: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     analysis_published?: boolean;
@@ -248,6 +249,7 @@ export interface TopicAdmin {
     task_count: number;
     time_limit_minutes?: number;
     is_mock: boolean;
+    open_to_groups: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     has_image?: boolean;
@@ -290,6 +292,7 @@ export interface TopicIn {
     course_type: TopicCourseType;
     time_limit_minutes?: number;
     is_mock: boolean;
+    open_to_groups?: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     image_position?: TopicImagePosition | null;

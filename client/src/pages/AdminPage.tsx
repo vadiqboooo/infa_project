@@ -328,7 +328,8 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             subject: 'informatics',
             course_type: 'year',
             time_limit_minutes: 60,
-            is_mock: false
+            is_mock: false,
+            open_to_groups: false
         };
         await adminFetch("/admin/topics", apiKey, { 
             method: "POST", 
@@ -599,6 +600,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                     Пробник
                                                 </span>
                                             )}
+                                            {topic.open_to_groups && (
+                                                <span className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                    Для групп
+                                                </span>
+                                            )}
                                         </div>
 
                                         <div className="lg:text-center">
@@ -695,6 +701,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                     {topic.is_mock && (
                                                         <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
                                                             Пробник
+                                                        </span>
+                                                    )}
+                                                    {topic.open_to_groups && (
+                                                        <span className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                            Для групп
                                                         </span>
                                                     )}
                                                 </div>
@@ -1616,6 +1627,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             course_type: data.course_type ?? topic.course_type ?? 'year',
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
+            open_to_groups: data.open_to_groups !== undefined ? data.open_to_groups : topic.open_to_groups ?? false,
             ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,
             ege_number_end: data.ege_number_end !== undefined ? data.ege_number_end : topic.ege_number_end ?? null,
             image_position: data.image_position !== undefined ? data.image_position : topic.image_position ?? null,

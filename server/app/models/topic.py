@@ -16,6 +16,7 @@ class Topic(Base):
     subject: Mapped[str] = mapped_column(String(50), default="informatics", server_default="informatics", nullable=False)
     course_type: Mapped[str] = mapped_column(String(20), default="year", server_default="year", nullable=False)
     is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
+    open_to_groups: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ege_number_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
