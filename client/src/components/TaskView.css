@@ -685,12 +685,14 @@
 }
 
 .task-body .katex {
-    font-size: 1.15em;
-    color: #e2e8f0;
+    font-size: 1.22em;
+    color: #f8fafc;
+    font-weight: 600;
+    text-rendering: geometricPrecision;
 }
 
 .task-body .katex-html {
-    color: #e2e8f0;
+    color: #f8fafc;
 }
 
 .task-body .katex .sqrt > .root,
@@ -700,12 +702,28 @@
 
 .task-body .katex .sqrt .sqrt-line {
     border-top-color: currentColor;
+    border-top-width: 0.08em;
 }
 
 /* Inline формулы */
 .task-body p .katex {
-    font-size: 1.1em;
-    vertical-align: middle;
+    font-size: 1.28em;
+    line-height: 1;
+    vertical-align: -0.12em;
+}
+
+.task-body .katex .mord,
+.task-body .katex .mrel,
+.task-body .katex .mbin,
+.task-body .katex .mopen,
+.task-body .katex .mclose,
+.task-body .katex .mpunct {
+    color: inherit;
+}
+
+.task-body .katex .sizing,
+.task-body .katex .fontsize-ensurer {
+    color: inherit;
 }
 
 .light .task-title {
@@ -784,7 +802,7 @@
 
 .light .task-solve-page .task-body .katex,
 .light .task-solve-page .task-body .katex-html {
-    color: #e2e8f0;
+    color: #f8fafc;
 }
 
 .light .task-solve-page .task-view.annotation-open .task-body {
