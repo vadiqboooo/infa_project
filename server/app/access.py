@@ -109,7 +109,7 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
         has_subscription=has_subscription,
         has_group_access=has_group_access,
         trial_task_ids=trial_task_ids,
-        can_access_all=user.role == "admin" and course_type not in {"year", "summer"},
+        can_access_all=user.role == "admin",
     )
 
 
@@ -118,6 +118,8 @@ def can_access_topic_group(topic: Topic, access: ContentAccess) -> bool:
 
 
 def can_access_task(task_id: int, access: ContentAccess, topic: Topic | None = None) -> bool:
+    if access.can_access_all:
+        return True
     if topic is not None and can_access_topic_group(topic, access):
         return True
     return access.has_subscription or task_id in access.trial_task_ids
@@ -133,7 +135,7 @@ def can_access_topic_course(topic: Topic, access: ContentAccess) -> bool:
 def can_access_topic(topic: Topic, access: ContentAccess) -> bool:
     if not can_access_topic_course(topic, access):
         return False
-    if access.has_subscription or can_access_topic_group(topic, access):
+    if access.can_access_all or access.has_subscription or can_access_topic_group(topic, access):
         return True
     if topic.category in {"control", "variants", "math", "mock"}:
         return False
@@ -158,7 +160,7 @@ async def require_task_access(task_id: int, user: User, db: AsyncSession) -> Con
 
 async def require_exam_access(user: User, db: AsyncSession) -> ContentAccess:
     access = await get_content_access(user, db)
-    if not access.has_subscription:
+    if not access.can_access_all and not access.has_subscription:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",
@@ -168,7 +170,9 @@ async def require_exam_access(user: User, db: AsyncSession) -> ContentAccess:
 
 async def require_exam_topic_access(topic: Topic, user: User, db: AsyncSession) -> ContentAccess:
     access = await get_content_access(user, db)
-    if not can_access_topic_course(topic, access) or not (access.has_subscription or can_access_topic_group(topic, access)):
+    if not can_access_topic_course(topic, access) or not (
+        access.can_access_all or access.has_subscription or can_access_topic_group(topic, access)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Subscription required",

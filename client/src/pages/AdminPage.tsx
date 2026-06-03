@@ -346,6 +346,31 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         await loadData();
     };
 
+    const handleToggleTopicGroupAccess = async (topic: TopicAdmin) => {
+        const body: TopicIn = {
+            title: topic.title,
+            order_index: topic.order_index,
+            category: topic.category,
+            subject: topic.subject ?? 'informatics',
+            course_type: topic.course_type ?? 'year',
+            time_limit_minutes: topic.time_limit_minutes,
+            is_mock: topic.is_mock,
+            open_to_groups: !topic.open_to_groups,
+            ege_number: topic.ege_number ?? null,
+            ege_number_end: topic.ege_number_end ?? null,
+            image_position: topic.image_position ?? null,
+            image_size: topic.image_size ?? null,
+            character_url: topic.character_url ?? null,
+            background_url: topic.background_url ?? null,
+        };
+        await adminFetch(`/admin/topics/${topic.id}`, apiKey, {
+            method: "PUT",
+            body: JSON.stringify(body),
+        });
+        queryClient.invalidateQueries({ queryKey: ["navigation"] });
+        await loadData();
+    };
+
     const handleImportVariant = async (
         topic_title: string,
         variant_id: number,
@@ -545,7 +570,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                         className="flex-1 overflow-y-auto"
                     >
                         <div className="rounded-2xl bg-gradient-to-br from-violet-100 via-sky-100 to-emerald-50 p-3 shadow-sm">
-                            <div className="hidden lg:grid grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_120px] gap-4 px-4 pb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                            <div className="hidden lg:grid grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_140px] gap-4 px-4 pb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">
                                 <span className="text-center">№ задания</span>
                                 <span>Топик</span>
                                 <span>Категория</span>
@@ -562,7 +587,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                     <div
                                         key={topic.id}
                                         onClick={() => navigate(`topics/${topic.id}`)}
-                                        className="grid grid-cols-1 lg:grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_120px] gap-4 items-center rounded-xl bg-white/90 border border-white/80 px-4 py-3 shadow-sm cursor-pointer hover:bg-white transition-colors group"
+                                        className="grid grid-cols-1 lg:grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_140px] gap-4 items-center rounded-xl bg-white/90 border border-white/80 px-4 py-3 shadow-sm cursor-pointer hover:bg-white transition-colors group"
                                     >
                                         <div className="lg:text-center">
                                             <span className={clsx(
@@ -614,6 +639,21 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                         </div>
 
                                         <div className="flex items-center justify-start lg:justify-end gap-1.5">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggleTopicGroupAccess(topic);
+                                                }}
+                                                title={topic.open_to_groups ? "Закрыть для групп" : "Открыть для групп"}
+                                                className={clsx(
+                                                    "p-2 rounded-lg transition-all",
+                                                    topic.open_to_groups
+                                                        ? "text-teal-700 bg-teal-50 hover:bg-teal-100"
+                                                        : "text-gray-400 hover:text-teal-700 hover:bg-teal-50"
+                                                )}
+                                            >
+                                                <Users size={16} />
+                                            </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();

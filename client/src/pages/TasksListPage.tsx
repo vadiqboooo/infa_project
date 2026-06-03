@@ -74,8 +74,11 @@ export function TasksListPage() {
         // Topic-level explicit range (ege_number_end) takes priority
         const explicitEnd = tut?.ege_number_end ?? hw?.ege_number_end ?? null;
         // Otherwise compute composite range from tasks' sub_tasks
+        const topicCandidates = [...tutTopics, ...hwTopics];
         const allTasks = [...tutTopics, ...hwTopics].flatMap(t => t.tasks);
-        const isLocked = activeSubject === 'math' || (allTasks.length > 0 && allTasks.every(t => t.is_locked));
+        const isLocked = topicCandidates.length > 0
+          ? topicCandidates.every(t => t.is_locked)
+          : allTasks.length > 0 && allTasks.every(t => t.is_locked);
         const isTrial = allTasks.some(t => t.is_trial);
         const taskMax = allTasks.reduce<number | null>((acc, t) => {
           const m = (t as any).ege_number_max as number | null | undefined;
