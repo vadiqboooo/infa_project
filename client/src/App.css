@@ -210,6 +210,49 @@
   color: #13231b !important;
 }
 
+.light .profile-modal {
+  border-color: rgba(57, 79, 66, 0.16) !important;
+  background: #ffffff !important;
+  color: #2d3e34 !important;
+  box-shadow: 0 28px 80px rgba(22, 52, 35, 0.18) !important;
+}
+
+.light .profile-modal .text-white {
+  color: #13231b !important;
+}
+
+.light .profile-modal .text-emerald-300,
+.light .profile-modal .text-emerald-200 {
+  color: #137a4b !important;
+}
+
+.light .profile-modal .text-red-100 {
+  color: #b83b3b !important;
+}
+
+.light .profile-modal .text-amber-100 {
+  color: #8a5a10 !important;
+}
+
+.light .profile-modal input {
+  border-color: rgba(57, 79, 66, 0.18) !important;
+  background: #f8fcf9 !important;
+  color: #13231b !important;
+}
+
+.light .profile-modal input::placeholder {
+  color: #7a8b80 !important;
+}
+
+.light .profile-modal input:focus {
+  border-color: rgba(16, 185, 129, 0.62) !important;
+}
+
+.light .profile-modal .bg-emerald-500.text-white,
+.light .profile-modal .bg-emerald-400.text-white {
+  color: #ffffff !important;
+}
+
 .light .theme-toggle {
   border-color: rgba(57, 79, 66, 0.14);
   background: rgba(255, 255, 255, 0.76);
@@ -519,31 +562,31 @@
 }
 
 .light .task-solve-page {
-  background: #030a12 !important;
-  color: #e5edf5;
+  background: #f4faf6 !important;
+  color: #2d3e34;
 }
 
 .light .task-solve-page .task-workspace-body {
   background:
-    radial-gradient(circle at 80% 8%, rgba(16, 185, 129, 0.16), transparent 34%),
-    linear-gradient(180deg, #061018, #03080f) !important;
+    radial-gradient(circle at 80% 8%, rgba(33, 182, 111, 0.10), transparent 34%),
+    linear-gradient(180deg, #f8fcf9, #eef7f1) !important;
 }
 
 .light .task-solve-page > .relative,
 .light .task-solve-page .bg-\[\#07111D\]\/92,
 .light .task-solve-page .bg-\[\#07111D\]\/72,
 .light .task-solve-page .bg-\[\#07111D\] {
-  border-color: rgba(255, 255, 255, 0.10) !important;
-  background: rgba(7, 17, 29, 0.92) !important;
-  color: #e5edf5 !important;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34) !important;
+  border-color: rgba(57, 79, 66, 0.14) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: #13231b !important;
+  box-shadow: 0 18px 48px rgba(22, 52, 35, 0.08) !important;
 }
 
 .light .task-solve-page .bg-\[\#0A1522\] {
-  border-color: rgba(255, 255, 255, 0.10) !important;
-  background: #0a1522 !important;
-  color: #e5edf5 !important;
-  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(57, 79, 66, 0.14) !important;
+  background: #ffffff !important;
+  color: #13231b !important;
+  box-shadow: 0 16px 40px rgba(22, 52, 35, 0.08) !important;
 }
 
 .light .task-solve-page .bg-\[radial-gradient\(circle_at_50\%_0\%\,rgba\(16\,185\,129\,0\.10\)\,transparent_34\%\)\,linear-gradient\(180deg\,rgba\(3\,10\,18\,0\)\,rgba\(3\,10\,18\,0\.96\)\)\] {
@@ -561,35 +604,43 @@
 .light .task-solve-page .text-slate-100,
 .light .task-solve-page .text-slate-200,
 .light .task-solve-page .text-slate-300 {
-  color: #e5edf5 !important;
+  color: #13231b !important;
 }
 
 .light .task-solve-page .text-slate-400,
 .light .task-solve-page .text-slate-500,
 .light .task-solve-page .text-slate-600,
 .light .task-solve-page .text-slate-700 {
-  color: #94a3b8 !important;
+  color: #607064 !important;
 }
 
 .light .task-solve-page .text-emerald-100,
 .light .task-solve-page .text-emerald-200 {
-  color: #a7f3d0 !important;
+  color: #137a4b !important;
 }
 
 .light .task-solve-page .text-violet-200 {
-  color: #ddd6fe !important;
+  color: #6653bd !important;
 }
 
 .light .task-solve-page .text-amber-200 {
-  color: #fde68a !important;
+  color: #9a6512 !important;
 }
 
 .light .task-solve-page .text-sky-200 {
-  color: #bae6fd !important;
+  color: #176b8c !important;
 }
 
 .light .task-solve-page .text-red-200 {
-  color: #fecaca !important;
+  color: #b83b3b !important;
+}
+
+.light .task-solve-page .text-white.bg-\[\#4e8c5a\],
+.light .task-solve-page .text-white.bg-\[\#3F8C62\],
+.light .task-solve-page .text-white.bg-violet-600,
+.light .task-solve-page .text-white.bg-red-500,
+.light .task-solve-page .text-white.bg-red-600 {
+  color: #ffffff !important;
 }
 
 .light .task-solve-page .bg-white\/\[0\.025\],
@@ -597,46 +648,46 @@
 .light .task-solve-page .bg-white\/\[0\.05\],
 .light .task-solve-page .bg-white\/\[0\.06\],
 .light .task-solve-page .bg-white\/10 {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(35, 71, 49, 0.07) !important;
 }
 
 .light .task-solve-page .hover\:bg-white\/\[0\.06\]:hover,
 .light .task-solve-page .hover\:bg-white\/\[0\.10\]:hover {
-  background-color: rgba(255, 255, 255, 0.10) !important;
+  background-color: rgba(35, 71, 49, 0.11) !important;
 }
 
 .light .task-solve-page .prose-invert {
-  --tw-prose-body: #dbe5f1;
-  --tw-prose-headings: #f8fafc;
-  --tw-prose-lead: #dbe5f1;
-  --tw-prose-links: #86efac;
-  --tw-prose-bold: #f8fafc;
-  --tw-prose-counters: #94a3b8;
-  --tw-prose-bullets: #94a3b8;
-  --tw-prose-hr: rgba(255, 255, 255, 0.10);
-  --tw-prose-quotes: #f8fafc;
-  --tw-prose-quote-borders: rgba(255, 255, 255, 0.10);
-  --tw-prose-captions: #94a3b8;
-  --tw-prose-code: #86efac;
-  --tw-prose-pre-code: #e2e8f0;
-  --tw-prose-pre-bg: rgba(255, 255, 255, 0.06);
-  --tw-prose-th-borders: rgba(255, 255, 255, 0.12);
-  --tw-prose-td-borders: rgba(255, 255, 255, 0.12);
+  --tw-prose-body: #2d3e34;
+  --tw-prose-headings: #13231b;
+  --tw-prose-lead: #4f6256;
+  --tw-prose-links: #137a4b;
+  --tw-prose-bold: #13231b;
+  --tw-prose-counters: #607064;
+  --tw-prose-bullets: #607064;
+  --tw-prose-hr: rgba(57, 79, 66, 0.14);
+  --tw-prose-quotes: #13231b;
+  --tw-prose-quote-borders: rgba(57, 79, 66, 0.18);
+  --tw-prose-captions: #607064;
+  --tw-prose-code: #24734a;
+  --tw-prose-pre-code: #2d3e34;
+  --tw-prose-pre-bg: rgba(35, 71, 49, 0.07);
+  --tw-prose-th-borders: rgba(57, 79, 66, 0.16);
+  --tw-prose-td-borders: rgba(57, 79, 66, 0.16);
 }
 
 .light .task-solve-page .ring-\[\#0A1522\],
 .light .task-solve-page .ring-2.ring-\[\#0A1522\] {
-  --tw-ring-color: #0a1522 !important;
+  --tw-ring-color: #ffffff !important;
 }
 
 .light .task-solve-page .border-\[\#07111D\] {
-  border-color: #07111d !important;
+  border-color: rgba(57, 79, 66, 0.16) !important;
 }
 
 .light .task-solve-page input,
 .light .task-solve-page textarea,
 .light .task-solve-page select {
-  color: #e5edf5 !important;
+  color: #13231b !important;
 }
 
 .light .input,

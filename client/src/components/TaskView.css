@@ -771,45 +771,45 @@
 }
 
 .light .task-solve-page .task-title {
-    color: #f8fafc;
+    color: #13231b;
 }
 
 .light .task-solve-page .task-body {
-    color: #dbe5f1;
+    color: #2d3e34;
 }
 
 .light .task-solve-page .task-body strong,
 .light .task-solve-page .task-body b {
-    color: #f8fafc;
+    color: #13231b;
 }
 
 .light .task-solve-page .task-body em,
 .light .task-solve-page .task-body i {
-    color: #cbd5e1;
+    color: #4f6256;
 }
 
 .light .task-solve-page .task-body code,
 .light .task-solve-page .task-body pre {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.10);
-    color: #86efac;
+    background: rgba(35, 71, 49, 0.07);
+    border-color: rgba(57, 79, 66, 0.14);
+    color: #24734a;
 }
 
 .light .task-solve-page .task-body img {
-    border-color: rgba(255, 255, 255, 0.10);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
+    border-color: rgba(57, 79, 66, 0.14);
+    box-shadow: 0 8px 24px rgba(22, 52, 35, 0.08);
 }
 
 .light .task-solve-page .task-body .katex,
 .light .task-solve-page .task-body .katex-html {
-    color: #f8fafc;
+    color: #13231b;
 }
 
 .light .task-solve-page .task-view.annotation-open .task-body {
-    border-color: rgba(148, 163, 184, 0.18);
-    background: rgba(7, 17, 29, 0.98);
-    color: #f8fafc;
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+    border-color: rgba(57, 79, 66, 0.16);
+    background: rgba(255, 255, 255, 0.96);
+    color: #13231b;
+    box-shadow: 0 14px 30px rgba(22, 52, 35, 0.10);
 }
 
 .dark .task-body .task-inline-svg [stroke="#000"],
