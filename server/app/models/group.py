@@ -20,3 +20,10 @@ class Group(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     color: Mapped[str] = mapped_column(String(20), nullable=False, default="#3F8C62")
+
+    lessons = relationship(
+        "GroupLesson",
+        back_populates="group",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

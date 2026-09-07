@@ -11,12 +11,16 @@ import {
     Settings,
     LogOut,
     ShieldAlert,
-    CreditCard,
     Pencil,
     X,
     Check,
     ClipboardList,
     BarChart3,
+    CalendarDays,
+    ChevronDown,
+    ChevronRight,
+    Eye,
+    EyeOff,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { Routes, Route, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -35,7 +39,6 @@ import type {
     PreparationPlan,
     PreparationPlanBlock,
     AnalyticsSummary,
-    AdminTestCheckoutResponse,
 } from "../api/types";
 import { TopicDetail } from "../components/admin/TopicDetail";
 import { StudentsTable } from "../components/admin/StudentsTable";
@@ -44,6 +47,7 @@ import { TopicStats } from "../components/admin/TopicStats";
 import { StudentTaskSolutionReviewModal } from "../components/admin/StudentTaskSolutionReviewModal";
 import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import AdminImportPdfPage from "./AdminImportPdfPage";
+import { GroupPlanEditor } from "../components/admin/GroupPlanEditor";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
@@ -56,6 +60,7 @@ type AdminDashboardState = {
     activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics';
     search?: string;
     filter?: FilterCategory;
+    egeNumberFilter?: string;
     topicsScrollTop?: number;
     studentsScrollTop?: number;
 };
@@ -244,16 +249,22 @@ export default function AdminPage() {
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
     const savedState = readAdminDashboardState();
-    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics'>(savedState.activeTab ?? 'topics');
+    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'metrics'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
-    const [plans, setPlans] = useState<PreparationPlan[]>([]);
     const [metrics, setMetrics] = useState<AnalyticsSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState(savedState.search ?? "");
     const [filter, setFilter] = useState<FilterCategory>(normalizeTopicFilter(savedState.filter));
+    const [egeNumberFilter, setEgeNumberFilter] = useState(savedState.egeNumberFilter ?? 'all');
     const [showImport, setShowImport] = useState(false);
+    const [showCreateTopic, setShowCreateTopic] = useState(false);
+    const [newTopicTitle, setNewTopicTitle] = useState("");
+    const [newTopicSubject, setNewTopicSubject] = useState<'informatics' | 'math'>('informatics');
+    const [newTopicExamType, setNewTopicExamType] = useState<'ege' | 'oge'>('ege');
+    const [createTopicError, setCreateTopicError] = useState("");
+    const [creatingTopic, setCreatingTopic] = useState(false);
     const topicsScrollRef = useRef<HTMLDivElement | null>(null);
     const studentsScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -263,17 +274,15 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [t, s, g, p, m] = await Promise.all([
+            const [t, s, g, m] = await Promise.all([
                 adminFetch<TopicAdmin[]>("/admin/topics", apiKey),
                 adminFetch<StudentOut[]>("/admin/students", apiKey),
                 adminFetch<GroupOut[]>("/admin/groups", apiKey),
-                adminFetch<PreparationPlan[]>("/admin/preparation-plans", apiKey),
                 adminFetch<AnalyticsSummary>("/analytics/admin/summary?days=14", apiKey).catch(() => null),
             ]);
             setTopics(t);
             setStudents(s);
             setGroups(g);
-            setPlans(p);
             setMetrics(m);
         } finally {
             setLoading(false);
@@ -285,8 +294,14 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     }, [loadData]);
 
     useEffect(() => {
-        saveAdminDashboardState({ activeTab, search, filter });
-    }, [activeTab, search, filter]);
+        saveAdminDashboardState({ activeTab, search, filter, egeNumberFilter });
+    }, [activeTab, search, filter, egeNumberFilter]);
+
+    const egeNumberOptions = useMemo(() => (
+        Array.from(new Set(topics.map(topicEgeLabel)))
+            .filter((label) => label !== '—')
+            .sort((a, b) => a.localeCompare(b, 'ru-RU', { numeric: true }))
+    ), [topics]);
 
     const filteredTopics = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -297,20 +312,21 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 || (filter === 'math' && (t.subject === 'math' || t.category === 'math'))
                 || t.category === filter;
             const egeLabel = topicEgeLabel(t).toLowerCase();
+            const matchesEgeNumber = egeNumberFilter === 'all' || topicEgeLabel(t) === egeNumberFilter;
             const matchesSearch =
                 query === ''
                 || t.title.toLowerCase().includes(query)
                 || egeLabel.includes(query)
                 || (t.ege_number != null && String(t.ege_number).includes(query))
                 || (t.ege_number_end != null && String(t.ege_number_end).includes(query));
-            return matchesFilter && matchesSearch;
+            return matchesFilter && matchesEgeNumber && matchesSearch;
         });
-    }, [topics, filter, search]);
+    }, [topics, filter, egeNumberFilter, search]);
 
     useEffect(() => {
         if (loading) return;
         const state = readAdminDashboardState();
-        if (activeTab === 'subscriptions' || activeTab === 'plans' || activeTab === 'metrics') return;
+        if (activeTab === 'subscriptions' || activeTab === 'metrics') return;
         const scrollTop = activeTab === 'students' ? state.studentsScrollTop : state.topicsScrollTop;
         requestAnimationFrame(() => {
             const target = activeTab === 'students' ? studentsScrollRef.current : topicsScrollRef.current;
@@ -318,25 +334,42 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         });
     }, [activeTab, loading, students.length, filteredTopics.length]);
 
-    const handleCreateTopic = async () => {
-        const title = prompt("Введите название новой темы");
-        if (!title) return;
-        const body: TopicIn = { 
-            title, 
-            order_index: topics.length, 
-            category: 'tutorial' as TopicCategory,
-            subject: 'informatics',
-            course_type: 'year',
-            time_limit_minutes: 60,
-            is_mock: false,
-            open_to_groups: false
-        };
-        await adminFetch("/admin/topics", apiKey, { 
-            method: "POST", 
-            body: JSON.stringify(body) 
-        });
-        queryClient.invalidateQueries({ queryKey: ["navigation"] });
-        await loadData();
+    const handleCreateTopic = async (event: React.FormEvent) => {
+        event.preventDefault();
+        const title = newTopicTitle.trim();
+        if (!title) {
+            setCreateTopicError("Введите название топика");
+            return;
+        }
+
+        try {
+            setCreatingTopic(true);
+            setCreateTopicError("");
+            const body: TopicIn = {
+                title,
+                order_index: topics.length,
+                category: 'tutorial' as TopicCategory,
+                subject: newTopicSubject,
+                exam_type: newTopicExamType,
+                course_type: 'year',
+                time_limit_minutes: 60,
+                is_mock: false,
+                open_to_groups: false,
+                show_in_tasks: true,
+            };
+            const createdTopic = await adminFetch<TopicAdmin>("/admin/topics", apiKey, {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            setShowCreateTopic(false);
+            setNewTopicTitle("");
+            queryClient.invalidateQueries({ queryKey: ["navigation"] });
+            navigate(`/admin/topics/${createdTopic.id}`);
+        } catch (error) {
+            setCreateTopicError(error instanceof Error ? error.message : "Не удалось создать топик");
+        } finally {
+            setCreatingTopic(false);
+        }
     };
 
     const handleDeleteTopic = async (id: number) => {
@@ -352,10 +385,39 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             order_index: topic.order_index,
             category: topic.category,
             subject: topic.subject ?? 'informatics',
+            exam_type: topic.exam_type ?? 'ege',
             course_type: topic.course_type ?? 'year',
             time_limit_minutes: topic.time_limit_minutes,
             is_mock: topic.is_mock,
             open_to_groups: !topic.open_to_groups,
+            show_in_tasks: topic.show_in_tasks ?? true,
+            ege_number: topic.ege_number ?? null,
+            ege_number_end: topic.ege_number_end ?? null,
+            image_position: topic.image_position ?? null,
+            image_size: topic.image_size ?? null,
+            character_url: topic.character_url ?? null,
+            background_url: topic.background_url ?? null,
+        };
+        await adminFetch(`/admin/topics/${topic.id}`, apiKey, {
+            method: "PUT",
+            body: JSON.stringify(body),
+        });
+        queryClient.invalidateQueries({ queryKey: ["navigation"] });
+        await loadData();
+    };
+
+    const handleToggleTopicTasksVisibility = async (topic: TopicAdmin) => {
+        const body: TopicIn = {
+            title: topic.title,
+            order_index: topic.order_index,
+            category: topic.category,
+            subject: topic.subject ?? 'informatics',
+            exam_type: topic.exam_type ?? 'ege',
+            course_type: topic.course_type ?? 'year',
+            time_limit_minutes: topic.time_limit_minutes,
+            is_mock: topic.is_mock,
+            open_to_groups: topic.open_to_groups,
+            show_in_tasks: !(topic.show_in_tasks ?? true),
             ege_number: topic.ege_number ?? null,
             ege_number_end: topic.ege_number_end ?? null,
             image_position: topic.image_position ?? null,
@@ -439,7 +501,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     };
 
     return (
-        <div className="p-8 flex flex-col h-full min-h-0">
+        <div className="admin-dashboard flex h-full min-h-0 flex-col p-4 md:p-6">
             <div className="hidden">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Админ-панель</h1>
@@ -455,11 +517,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-1 mb-8 bg-gray-200/50 rounded-xl p-1 w-fit">
+            <div className="admin-tabs mb-5 flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-gray-200/50 p-1">
                 <button
                     onClick={() => setActiveTab('topics')}
                     className={clsx(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
                         activeTab === 'topics' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                     )}
                 >
@@ -469,7 +531,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 <button
                     onClick={() => setActiveTab('students')}
                     className={clsx(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
                         activeTab === 'students' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                     )}
                 >
@@ -479,27 +541,17 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 <button
                     onClick={() => setActiveTab('subscriptions')}
                     className={clsx(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
                         activeTab === 'subscriptions' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                     )}
                 >
-                    <CreditCard size={16} />
-                    Подписка
-                </button>
-                <button
-                    onClick={() => setActiveTab('plans')}
-                    className={clsx(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
-                        activeTab === 'plans' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                    )}
-                >
-                    <ClipboardList size={16} />
-                    Планы
+                    <Users size={16} />
+                    Группы
                 </button>
                 <button
                     onClick={() => setActiveTab('metrics')}
                     className={clsx(
-                        'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all',
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
                         activeTab === 'metrics' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                     )}
                 >
@@ -511,7 +563,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             {activeTab === "topics" ? (
                 <div className="flex-1 flex flex-col min-h-0">
                     {/* Filters Row */}
-                    <div className="flex items-center gap-3 mb-6">
+                    <div className="mb-6 flex flex-wrap items-center gap-3">
                         <div className="relative flex-1 max-w-sm">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                             <input
@@ -523,19 +575,20 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                             />
                         </div>
 
-                        <div className="flex bg-gray-200/50 rounded-xl p-1">
-                            {FILTER_OPTIONS.map((opt) => (
-                                <button
-                                    key={opt.key}
-                                    onClick={() => setFilter(opt.key)}
-                                    className={clsx(
-                                        'px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
-                                        filter === opt.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                                    )}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
+                        <div className="flex w-full gap-2 lg:hidden">
+                            <label className="relative min-w-0 flex-1">
+                                <select value={egeNumberFilter} onChange={(event) => setEgeNumberFilter(event.target.value)} className="admin-table-filter h-10 w-full px-3 pr-8 text-xs">
+                                    <option value="all">Все номера</option>
+                                    {egeNumberOptions.map((number) => <option key={number} value={number}>№ {number}</option>)}
+                                </select>
+                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            </label>
+                            <label className="relative min-w-0 flex-1">
+                                <select value={filter} onChange={(event) => setFilter(event.target.value as FilterCategory)} className="admin-table-filter h-10 w-full px-3 pr-8 text-xs">
+                                    {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.key === 'все' ? 'Все категории' : option.label}</option>)}
+                                </select>
+                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            </label>
                         </div>
 
                         <div className="ml-auto flex items-center gap-2">
@@ -554,7 +607,10 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                 PDF
                             </button>
                             <button
-                                onClick={handleCreateTopic}
+                                onClick={() => {
+                                    setCreateTopicError("");
+                                    setShowCreateTopic(true);
+                                }}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
                             >
                                 <Plus size={16} />
@@ -571,9 +627,30 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     >
                         <div className="rounded-2xl bg-gradient-to-br from-violet-100 via-sky-100 to-emerald-50 p-3 shadow-sm">
                             <div className="hidden lg:grid grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_140px] gap-4 px-4 pb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                                <span className="text-center">№ задания</span>
+                                <label className="relative block">
+                                    <span className="sr-only">Фильтр по номеру задания</span>
+                                    <select
+                                        value={egeNumberFilter}
+                                        onChange={(event) => setEgeNumberFilter(event.target.value)}
+                                        className="admin-table-filter h-8 w-full px-2 pr-7 text-center text-[11px]"
+                                    >
+                                        <option value="all">Все номера</option>
+                                        {egeNumberOptions.map((number) => <option key={number} value={number}>№ {number}</option>)}
+                                    </select>
+                                    <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                </label>
                                 <span>Топик</span>
-                                <span>Категория</span>
+                                <label className="relative block">
+                                    <span className="sr-only">Фильтр по категории</span>
+                                    <select
+                                        value={filter}
+                                        onChange={(event) => setFilter(event.target.value as FilterCategory)}
+                                        className="admin-table-filter h-8 w-full px-2 pr-7 text-[11px]"
+                                    >
+                                        {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.key === 'все' ? 'Все категории' : option.label}</option>)}
+                                    </select>
+                                    <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                </label>
                                 <span className="text-center">Задач</span>
                                 <span className="text-right">Управление</span>
                             </div>
@@ -630,6 +707,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                                     Для групп
                                                 </span>
                                             )}
+                                            {topic.show_in_tasks === false && (
+                                                <span className="px-2.5 py-1 bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
+                                                    Скрыт из заданий
+                                                </span>
+                                            )}
                                         </div>
 
                                         <div className="lg:text-center">
@@ -639,6 +721,21 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                         </div>
 
                                         <div className="flex items-center justify-start lg:justify-end gap-1.5">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggleTopicTasksVisibility(topic);
+                                                }}
+                                                title={topic.show_in_tasks === false ? "Показать во вкладке «Задания»" : "Скрыть из вкладки «Задания»"}
+                                                className={clsx(
+                                                    "p-2 rounded-lg transition-all",
+                                                    topic.show_in_tasks === false
+                                                        ? "text-gray-600 bg-gray-100 hover:bg-gray-200"
+                                                        : "text-[#3F8C62] bg-emerald-50 hover:bg-emerald-100"
+                                                )}
+                                            >
+                                                {topic.show_in_tasks === false ? <EyeOff size={16} /> : <Eye size={16} />}
+                                            </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -806,11 +903,11 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     />
                 </div>
             ) : activeTab === "subscriptions" ? (
-                <SubscriptionsPanel groups={groups} apiKey={apiKey} onRefresh={loadData} />
+                <SubscriptionsPanel groups={groups} students={students} apiKey={apiKey} onRefresh={loadData} />
             ) : activeTab === "metrics" ? (
                 <MetricsPanel metrics={metrics} loading={loading && !metrics} />
             ) : (
-                <PlansPanel plans={plans} topics={topics} apiKey={apiKey} onRefresh={loadData} />
+                <MetricsPanel metrics={metrics} loading={loading && !metrics} />
             )}
 
             {showImport && (
@@ -820,7 +917,144 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 />
             )}
 
+            {showCreateTopic && (
+                <CreateTopicDialog
+                    title={newTopicTitle}
+                    subject={newTopicSubject}
+                    examType={newTopicExamType}
+                    error={createTopicError}
+                    submitting={creatingTopic}
+                    onTitleChange={setNewTopicTitle}
+                    onSubjectChange={setNewTopicSubject}
+                    onExamTypeChange={setNewTopicExamType}
+                    onClose={() => setShowCreateTopic(false)}
+                    onSubmit={handleCreateTopic}
+                />
+            )}
 
+        </div>
+    );
+}
+
+function CreateTopicDialog({
+    title,
+    subject,
+    examType,
+    error,
+    submitting,
+    onTitleChange,
+    onSubjectChange,
+    onExamTypeChange,
+    onClose,
+    onSubmit,
+}: {
+    title: string;
+    subject: 'informatics' | 'math';
+    examType: 'ege' | 'oge';
+    error: string;
+    submitting: boolean;
+    onTitleChange: (value: string) => void;
+    onSubjectChange: (value: 'informatics' | 'math') => void;
+    onExamTypeChange: (value: 'ege' | 'oge') => void;
+    onClose: () => void;
+    onSubmit: (event: React.FormEvent) => void;
+}) {
+    return (
+        <div
+            className="admin-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            role="presentation"
+            onMouseDown={(event) => {
+                if (event.target === event.currentTarget && !submitting) onClose();
+            }}
+        >
+            <form
+                onSubmit={onSubmit}
+                className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-topic-title"
+            >
+                <div className="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                        <h2 id="create-topic-title" className="text-xl font-bold text-gray-900">Новый топик</h2>
+                        <p className="mt-1 text-sm text-gray-500">Укажите основные параметры. Задания можно добавить на следующем шаге.</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={submitting}
+                        className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                        aria-label="Закрыть"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <label className="block">
+                        <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Название топика</span>
+                        <input
+                            value={title}
+                            onChange={(event) => onTitleChange(event.target.value)}
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
+                            placeholder="Например, Задание 14 — Системы счисления"
+                            autoFocus
+                            disabled={submitting}
+                        />
+                    </label>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Предмет</span>
+                            <select
+                                value={subject}
+                                onChange={(event) => onSubjectChange(event.target.value as 'informatics' | 'math')}
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
+                                disabled={submitting}
+                            >
+                                <option value="informatics">Информатика</option>
+                                <option value="math">Математика</option>
+                            </select>
+                        </label>
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Тип экзамена</span>
+                            <select
+                                value={examType}
+                                onChange={(event) => onExamTypeChange(event.target.value as 'ege' | 'oge')}
+                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
+                                disabled={submitting}
+                            >
+                                <option value="ege">ЕГЭ</option>
+                                <option value="oge">ОГЭ</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                        {error}
+                    </div>
+                )}
+
+                <div className="mt-6 flex justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={submitting}
+                        className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={submitting}
+                        className="rounded-xl bg-[#3F8C62] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#3F8C62]/20 transition hover:bg-[#357A54] disabled:opacity-50"
+                    >
+                        {submitting ? "Создание..." : "Создать топик"}
+                    </button>
+                </div>
+            </form>
         </div>
     );
 }
@@ -929,10 +1163,12 @@ function MetricsPanel({ metrics, loading }: { metrics: AnalyticsSummary | null; 
 
 function SubscriptionsPanel({
     groups,
+    students,
     apiKey,
     onRefresh,
 }: {
     groups: GroupOut[];
+    students: StudentOut[];
     apiKey: string;
     onRefresh: () => Promise<void>;
 }) {
@@ -942,10 +1178,8 @@ function SubscriptionsPanel({
     const [editName, setEditName] = useState('');
     const [editColor, setEditColor] = useState('');
     const [saving, setSaving] = useState(false);
-    const [testAmount, setTestAmount] = useState('10.00');
-    const [testPaymentLoading, setTestPaymentLoading] = useState(false);
-    const [testPaymentError, setTestPaymentError] = useState('');
-    const [testPayment, setTestPayment] = useState<AdminTestCheckoutResponse | null>(null);
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [planningGroup, setPlanningGroup] = useState<GroupOut | null>(null);
 
     const handleCreate = async () => {
         if (!newName.trim()) return;
@@ -956,6 +1190,7 @@ function SubscriptionsPanel({
                 body: JSON.stringify({ name: newName.trim(), color: newColor }),
             });
             setNewName('');
+            setShowCreateGroup(false);
             await onRefresh();
         } finally {
             setSaving(false);
@@ -978,209 +1213,232 @@ function SubscriptionsPanel({
     };
 
     const handleDelete = async (group: GroupOut) => {
-        if (!confirm(`Удалить подписку «${group.name}»? Ученики останутся без этой подписки.`)) return;
+        if (!confirm(`Удалить группу «${group.name}»? Ученики останутся без этой группы.`)) return;
         await adminFetch(`/admin/groups/${group.id}`, apiKey, { method: 'DELETE' });
         await onRefresh();
     };
 
-    const handleCreateTestPayment = async () => {
-        const amount = Number(testAmount.replace(',', '.'));
-        setTestPaymentError('');
-        setTestPayment(null);
-        if (!Number.isFinite(amount) || amount <= 0) {
-            setTestPaymentError('Введите сумму больше 0');
-            return;
-        }
-        setTestPaymentLoading(true);
-        try {
-            const payment = await adminFetch<AdminTestCheckoutResponse>('/billing/admin/test-checkout', apiKey, {
-                method: 'POST',
-                body: JSON.stringify({ amount: amount.toFixed(2) }),
-            });
-            setTestPayment(payment);
-            window.open(payment.confirmation_url, '_blank', 'noopener,noreferrer');
-        } catch (err: any) {
-            setTestPaymentError(err.message || 'Не удалось создать тестовую оплату');
-        } finally {
-            setTestPaymentLoading(false);
-        }
-    };
+    if (planningGroup) {
+        return (
+            <div className="admin-groups-shell -mx-4 -mb-4 flex min-h-0 flex-1 bg-[#151515] px-4 pb-4 pt-1 text-slate-100 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
+                <div className="flex min-h-0 w-full flex-1">
+                    <GroupPlanEditor group={planningGroup} students={students} apiKey={apiKey} onClose={() => setPlanningGroup(null)} />
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl space-y-4">
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="max-w-xl">
-                            <h2 className="text-lg font-bold text-gray-900">Тестовая оплата</h2>
-                            <p className="text-sm text-gray-500 mt-1">
-                                Создает платеж в текущем магазине YooKassa на указанную сумму. Подписка ученику не выдается.
-                            </p>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-400">Сумма, ₽</span>
-                                <input
-                                    value={testAmount}
-                                    onChange={(e) => setTestAmount(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTestPayment(); }}
-                                    inputMode="decimal"
-                                    className="w-full min-w-36 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62]"
-                                    placeholder="10.00"
-                                />
-                            </label>
-                            <button
-                                onClick={handleCreateTestPayment}
-                                disabled={testPaymentLoading}
-                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                            >
-                                <CreditCard size={16} />
-                                {testPaymentLoading ? 'Создание...' : 'Создать оплату'}
-                            </button>
-                        </div>
-                    </div>
-                    {testPaymentError && (
-                        <p className="mt-3 text-sm font-semibold text-red-600">{testPaymentError}</p>
-                    )}
-                    {testPayment && (
-                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                            <div className="font-bold">Платеж создан: {testPayment.amount_value} {testPayment.currency}</div>
-                            <div className="mt-1 break-all text-xs text-emerald-700">YooKassa ID: {testPayment.yookassa_payment_id}</div>
-                            <a
-                                href={testPayment.confirmation_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-2 inline-flex font-bold text-emerald-900 underline"
-                            >
-                                Открыть страницу оплаты
-                            </a>
-                        </div>
-                    )}
-                </div>
-
-                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                    <div className="flex items-start justify-between gap-4 mb-5">
-                        <div>
-                            <h2 className="text-lg font-bold text-gray-900">Подписка</h2>
-                            <p className="text-sm text-gray-500 mt-1">Создание и настройка групп, в которых занимаются ученики.</p>
-                        </div>
-                        <span className="px-3 py-1.5 rounded-xl bg-[#3F8C62]/10 text-[#3F8C62] text-xs font-bold">
-                            {groups.length} подписок
-                        </span>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="flex items-center gap-1">
-                            {SUBSCRIPTION_COLORS.map((color) => (
-                                <button
-                                    key={color}
-                                    onClick={() => setNewColor(color)}
-                                    className={clsx('w-6 h-6 rounded-full border-2 transition-all', newColor === color ? 'border-gray-700 scale-110' : 'border-white')}
-                                    style={{ backgroundColor: color }}
-                                    title={color}
-                                />
-                            ))}
-                        </div>
-                        <input
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-                            placeholder="Название подписки..."
-                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62]"
-                        />
-                        <button
-                            onClick={handleCreate}
-                            disabled={saving || !newName.trim()}
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                        >
-                            <Plus size={16} />
-                            Создать
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {groups.map((group) => {
-                        const isEditing = editingGroup?.id === group.id;
-                        return (
-                            <div key={group.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                                {isEditing ? (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center gap-1">
-                                            {SUBSCRIPTION_COLORS.map((color) => (
-                                                <button
-                                                    key={color}
-                                                    onClick={() => setEditColor(color)}
-                                                    className={clsx('w-5 h-5 rounded-full border-2 transition-all', editColor === color ? 'border-gray-700 scale-110' : 'border-white')}
-                                                    style={{ backgroundColor: color }}
-                                                />
-                                            ))}
-                                        </div>
-                                        <input
-                                            value={editName}
-                                            onChange={(e) => setEditName(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handleUpdate();
-                                                if (e.key === 'Escape') setEditingGroup(null);
-                                            }}
-                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#3F8C62]"
-                                            autoFocus
-                                        />
-                                        <div className="flex justify-end gap-2">
-                                            <button onClick={() => setEditingGroup(null)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100">
-                                                <X size={16} />
-                                            </button>
-                                            <button onClick={handleUpdate} disabled={saving || !editName.trim()} className="p-2 rounded-lg text-[#3F8C62] hover:bg-emerald-50 disabled:opacity-50">
-                                                <Check size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: group.color }} />
-                                                <h3 className="text-sm font-bold text-gray-900 truncate">{group.name}</h3>
-                                            </div>
-                                            <p className="text-xs text-gray-400 mt-1">{group.student_count} учеников</p>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => {
-                                                    setEditingGroup(group);
-                                                    setEditName(group.name);
-                                                    setEditColor(group.color);
-                                                }}
-                                                className="p-2 rounded-lg text-gray-400 hover:bg-sky-50 hover:text-sky-600 transition-all"
-                                                title="Редактировать"
-                                            >
-                                                <Pencil size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(group)}
-                                                className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-all"
-                                                title="Удалить"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
+        <div className="admin-groups-shell -mx-4 -mb-4 flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#151515] px-4 pb-4 pt-1 text-slate-100 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
+            <div className="flex min-h-0 w-full flex-1 flex-col">
+                <div className="mb-5 flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <div className="flex items-center gap-2.5">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-[#202020] text-emerald-400">
+                                <Users size={17} />
                             </div>
-                        );
-                    })}
+                            <div>
+                                <h2 className="text-xl font-bold leading-7 text-white">Учебные группы</h2>
+                                <p className="text-sm text-slate-500">Откройте группу, чтобы посмотреть и настроить план уроков.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowCreateGroup(true)}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-bold text-white transition hover:bg-emerald-400"
+                    >
+                        <Plus size={15} />
+                        Добавить группу
+                    </button>
                 </div>
 
-                {groups.length === 0 && (
-                    <div className="bg-white border border-gray-200 rounded-2xl py-16 text-center text-gray-400">
-                        <CreditCard size={42} className="mx-auto mb-3 opacity-25" />
-                        <p className="text-sm font-bold text-gray-900">Подписок пока нет</p>
-                        <p className="text-sm">Создайте первую подписку выше.</p>
+                <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-white/[0.08] bg-[#202020] shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+                    <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+                        <div>
+                            <h3 className="text-base font-bold text-white">Все группы</h3>
+                            <p className="mt-1 text-xs text-slate-500">{groups.length} {groupCountLabel(groups.length)}</p>
+                        </div>
                     </div>
-                )}
+
+                    {groups.length > 0 ? (
+                        <div className="min-h-0 flex-1 overflow-auto">
+                            <table className="w-full min-w-[680px] border-collapse">
+                                <thead>
+                                    <tr className="border-b border-white/[0.06] text-left">
+                                        <th className="h-12 px-6 text-[11px] font-bold uppercase tracking-wide text-slate-500">Группа</th>
+                                        <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Ученики</th>
+                                        <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">План уроков</th>
+                                        <th className="h-12 px-6 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Управление</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {groups.map((group) => {
+                                        const isEditing = editingGroup?.id === group.id;
+                                        return (
+                                            <tr
+                                                key={group.id}
+                                                onClick={() => !isEditing && setPlanningGroup(group)}
+                                                className="group cursor-pointer border-b border-white/[0.055] transition-colors last:border-b-0 hover:bg-white/[0.025]"
+                                            >
+                                                <td className="px-6 py-4">
+                                                    {isEditing ? (
+                                                        <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                                                            <input
+                                                                value={editName}
+                                                                onChange={(event) => setEditName(event.target.value)}
+                                                                onKeyDown={(event) => {
+                                                                    if (event.key === 'Enter') handleUpdate();
+                                                                    if (event.key === 'Escape') setEditingGroup(null);
+                                                                }}
+                                                                className="h-9 min-w-0 flex-1 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 text-xs text-slate-200 outline-none focus:border-emerald-400/50"
+                                                                autoFocus
+                                                            />
+                                                            <div className="flex shrink-0 gap-1">
+                                                                {SUBSCRIPTION_COLORS.map((color) => (
+                                                                    <button
+                                                                        key={color}
+                                                                        type="button"
+                                                                        onClick={() => setEditColor(color)}
+                                                                        className={clsx('h-4 w-4 rounded-full ring-offset-2 ring-offset-[#202020] transition', editColor === color && 'ring-1 ring-white')}
+                                                                        style={{ backgroundColor: color }}
+                                                                        aria-label={`Цвет ${color}`}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex min-w-0 items-center gap-3">
+                                                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04]" style={{ color: group.color }}><Users size={19} /></span>
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-sm font-bold text-slate-100 transition group-hover:text-emerald-300">{group.name}</p>
+                                                                <p className="mt-1 text-[11px] text-slate-500">ID {group.id}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-4 text-sm font-semibold text-slate-300">{group.student_count} {studentCountLabel(group.student_count)}</td>
+                                                <td className="px-5 py-4">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setPlanningGroup(group);
+                                                        }}
+                                                        className="inline-flex items-center gap-2 text-sm font-bold text-emerald-400 transition hover:text-emerald-300"
+                                                    >
+                                                        <CalendarDays size={16} />
+                                                        Открыть план
+                                                        <ChevronRight size={14} />
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                                                        {isEditing ? (
+                                                            <>
+                                                                <button type="button" onClick={() => setEditingGroup(null)} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-white" title="Отменить"><X size={15} /></button>
+                                                                <button type="button" onClick={handleUpdate} disabled={saving || !editName.trim()} className="rounded-lg p-2 text-emerald-400 transition hover:bg-emerald-400/10 disabled:opacity-40" title="Сохранить"><Check size={15} /></button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setEditingGroup(group);
+                                                                        setEditName(group.name);
+                                                                        setEditColor(group.color);
+                                                                    }}
+                                                                    className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-sky-400"
+                                                                    title="Редактировать"
+                                                                >
+                                                                    <Pencil size={16} />
+                                                                </button>
+                                                                <button type="button" onClick={() => handleDelete(group)} className="rounded-lg p-2 text-slate-500 transition hover:bg-red-400/10 hover:text-red-400" title="Удалить"><Trash2 size={16} /></button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="px-5 py-16 text-center">
+                            <Users size={34} className="mx-auto text-slate-700" />
+                            <p className="mt-3 text-sm font-semibold text-slate-300">Групп пока нет</p>
+                            <p className="mt-1 text-xs text-slate-600">Добавьте первую учебную группу.</p>
+                            <button type="button" onClick={() => setShowCreateGroup(true)} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-400"><Plus size={14} />Добавить группу</button>
+                        </div>
+                    )}
+                </section>
             </div>
+
+            {showCreateGroup && (
+                <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={() => setShowCreateGroup(false)}>
+                    <div className="w-full max-w-md rounded-xl border border-white/[0.1] bg-[#202020] p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-base font-semibold text-white">Новая группа</h3>
+                                <p className="mt-1 text-xs text-slate-500">Название и цвет помогут быстро найти группу в списке.</p>
+                            </div>
+                            <button type="button" onClick={() => setShowCreateGroup(false)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.06] hover:text-white"><X size={17} /></button>
+                        </div>
+                        <label className="mt-5 block">
+                            <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500">Название</span>
+                            <input
+                                value={newName}
+                                onChange={(event) => setNewName(event.target.value)}
+                                onKeyDown={(event) => { if (event.key === 'Enter') handleCreate(); }}
+                                placeholder="Например, Информатика 11А"
+                                className="h-11 w-full rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-emerald-400/50"
+                                autoFocus
+                            />
+                        </label>
+                        <div className="mt-4">
+                            <span className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-500">Цвет группы</span>
+                            <div className="flex gap-2">
+                                {SUBSCRIPTION_COLORS.map((color) => (
+                                    <button
+                                        key={color}
+                                        type="button"
+                                        onClick={() => setNewColor(color)}
+                                        className={clsx('h-7 w-7 rounded-full ring-offset-[3px] ring-offset-[#202020] transition', newColor === color ? 'scale-105 ring-2 ring-white' : 'opacity-70 hover:opacity-100')}
+                                        style={{ backgroundColor: color }}
+                                        aria-label={`Цвет ${color}`}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button type="button" onClick={() => setShowCreateGroup(false)} className="h-10 rounded-lg border border-white/[0.08] px-4 text-xs font-medium text-slate-400 hover:bg-white/[0.04] hover:text-white">Отмена</button>
+                            <button type="button" onClick={handleCreate} disabled={saving || !newName.trim()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-500 px-4 text-xs font-semibold text-white hover:bg-emerald-400 disabled:opacity-40"><Plus size={14} />{saving ? 'Создание...' : 'Создать группу'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
+}
+
+function groupCountLabel(count: number) {
+    const mod100 = count % 100;
+    const mod10 = count % 10;
+    if (mod100 >= 11 && mod100 <= 14) return 'групп';
+    if (mod10 === 1) return 'группа';
+    if (mod10 >= 2 && mod10 <= 4) return 'группы';
+    return 'групп';
+}
+
+function studentCountLabel(count: number) {
+    const mod100 = count % 100;
+    const mod10 = count % 10;
+    if (mod100 >= 11 && mod100 <= 14) return 'учеников';
+    if (mod10 === 1) return 'ученик';
+    if (mod10 >= 2 && mod10 <= 4) return 'ученика';
+    return 'учеников';
 }
 
 const defaultPlanBlocks: PreparationPlanBlock[] = [
@@ -1626,11 +1884,14 @@ function AdminTopicStatsPage({ apiKey }: { apiKey: string }) {
 
 function AdminTopicEdit({ apiKey }: { apiKey: string }) {
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
     const [topic, setTopic] = useState<TopicAdmin | null>(null);
     const [tasks, setTasks] = useState<TaskAdmin[]>([]);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const openedFromTaskBank = searchParams.get('from') === 'task-bank';
+    const handleBack = () => openedFromTaskBank ? navigate(-1) : navigate('/admin');
 
     const loadTopicData = useCallback(async () => {
         if (!id) return;
@@ -1664,10 +1925,12 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             order_index: data.order_index ?? topic.order_index,
             category: (data.category as TopicCategory) || topic.category,
             subject: (data.subject as TopicSubject) || topic.subject || 'informatics',
+            exam_type: data.exam_type ?? topic.exam_type ?? 'ege',
             course_type: data.course_type ?? topic.course_type ?? 'year',
             time_limit_minutes: data.time_limit_minutes !== undefined ? data.time_limit_minutes : topic.time_limit_minutes,
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
             open_to_groups: data.open_to_groups !== undefined ? data.open_to_groups : topic.open_to_groups ?? false,
+            show_in_tasks: data.show_in_tasks !== undefined ? data.show_in_tasks : topic.show_in_tasks ?? true,
             ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,
             ege_number_end: data.ege_number_end !== undefined ? data.ege_number_end : topic.ege_number_end ?? null,
             image_position: data.image_position !== undefined ? data.image_position : topic.image_position ?? null,
@@ -1712,6 +1975,16 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             body: JSON.stringify(body)
         });
         
+        queryClient.invalidateQueries({ queryKey: ["navigation"] });
+        await loadTopicData();
+    };
+
+    const handleAttachTaskById = async (taskId: number) => {
+        if (!topic) return;
+        await adminFetch<TaskAdmin>(`/admin/topics/${topic.id}/tasks/attach`, apiKey, {
+            method: "POST",
+            body: JSON.stringify({ task_id: taskId }),
+        });
         queryClient.invalidateQueries({ queryKey: ["navigation"] });
         await loadTopicData();
     };
@@ -1772,12 +2045,15 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
                 <TopicDetail
                     topic={topic}
                     tasks={tasks}
-                    onBack={() => navigate("/admin")}
+                    onBack={handleBack}
                     onSaveTopic={handleSaveTopic}
                     onSaveTask={handleSaveTask}
+                    onAttachTaskById={handleAttachTaskById}
                     onReorderTasks={handleReorderTasks}
                     onDeleteTask={handleDeleteTask}
                     apiKey={apiKey}
+                    initialTaskId={Number(searchParams.get('task')) || undefined}
+                    onExitInitialTask={openedFromTaskBank ? handleBack : undefined}
                 />
             </div>
         </div>

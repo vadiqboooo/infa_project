@@ -19,7 +19,7 @@ import { useTheme } from '../context/ThemeContext';
 
 const CATEGORY_STYLE = {
     control: {
-        background: 'linear-gradient(135deg, rgba(9,32,54,0.98) 0%, rgba(8,18,31,0.98) 58%, rgba(6,11,20,0.98) 100%)',
+        background: 'linear-gradient(135deg, rgba(33,70,82,0.48) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)',
         border: 'border-sky-400/15',
         glow: 'rgba(56,189,248,0.18)',
         progress: 'from-sky-400 to-blue-500',
@@ -32,7 +32,7 @@ const CATEGORY_STYLE = {
         icon: ClipboardCheck,
     },
     variants: {
-        background: 'linear-gradient(135deg, rgba(8,47,36,0.98) 0%, rgba(7,19,30,0.98) 58%, rgba(6,11,20,0.98) 100%)',
+        background: 'linear-gradient(135deg, rgba(20,72,48,0.52) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)',
         border: 'border-emerald-400/15',
         glow: 'rgba(16,185,129,0.18)',
         progress: 'from-emerald-400 to-green-500',
@@ -45,7 +45,7 @@ const CATEGORY_STYLE = {
         icon: BookMarked,
     },
     math: {
-        background: 'linear-gradient(135deg, rgba(18,64,58,0.98) 0%, rgba(14,25,40,0.98) 58%, rgba(6,11,20,0.98) 100%)',
+        background: 'linear-gradient(135deg, rgba(30,78,67,0.48) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)',
         border: 'border-teal-300/15',
         glow: 'rgba(45,212,191,0.18)',
         progress: 'from-teal-300 to-emerald-500',
@@ -58,7 +58,7 @@ const CATEGORY_STYLE = {
         icon: Pi,
     },
     mock: {
-        background: 'linear-gradient(135deg, rgba(40,23,76,0.98) 0%, rgba(14,18,35,0.98) 58%, rgba(6,11,20,0.98) 100%)',
+        background: 'linear-gradient(135deg, rgba(66,47,96,0.50) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)',
         border: 'border-violet-400/15',
         glow: 'rgba(139,92,246,0.2)',
         progress: 'from-violet-400 to-purple-500',

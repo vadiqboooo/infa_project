@@ -239,6 +239,7 @@ async def get_navigation(
             time_limit_minutes=exam.time_limit_minutes if exam else 60,
             is_mock=topic.is_mock,
             open_to_groups=topic.open_to_groups,
+            show_in_tasks=topic.show_in_tasks,
             ege_number=topic.ege_number,
             ege_number_end=topic.ege_number_end,
             analysis_published=attempt_id in published_ids if attempt_id else False,

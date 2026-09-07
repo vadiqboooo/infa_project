@@ -34,6 +34,7 @@ class TopicNav(BaseModel):
     time_limit_minutes: int | None = None
     is_mock: bool = False
     open_to_groups: bool = False
+    show_in_tasks: bool = True
     ege_number: int | None = None
     ege_number_end: int | None = None
     analysis_published: bool = False

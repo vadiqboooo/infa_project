@@ -57,6 +57,7 @@ export interface TopicNav {
     order_index: number;
     category: TopicCategory;
     subject: TopicSubject;
+    exam_type?: 'ege' | 'oge';
     course_type: TopicCourseType;
     tasks: TaskNav[];
     exam_id?: number;
@@ -68,6 +69,7 @@ export interface TopicNav {
     time_limit_minutes?: number;
     is_mock: boolean;
     open_to_groups?: boolean;
+    show_in_tasks?: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     analysis_published?: boolean;
@@ -245,11 +247,13 @@ export interface TopicAdmin {
     order_index: number;
     category: TopicCategory;
     subject: TopicSubject;
+    exam_type: 'ege' | 'oge';
     course_type: TopicCourseType;
     task_count: number;
     time_limit_minutes?: number;
     is_mock: boolean;
     open_to_groups: boolean;
+    show_in_tasks: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     has_image?: boolean;
@@ -269,7 +273,9 @@ export interface AdminSubTask {
 
 export interface TaskAdmin {
     id: number;
-    topic_id: number;
+    topic_id: number | null;
+    subject?: TopicSubject;
+    exam_type?: 'ege' | 'oge';
     external_id: string | null;
     ege_number: number | null;
     title: string | null;
@@ -284,15 +290,23 @@ export interface TaskAdmin {
     sub_tasks?: AdminSubTask[] | null;
 }
 
+export interface TaskBankItem extends TaskAdmin {
+    topic_title: string;
+    subject: TopicSubject;
+    exam_type: 'ege' | 'oge';
+}
+
 export interface TopicIn {
     title: string;
     order_index: number;
     category: TopicCategory;
     subject: TopicSubject;
+    exam_type?: 'ege' | 'oge';
     course_type: TopicCourseType;
     time_limit_minutes?: number;
     is_mock: boolean;
     open_to_groups?: boolean;
+    show_in_tasks?: boolean;
     ege_number?: number | null;
     ege_number_end?: number | null;
     image_position?: TopicImagePosition | null;
@@ -314,7 +328,9 @@ export interface ImportVariantResult {
 }
 
 export interface TaskAdminIn {
-    topic_id: number;
+    topic_id: number | null;
+    subject?: TopicSubject;
+    exam_type?: 'ege' | 'oge';
     external_id: string | null;
     ege_number: number | null;
     title: string | null;
@@ -557,6 +573,73 @@ export interface GroupOut {
     name: string;
     color: string;
     student_count: number;
+}
+
+export type GroupLessonStatus = "draft" | "published" | "completed";
+export type GroupLessonSection = "lesson" | "homework";
+
+export interface GroupLessonItem {
+    id: number;
+    section: GroupLessonSection;
+    resource_type: "topic" | "task";
+    topic_id: number | null;
+    task_id: number | null;
+    title: string;
+    subtitle: string | null;
+    href: string;
+    solved: number;
+    total: number;
+    progress_percent: number;
+    completion_status: "not_started" | "in_progress" | "completed";
+}
+
+export interface GroupLesson {
+    id: number;
+    group_id: number;
+    student_id: number | null;
+    group_name: string;
+    group_color: string;
+    title: string;
+    lesson_at: string;
+    homework_deadline: string | null;
+    note: string | null;
+    status: GroupLessonStatus;
+    items: GroupLessonItem[];
+}
+
+export interface GroupLessonItemIn {
+    section: GroupLessonSection;
+    topic_id?: number | null;
+    task_id?: number | null;
+    order_index?: number;
+}
+
+export interface GroupLessonIn {
+    title: string;
+    lesson_at: string;
+    homework_deadline: string | null;
+    note: string | null;
+    status: GroupLessonStatus;
+    items: GroupLessonItemIn[];
+}
+
+export interface GroupPlanTaskOption {
+    id: number;
+    title: string;
+    ege_number: number | null;
+    order_index: number;
+}
+
+export interface GroupPlanTopicOption {
+    id: number;
+    title: string;
+    category: string;
+    subject: string;
+    tasks: GroupPlanTaskOption[];
+}
+
+export interface GroupPlanResources {
+    topics: GroupPlanTopicOption[];
 }
 
 export interface PreparationPlanBlock {

@@ -7,10 +7,15 @@
     color-scheme: light;
 }
 
-.dark .admin-page,
 .light .admin-page {
     background: #F8F7F4;
     color: #111827;
+}
+
+.dark .admin-page {
+    background: #151515;
+    color: #e2e8f0;
+    color-scheme: dark;
 }
 
 .admin-page input,
@@ -268,4 +273,375 @@
 .task-row-expanded {
     border-color: #3F8C62;
     background-color: #F0FDF4;
+}
+.admin-plan-input {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    background: #ffffff;
+    padding: 0.625rem 0.75rem;
+    color: #111827;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.admin-plan-input:focus {
+    border-color: #3f8c62;
+    box-shadow: 0 0 0 3px rgba(63, 140, 98, 0.12);
+}
+
+/* Shared dark theme for every admin section. */
+.dark .admin-page .text-gray-950,
+.dark .admin-page .text-gray-900,
+.dark .admin-page .text-gray-800 {
+    color: #f1f5f9 !important;
+}
+
+.dark .admin-page .text-gray-700,
+.dark .admin-page .text-gray-600 {
+    color: #cbd5e1 !important;
+}
+
+.dark .admin-page .text-gray-500,
+.dark .admin-page .text-gray-400,
+.dark .admin-page .text-gray-300 {
+    color: #94a3b8 !important;
+}
+
+.dark .admin-page .bg-white,
+.dark .admin-page .bg-white\/90,
+.dark .admin-page .bg-white\/80,
+.dark .admin-page .bg-white\/70 {
+    background-color: #202020 !important;
+}
+
+.dark .admin-page .bg-gray-50 {
+    background-color: #191919 !important;
+}
+
+.dark .admin-page .bg-gray-100 {
+    background-color: #262626 !important;
+}
+
+.dark .admin-page .bg-gray-200,
+.dark .admin-page .bg-gray-200\/50 {
+    background-color: #303030 !important;
+}
+
+.dark .admin-page .bg-gradient-to-br {
+    background-color: #191919 !important;
+    background-image: none !important;
+}
+
+.dark .admin-page .bg-\[\#F8F7F4\],
+.dark .admin-page .bg-\[\#f0f5f0\] {
+    background-color: #151515 !important;
+}
+
+.dark .admin-page .border-gray-100,
+.dark .admin-page .border-gray-200,
+.dark .admin-page .border-gray-300,
+.dark .admin-page .border-white\/80 {
+    border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .admin-page input,
+.dark .admin-page textarea,
+.dark .admin-page select,
+.dark .admin-import-page input,
+.dark .admin-import-page textarea,
+.dark .admin-import-page select,
+.dark .admin-import-page .ProseMirror {
+    border-color: rgba(255, 255, 255, 0.10) !important;
+    background-color: #202020;
+    color: #e2e8f0 !important;
+    caret-color: #e2e8f0;
+}
+
+.dark .admin-page input::placeholder,
+.dark .admin-page textarea::placeholder,
+.dark .admin-import-page input::placeholder,
+.dark .admin-import-page textarea::placeholder {
+    color: #64748b !important;
+}
+
+.dark .admin-page select option,
+.dark .admin-import-page select option {
+    background: #202020;
+    color: #e2e8f0;
+}
+
+.dark .admin-page .prose,
+.dark .admin-page .prose *,
+.dark .admin-import-page .prose,
+.dark .admin-import-page .prose * {
+    color: #cbd5e1;
+}
+
+.dark .admin-page .bg-emerald-50,
+.dark .admin-page .bg-emerald-100 {
+    background-color: rgba(52, 211, 153, 0.10) !important;
+}
+
+.dark .admin-page .bg-sky-50,
+.dark .admin-page .bg-sky-100,
+.dark .admin-page .bg-blue-50,
+.dark .admin-page .bg-blue-100 {
+    background-color: rgba(56, 189, 248, 0.10) !important;
+}
+
+.dark .admin-page .bg-violet-50,
+.dark .admin-page .bg-violet-100,
+.dark .admin-page .bg-indigo-50,
+.dark .admin-page .bg-indigo-100 {
+    background-color: rgba(167, 139, 250, 0.10) !important;
+}
+
+.dark .admin-page .bg-amber-50,
+.dark .admin-page .bg-amber-100 {
+    background-color: rgba(251, 191, 36, 0.10) !important;
+}
+
+.dark .admin-page .bg-red-50,
+.dark .admin-page .bg-red-100 {
+    background-color: rgba(248, 113, 113, 0.10) !important;
+}
+
+.dark .admin-page .bg-teal-50,
+.dark .admin-page .bg-teal-100 {
+    background-color: rgba(45, 212, 191, 0.10) !important;
+}
+
+.dark .admin-page .text-emerald-700,
+.dark .admin-page .text-emerald-800,
+.dark .admin-page .text-emerald-900 { color: #6ee7b7 !important; }
+.dark .admin-page .text-sky-600,
+.dark .admin-page .text-sky-700,
+.dark .admin-page .text-blue-700 { color: #7dd3fc !important; }
+.dark .admin-page .text-violet-700,
+.dark .admin-page .text-indigo-700 { color: #c4b5fd !important; }
+.dark .admin-page .text-amber-700 { color: #fcd34d !important; }
+.dark .admin-page .text-red-500,
+.dark .admin-page .text-red-600,
+.dark .admin-page .text-red-700 { color: #fca5a5 !important; }
+.dark .admin-page .text-teal-700 { color: #5eead4 !important; }
+
+.dark .admin-page .hover\:bg-gray-50:hover,
+.dark .admin-page .hover\:bg-gray-100:hover,
+.dark .admin-page .hover\:bg-white:hover {
+    background-color: #292929 !important;
+}
+
+.dark .admin-page *::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+}
+
+/* Compact filters embedded into admin table headers. */
+.admin-page .admin-table-filter {
+    appearance: none;
+    border: 1px solid rgba(57, 79, 66, 0.12);
+    border-radius: 0.625rem;
+    background: rgba(255, 255, 255, 0.72) !important;
+    color: #526057 !important;
+    font-weight: 700;
+    line-height: 1;
+    outline: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    transition: border-color 0.18s, background-color 0.18s, color 0.18s;
+}
+
+.admin-page .admin-table-filter:hover {
+    border-color: rgba(63, 140, 98, 0.28);
+    background: rgba(255, 255, 255, 0.92) !important;
+    color: #25382d !important;
+}
+
+.admin-page .admin-table-filter:focus {
+    border-color: rgba(63, 140, 98, 0.55);
+    box-shadow: 0 0 0 3px rgba(63, 140, 98, 0.08);
+}
+
+.dark .admin-page .admin-table-filter {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.045) !important;
+    color: #cbd5e1 !important;
+    box-shadow: none;
+}
+
+.dark .admin-page .admin-table-filter:hover {
+    border-color: rgba(52, 211, 153, 0.24) !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+    color: #f1f5f9 !important;
+}
+
+.dark .admin-page .admin-table-filter:focus {
+    border-color: rgba(52, 211, 153, 0.48) !important;
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.07);
+}
+
+.admin-page .admin-table-filter option {
+    background: #ffffff;
+    color: #25382d;
+}
+
+.dark .admin-page .admin-table-filter option {
+    background: #202020;
+    color: #e2e8f0;
+}
+
+/* Groups use the same graphite surface system as the student dashboard. */
+.admin-page .admin-groups-shell input,
+.admin-page .admin-group-plan input,
+.admin-page .admin-group-plan textarea,
+.admin-page .admin-group-plan select {
+    color: #e2e8f0 !important;
+    caret-color: #e2e8f0;
+}
+
+.admin-page .admin-groups-shell input::placeholder,
+.admin-page .admin-group-plan input::placeholder,
+.admin-page .admin-group-plan textarea::placeholder {
+    color: #475569 !important;
+}
+
+.admin-page .admin-group-plan .admin-plan-input {
+    border-color: rgba(255, 255, 255, 0.09);
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.035);
+    color: #e2e8f0 !important;
+    font-size: 0.75rem;
+    box-shadow: none;
+}
+
+.admin-page .admin-group-plan .admin-plan-input:focus {
+    border-color: rgba(52, 211, 153, 0.55);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.08);
+}
+
+.admin-page .admin-group-plan select option {
+    background: #202020;
+    color: #e2e8f0;
+}
+
+.admin-page .admin-groups-shell::-webkit-scrollbar-thumb,
+.admin-page .admin-group-plan *::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+}
+
+/* Light theme for groups and lesson-plan workspace. */
+.light .admin-page .admin-groups-shell {
+    background: #f3f5f3 !important;
+    color: #13231b;
+}
+
+.light .admin-page .admin-groups-shell .bg-\[\#202020\],
+.light .admin-page .admin-group-plan .bg-\[\#202020\] {
+    background-color: #ffffff !important;
+}
+
+.light .admin-page .admin-groups-shell .bg-\[\#191919\],
+.light .admin-page .admin-group-plan.bg-\[\#191919\],
+.light .admin-page .admin-group-plan .bg-\[\#191919\] {
+    background-color: #f3f5f3 !important;
+}
+
+.light .admin-page .admin-groups-shell [class*="border-white"],
+.light .admin-page .admin-group-plan [class*="border-white"],
+.light .admin-page .admin-group-plan {
+    border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+.light .admin-page .admin-groups-shell .text-white,
+.light .admin-page .admin-groups-shell .text-slate-100,
+.light .admin-page .admin-groups-shell .text-slate-200,
+.light .admin-page .admin-groups-shell .text-slate-300,
+.light .admin-page .admin-group-plan .text-white,
+.light .admin-page .admin-group-plan .text-slate-100,
+.light .admin-page .admin-group-plan .text-slate-200,
+.light .admin-page .admin-group-plan .text-slate-300 {
+    color: #13231b !important;
+}
+
+.light .admin-page .admin-groups-shell .text-slate-400,
+.light .admin-page .admin-groups-shell .text-slate-500,
+.light .admin-page .admin-groups-shell .text-slate-600,
+.light .admin-page .admin-groups-shell .text-slate-700,
+.light .admin-page .admin-group-plan .text-slate-400,
+.light .admin-page .admin-group-plan .text-slate-500,
+.light .admin-page .admin-group-plan .text-slate-600,
+.light .admin-page .admin-group-plan .text-slate-700 {
+    color: #526057 !important;
+}
+
+.light .admin-page .admin-groups-shell .text-emerald-300,
+.light .admin-page .admin-groups-shell .text-emerald-400,
+.light .admin-page .admin-group-plan .text-emerald-300,
+.light .admin-page .admin-group-plan .text-emerald-400 {
+    color: #0f6b45 !important;
+}
+
+.light .admin-page .admin-group-plan .text-violet-300,
+.light .admin-page .admin-group-plan .text-violet-400 {
+    color: #5b3fa8 !important;
+}
+
+.light .admin-page .admin-group-plan .text-sky-300,
+.light .admin-page .admin-group-plan .text-sky-400 {
+    color: #036b91 !important;
+}
+
+.light .admin-page .admin-group-plan .text-amber-300,
+.light .admin-page .admin-group-plan .text-amber-400 {
+    color: #92510b !important;
+}
+
+.light .admin-page .admin-group-plan .text-red-300,
+.light .admin-page .admin-group-plan .text-red-400 {
+    color: #b42332 !important;
+}
+
+.light .admin-page .admin-groups-shell .bg-emerald-500.text-white,
+.light .admin-page .admin-group-plan .bg-emerald-500.text-white {
+    color: #ffffff !important;
+}
+
+.light .admin-page .admin-groups-shell input,
+.light .admin-page .admin-group-plan input,
+.light .admin-page .admin-group-plan textarea,
+.light .admin-page .admin-group-plan select {
+    color: #13231b !important;
+    caret-color: #13231b;
+}
+
+.light .admin-page .admin-groups-shell input::placeholder,
+.light .admin-page .admin-group-plan input::placeholder,
+.light .admin-page .admin-group-plan textarea::placeholder {
+    color: #8a9990 !important;
+}
+
+.light .admin-page .admin-group-plan .admin-plan-input {
+    border-color: #cbd5d1;
+    background: #ffffff;
+    color: #13231b !important;
+}
+
+.light .admin-page .admin-group-plan .admin-plan-input:focus {
+    border-color: #17734c;
+    box-shadow: 0 0 0 3px rgba(23, 115, 76, 0.10);
+}
+
+.light .admin-page .admin-group-plan select option {
+    background: #ffffff;
+    color: #13231b;
+}
+
+.light .admin-page .admin-groups-shell tbody tr:hover,
+.light .admin-page .admin-group-plan tbody tr:hover {
+    background: rgba(35, 71, 49, 0.04) !important;
+}
+
+.light .admin-page .admin-groups-shell::-webkit-scrollbar-thumb,
+.light .admin-page .admin-group-plan *::-webkit-scrollbar-thumb {
+    background: #cbd5cf;
 }

@@ -561,7 +561,7 @@
 }
 
 .dark .task-answer-inline-panel {
-    background: rgba(7, 17, 29, 0.98);
+    background: rgba(32, 32, 32, 0.98);
     border-color: rgba(52, 211, 153, 0.32);
     box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
 }

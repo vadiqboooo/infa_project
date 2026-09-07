@@ -35,6 +35,7 @@ export function TasksListPage() {
     };
 
     for (const topic of allTopics) {
+      if (topic.show_in_tasks === false) continue;
       const subject = getTopicSubject(topic);
       if (topic.ege_number != null) numsBySubject[subject].add(topic.ege_number);
     }
@@ -48,7 +49,9 @@ export function TasksListPage() {
   const taskGroups = useMemo(() => {
     if (!allTopics) return [];
 
-    const subjectTopics = allTopics.filter(t => getTopicSubject(t) === activeSubject);
+    const subjectTopics = allTopics.filter(
+      t => t.show_in_tasks !== false && getTopicSubject(t) === activeSubject,
+    );
     const tutorials = subjectTopics.filter(t => t.category === TopicCategory.tutorial || t.category === TopicCategory.math);
     const homeworks  = subjectTopics.filter(t => t.category === TopicCategory.homework);
 
@@ -191,7 +194,7 @@ export function TasksListPage() {
   }, []);
 
   return (
-    <div className="min-h-full space-y-6 bg-[#030A12] p-4 animate-in fade-in duration-500 md:p-8">
+    <div className="tasks-list-page min-h-full space-y-6 bg-[#151515] p-4 animate-in fade-in duration-500 md:p-8">
       <div className="mx-auto max-w-[1400px] space-y-4">
         <div className="flex gap-6 overflow-x-auto border-b border-slate-900/10 dark:border-white/10 scrollbar-hide">
           {SUBJECTS.map(({ id, label }) => {

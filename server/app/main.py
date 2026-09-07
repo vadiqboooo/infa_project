@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.routers import admin, analytics, auth, billing, content, course_leads, exams, preparation, solving, stats
+from app.routers import admin, analytics, auth, billing, content, course_leads, exams, group_plan, preparation, solving, stats
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,12 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'open'"))
             await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS closed_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
             await conn.execute(text("ALTER TABLE user_task_solution_help_requests ADD COLUMN IF NOT EXISTS close_reason VARCHAR(64)"))
+            await conn.execute(text("ALTER TABLE group_lessons ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES users(id) ON DELETE CASCADE"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_group_lessons_student_id ON group_lessons (student_id)"))
+            await conn.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS exam_type VARCHAR(10) NOT NULL DEFAULT 'ege'"))
+            await conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS subject VARCHAR(50) NOT NULL DEFAULT 'informatics'"))
+            await conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS exam_type VARCHAR(10) NOT NULL DEFAULT 'ege'"))
+            await conn.execute(text("ALTER TABLE tasks ALTER COLUMN topic_id DROP NOT NULL"))
         logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)
@@ -136,6 +142,8 @@ app.include_router(solving.router)
 app.include_router(exams.router)
 app.include_router(stats.router)
 app.include_router(preparation.router)
+app.include_router(group_plan.router)
+app.include_router(group_plan.admin_router)
 app.include_router(admin.router, prefix="/admin")
 
 # Serve uploaded files (exam solutions)

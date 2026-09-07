@@ -26,7 +26,9 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), nullable=False)
+    topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id"), nullable=True)
+    subject: Mapped[str] = mapped_column(String(50), default="informatics", server_default="informatics", nullable=False)
+    exam_type: Mapped[str] = mapped_column(String(10), default="ege", server_default="ege", nullable=False)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

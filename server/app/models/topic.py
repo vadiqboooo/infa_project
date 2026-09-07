@@ -14,9 +14,11 @@ class Topic(Base):
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     category: Mapped[str] = mapped_column(String(50), default="tutorial", nullable=False)
     subject: Mapped[str] = mapped_column(String(50), default="informatics", server_default="informatics", nullable=False)
+    exam_type: Mapped[str] = mapped_column(String(10), default="ege", server_default="ege", nullable=False)
     course_type: Mapped[str] = mapped_column(String(20), default="year", server_default="year", nullable=False)
     is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
     open_to_groups: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
+    show_in_tasks: Mapped[bool] = mapped_column(Integer, default=True, server_default="1", nullable=False)
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ege_number_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 

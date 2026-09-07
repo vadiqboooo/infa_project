@@ -4,6 +4,7 @@ from app.models.exam import Exam, exam_tasks
 from app.models.user import User
 from app.models.progress import UserProgress
 from app.models.exam_attempt import ExamAttempt
+from app.models.exam_analysis import ExamAnalysis
 from app.models.ai_chat_log import AIChatLog
 from app.models.topic_seen import UserTopicSeen
 from app.models.task_solution import UserTaskSolution
@@ -18,6 +19,8 @@ from app.models.preparation_plan import PreparationPlan, PreparationPlanBlock, U
 from app.models.course_lead import CourseLead
 from app.models.payment import Payment
 from app.models.site_visit import SiteVisit
+from app.models.group import Group, user_groups
+from app.models.group_plan import GroupLesson, GroupLessonItem
 
 __all__ = [
     "Topic",
@@ -27,6 +30,7 @@ __all__ = [
     "User",
     "UserProgress",
     "ExamAttempt",
+    "ExamAnalysis",
     "AIChatLog",
     "UserTopicSeen",
     "UserTaskSolution",
@@ -43,4 +47,8 @@ __all__ = [
     "CourseLead",
     "Payment",
     "SiteVisit",
+    "Group",
+    "user_groups",
+    "GroupLesson",
+    "GroupLessonItem",
 ]

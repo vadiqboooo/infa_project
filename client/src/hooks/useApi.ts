@@ -25,6 +25,7 @@ import type {
     LatestPaymentSync,
     PaymentHistoryItem,
     PaymentStatus,
+    GroupLesson,
 } from "../api/types";
 
 /* ── Navigation ──────────────────────────────────────── */
@@ -102,6 +103,13 @@ export function useSubmitExam(examId: number) {
                 method: "POST",
                 body: JSON.stringify(body),
             }),
+    });
+}
+
+export function useGroupPlan() {
+    return useQuery<GroupLesson[]>({
+        queryKey: ["group-plan"],
+        queryFn: () => api<GroupLesson[]>("/group-plan"),
     });
 }
 

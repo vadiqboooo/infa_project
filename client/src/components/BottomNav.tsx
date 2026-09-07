@@ -33,7 +33,7 @@ export function BottomNav() {
 
     return (
         <>
-            <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#07111D]/95 backdrop-blur md:hidden">
+            <nav className="app-bottom-nav fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#202020]/95 backdrop-blur md:hidden">
                 <div className="flex items-stretch h-16">
                     {navLinks.map((link) => {
                         const active = isActive(link.path);

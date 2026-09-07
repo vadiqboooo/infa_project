@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, BookOpen, FileText, GraduationCap, Settings, ShieldCheck, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, BookOpen, FileText, GraduationCap, Settings, ShieldCheck, Database, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ProfileModal } from './ProfileModal';
 import { NotificationsHoverCard } from './NotificationsHoverCard';
@@ -41,7 +41,7 @@ export function Sidebar({ collapsed = false, onCollapsedChange }: SidebarProps) 
   return (
     <>
       <div className={clsx(
-        "app-sidebar flex h-screen shrink-0 flex-col border-r border-white/10 bg-[#07111D] text-slate-200 shadow-[10px_0_40px_rgba(0,0,0,0.18)] transition-[width] duration-200",
+        "app-sidebar flex h-screen shrink-0 flex-col border-r border-white/10 bg-[#202020] text-slate-200 shadow-[10px_0_40px_rgba(0,0,0,0.18)] transition-[width] duration-200",
         collapsed ? "app-sidebar-collapsed w-20" : "w-60"
       )}>
         {/* Logo / Brand */}
@@ -105,6 +105,20 @@ export function Sidebar({ collapsed = false, onCollapsedChange }: SidebarProps) 
                 <ShieldCheck size={18} />
                 <span>Админ-панель</span>
               </Link>
+              <Link
+                to="/task-bank"
+                title="База заданий"
+                className={clsx(
+                  'flex items-center gap-3 rounded-lg py-2.5 text-sm transition-colors',
+                  collapsed ? 'justify-center px-0' : 'px-4',
+                  location.pathname.startsWith('/task-bank')
+                    ? 'bg-[#113E2D] text-[#8AF0B8] font-medium'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                )}
+              >
+                <Database size={18} />
+                {!collapsed && <span>База заданий</span>}
+              </Link>
             </>
           )}
         </nav>
@@ -138,7 +152,7 @@ export function Sidebar({ collapsed = false, onCollapsedChange }: SidebarProps) 
                     {user?.first_name?.charAt(0) || 'U'}
                   </div>
                 )}
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-[#07111D]" />
+                <div className="sidebar-online-dot absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4ADE80] rounded-full border-2 border-[#202020]" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate leading-tight">{user?.first_name || 'Загрузка...'}</p>

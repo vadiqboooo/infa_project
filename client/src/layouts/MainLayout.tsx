@@ -19,7 +19,7 @@ export function MainLayout() {
   }, [sidebarCollapsed]);
 
   return (
-    <div className="flex h-screen bg-[#030A12] transition-colors">
+    <div className="app-shell flex h-screen bg-[#151515] transition-colors">
       {/* Sidebar — hidden on mobile, visible on md+ */}
       <div className="hidden md:flex">
         <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />

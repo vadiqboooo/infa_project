@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   useCurrentPreparationPlan,
@@ -12,14 +12,17 @@ import {
   useUpdatePreparationPlanActiveBlock,
   useUserStats,
   useWeeklyActivity,
+  useGroupPlan,
 } from '../hooks/useApi';
-import { TopicCategory, type TopicNav } from '../api/types';
-import { Award, Brain, CheckCircle2, ChevronRight, FileText, ListChecks, LockKeyhole, MoreHorizontal, PlaySquare, Route, Save, Sparkles, Star, TrendingUp, Zap } from 'lucide-react';
+import { TopicCategory, type GroupLesson, type GroupLessonItem, type TopicNav } from '../api/types';
+import { Award, BookOpen, Brain, CalendarDays, CheckCircle2, ChevronRight, FileText, ListChecks, LockKeyhole, MoreHorizontal, PlaySquare, Route, Save, Search, SlidersHorizontal, Sparkles, Star, TrendingUp, Zap } from 'lucide-react';
 import metricChart from '../assets/metric-chart.png';
 import metricCup from '../assets/metric-cup.png';
 import metricGift from '../assets/metric-gift.png';
 import metricTasks from '../assets/metric-tasks.png';
 import { useTheme } from '../context/ThemeContext';
+import { Badge } from '../components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
   Area,
   AreaChart,
@@ -66,36 +69,10 @@ type PlanBlockTracker = {
 };
 
 export function HomePage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { data: userStats } = useUserStats();
   const { data: weeklyData } = useWeeklyActivity();
   const { data: navigation } = useNavigation();
-  const { data: plans } = usePreparationPlans();
-  const { data: currentPlan } = useCurrentPreparationPlan();
-  const selectPlan = useSelectPreparationPlan();
-  const updateActiveBlock = useUpdatePreparationPlanActiveBlock();
-  const paymentIdFromUrl = Number(searchParams.get('payment_id'));
-  const paymentId = Number.isFinite(paymentIdFromUrl) && paymentIdFromUrl > 0 ? paymentIdFromUrl : null;
-  const { data: paymentStatus } = usePaymentStatus(paymentId);
-  const shouldSyncLatestPayment = currentPlan?.subscription_plan === 'none' || currentPlan?.subscription_required;
-  useSyncLatestPayment(!!currentPlan && shouldSyncLatestPayment);
-  const [selectedPlanId, setSelectedPlanId] = React.useState<number | ''>('');
-  const [durationDays, setDurationDays] = React.useState(14);
-  const [localActiveBlockId, setLocalActiveBlockId] = React.useState<number | null>(null);
-
-  React.useEffect(() => {
-    if (!selectedPlanId && plans?.length) {
-      setSelectedPlanId(plans[0].id);
-      setDurationDays(plans[0].default_duration_days);
-    }
-  }, [plans, selectedPlanId]);
-
-  React.useEffect(() => {
-    if (currentPlan?.plan) {
-      setSelectedPlanId(currentPlan.plan.id);
-      setDurationDays(currentPlan.plan.default_duration_days);
-    }
-  }, [currentPlan?.plan?.id]);
+  const { data: groupPlan = [], isLoading: groupPlanLoading } = useGroupPlan();
 
   const stats = userStats || {
     total_solved: 0,
@@ -123,47 +100,11 @@ export function HomePage() {
   }, [navigation]);
   const completedExamScores = examScores.filter((item) => item.score != null && item.score > 0);
   const latestExamScore = completedExamScores.at(-1)?.score ?? 0;
-  const planBlockTrackers = React.useMemo(
-    () => buildPlanBlockTrackers(currentPlan?.block_progress ?? [], navigation ?? [], currentPlan?.current_block?.block_id),
-    [currentPlan, navigation],
-  );
-  const activeBlockStorageKey = React.useMemo(() => {
-    const planKey = currentPlan?.user_plan_id ?? currentPlan?.plan?.id;
-    return planKey ? `${PREPARATION_ACTIVE_BLOCK_STORAGE_PREFIX}:${planKey}` : null;
-  }, [currentPlan?.plan?.id, currentPlan?.user_plan_id]);
-  const effectiveActiveBlockId = currentPlan?.active_block_id ?? localActiveBlockId;
-
-  React.useEffect(() => {
-    if (!activeBlockStorageKey) {
-      setLocalActiveBlockId(null);
-      return;
-    }
-
-    const serverBlockId = currentPlan?.active_block_id;
-    if (serverBlockId != null) {
-      setLocalActiveBlockId(serverBlockId);
-      localStorage.setItem(activeBlockStorageKey, String(serverBlockId));
-      return;
-    }
-
-    const savedBlockId = Number(localStorage.getItem(activeBlockStorageKey));
-    const hasSavedBlock = Number.isFinite(savedBlockId)
-      && planBlockTrackers.some((block) => block.blockId === savedBlockId);
-    setLocalActiveBlockId(hasSavedBlock ? savedBlockId : null);
-  }, [activeBlockStorageKey, currentPlan?.active_block_id, planBlockTrackers]);
-
-  React.useEffect(() => {
-    if (!paymentStatus || paymentStatus.status !== 'succeeded') return;
-    setSearchParams((params) => {
-      params.delete('payment_id');
-      return params;
-    }, { replace: true });
-  }, [paymentStatus, setSearchParams]);
 
   return (
-    <div className="home-page -m-4 min-h-screen bg-[#030A12] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-12">
-      <div className="mx-auto max-w-[1232px] space-y-8">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="home-page -m-4 min-h-screen bg-[#151515] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-10">
+      <div className="mx-auto max-w-[1232px] space-y-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             icon={<CheckCircle2 size={18} />}
             tone="mint"
@@ -205,43 +146,9 @@ export function HomePage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_395px]">
-          <div className="space-y-6">
-            {paymentId && paymentStatus?.status !== 'succeeded' && (
-              <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-100">
-                Проверяем оплату. Доступ откроется автоматически после подтверждения ЮKassa.
-              </div>
-            )}
-            {currentPlan?.subscription_required ? (
-              <SubscriptionOfferCard />
-            ) : (
-              <PreparationPlanCard
-                currentPlan={currentPlan}
-                plans={plans ?? []}
-                selectedPlanId={selectedPlanId}
-                durationDays={durationDays}
-                planBlockTrackers={planBlockTrackers}
-                isSelecting={selectPlan.isPending}
-                activeBlockId={effectiveActiveBlockId}
-                onPlanChange={(planId) => {
-                  setSelectedPlanId(planId);
-                  const plan = plans?.find((item) => item.id === planId);
-                  if (plan) setDurationDays(plan.default_duration_days);
-                }}
-                onDurationChange={setDurationDays}
-                onSelectPlan={(planId, days) => selectPlan.mutate({
-                  plan_id: Number(planId ?? selectedPlanId),
-                  duration_days: days ?? durationDays,
-                })}
-                onActiveBlockChange={(blockId) => {
-                  setLocalActiveBlockId(blockId);
-                  if (activeBlockStorageKey) {
-                    localStorage.setItem(activeBlockStorageKey, String(blockId));
-                  }
-                  updateActiveBlock.mutate({ block_id: blockId });
-                }}
-              />
-            )}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5">
+            <GroupPreparationPlan lessons={groupPlan} loading={groupPlanLoading} />
 
             <ActivityCard
               weeklyDays={weeklyDays}
@@ -435,35 +342,35 @@ function MetricCard({
   const safeProgress = Math.min(100, Math.max(0, progress ?? 0));
 
   return (
-    <div className="home-metric-card relative h-[164px] overflow-hidden rounded-[16px] border border-white/10 bg-[#0A1522] p-4 shadow-[0_14px_34px_rgba(0,0,0,0.28)] ring-1 ring-white/[0.03]">
-      <div className={`absolute -bottom-12 -right-10 h-32 w-32 rounded-full blur-2xl ${toneClass.glow}`} />
+    <div className="home-metric-card relative h-[132px] overflow-hidden rounded-[10px] border border-white/[0.08] bg-[#202020] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] ring-1 ring-white/[0.015]">
+      <div className={`absolute -bottom-16 -right-12 h-32 w-32 rounded-full opacity-40 blur-2xl ${toneClass.glow}`} />
       <MetricArt type={art} />
       <div className="relative z-10 flex h-full flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${toneClass.iconBg}`}>
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] ${toneClass.iconBg}`}>
               <span className={toneClass.iconText}>{icon}</span>
             </div>
             <div>
-              <p className="text-sm font-bold leading-5 text-slate-100">{label}</p>
-              <p className="mt-1 text-xs font-medium text-slate-500">{subtitle}</p>
+              <p className="text-xs font-semibold leading-4 text-slate-400">{label}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-600">{subtitle}</p>
             </div>
           </div>
           <MoreHorizontal size={18} className="mt-1 shrink-0 text-slate-600" />
         </div>
 
-        <div className="mt-5 max-w-[150px]">
+        <div className="mt-3 max-w-[150px]">
           <div className="flex items-end gap-2">
-            <span className="text-[32px] font-bold leading-none tracking-normal text-white">{value}</span>
+            <span className="text-[27px] font-semibold leading-none tracking-tight text-white">{value}</span>
             {mutedValue && (
               <span className="pb-0.5 text-base font-bold text-slate-500">/ {mutedValue}</span>
             )}
           </div>
-          <p className={`mt-2 truncate text-xs font-semibold ${toneClass.accentText}`}>{caption}</p>
+          <p className={`mt-1.5 truncate text-[10px] font-medium ${toneClass.accentText}`}>{caption}</p>
         </div>
 
         {progress != null && (
-          <div className="mt-3 h-2 max-w-[126px] overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2 h-1 max-w-[126px] overflow-hidden rounded-full bg-white/10">
             <div
               className={`h-full rounded-full ${toneClass.progress}`}
               style={{ width: `${safeProgress}%` }}
@@ -522,13 +429,13 @@ function MetricArt({ type }: { type: 'tasks' | 'gift' | 'chart' | 'cup' }) {
     : 'h-[100px] w-[100px]';
 
   return (
-    <div className="pointer-events-none absolute bottom-0 right-1 z-0 flex h-[112px] w-[112px] items-end justify-end overflow-hidden" aria-hidden="true">
+    <div className="pointer-events-none absolute -bottom-3 right-0 z-0 flex h-[92px] w-[92px] items-end justify-end overflow-hidden opacity-45 grayscale" aria-hidden="true">
       <img
         src={art}
         alt=""
         loading="eager"
         draggable={false}
-        className={`${sizeClass} object-contain object-bottom drop-shadow-[0_10px_18px_rgba(15,23,42,0.06)]`}
+        className={`${sizeClass} object-contain object-bottom drop-shadow-[0_10px_18px_rgba(0,0,0,0.2)]`}
       />
     </div>
   );
@@ -880,6 +787,211 @@ function PreparationPlanCard({
   );
 }
 
+function GroupPreparationPlan({ lessons, loading }: { lessons: GroupLesson[]; loading: boolean }) {
+  const [now] = React.useState(() => Date.now());
+  const [query, setQuery] = React.useState('');
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState<'all' | 'in_progress' | 'overdue' | 'not_started'>('all');
+  const rows = lessons
+    .flatMap((lesson) => lesson.items.map((item) => ({ lesson, item })))
+    .sort((a, b) => new Date(b.lesson.lesson_at).getTime() - new Date(a.lesson.lesson_at).getTime());
+  const groupName = lessons[0]?.group_name;
+  const normalizedQuery = query.trim().toLocaleLowerCase('ru-RU');
+  const pendingRows = rows.filter(({ lesson, item }) => !getGroupPlanItemState(lesson, item, now).complete);
+  const historyRows = rows.filter(({ lesson, item }) => getGroupPlanItemState(lesson, item, now).complete);
+  const filteredRows = pendingRows.filter(({ lesson, item }) => {
+    const matchesQuery = !normalizedQuery
+      || item.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery)
+      || lesson.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery);
+    const { overdue } = getGroupPlanItemState(lesson, item, now);
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'overdue' && overdue)
+      || (statusFilter === 'in_progress' && item.completion_status === 'in_progress')
+      || (statusFilter === 'not_started' && item.completion_status === 'not_started' && !overdue);
+    return matchesQuery && matchesStatus;
+  });
+
+  if (loading) {
+    return <Panel className="min-h-[280px] animate-pulse"><div className="h-6 w-44 rounded bg-white/10" /><div className="mt-6 h-48 rounded-lg bg-white/[0.04]" /></Panel>;
+  }
+
+  return (
+    <Panel className="group-preparation-plan min-h-[280px] !p-0">
+      <div className="flex flex-col gap-4 border-b border-white/[0.07] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.035] text-slate-300">
+              <CalendarDays size={16} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold leading-5 text-white">План подготовки</h2>
+              <p className="text-[11px] text-slate-500">
+                {groupName ? `Группа «${groupName}»` : 'Занятия и домашние задания вашей группы'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {pendingRows.length > 0 && (
+          <div className="flex w-full gap-2 lg:w-auto">
+            <label className="relative min-w-0 flex-1 lg:w-[210px] lg:flex-none">
+              <span className="sr-only">Найти задание</span>
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Найти задание..."
+                className="h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-xs text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-white/20 focus:bg-white/[0.055]"
+              />
+            </label>
+            <label className="relative shrink-0">
+              <span className="sr-only">Фильтр заданий</span>
+              <SlidersHorizontal size={13} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+                className="h-9 appearance-none rounded-lg border border-white/[0.08] bg-white/[0.055] pl-8 pr-7 text-xs font-medium text-slate-300 outline-none transition hover:bg-white/[0.08] focus:border-white/20"
+              >
+                <option value="all">Все</option>
+                <option value="in_progress">В работе</option>
+                <option value="overdue">Просрочено</option>
+                <option value="not_started">Не начато</option>
+              </select>
+              <ChevronRight size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-slate-500" />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="m-5 rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-5 py-10 text-center">
+          <BookOpen size={34} className="mx-auto mb-3 text-slate-500" />
+          <p className="font-bold text-slate-200">План пока не заполнен</p>
+          <p className="mt-1 text-sm text-slate-500">Когда преподаватель опубликует занятие, материалы появятся здесь.</p>
+        </div>
+      ) : (
+        <div>
+          {pendingRows.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <CheckCircle2 size={30} className="mx-auto text-emerald-400" />
+              <p className="mt-3 text-sm font-semibold text-slate-200">Все задачи выполнены</p>
+              <p className="mt-1 text-xs text-slate-500">Новые материалы появятся здесь после публикации.</p>
+            </div>
+          ) : filteredRows.length > 0 ? (
+            <GroupPlanRowsTable rows={filteredRows} now={now} />
+          ) : (
+            <div className="px-5 py-10 text-center text-xs text-slate-500">
+              По вашему запросу ничего не найдено
+            </div>
+          )}
+
+          {historyRows.length > 0 && (
+            <div className="border-t border-white/[0.07]">
+              <button
+                type="button"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((value) => !value)}
+                className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition hover:bg-white/[0.025]"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
+                  <span className="text-xs font-medium text-slate-300">История выполненных</span>
+                  <span className="rounded-md bg-white/[0.055] px-1.5 py-0.5 text-[9px] font-medium text-slate-500">{historyRows.length}</span>
+                </span>
+                <ChevronRight size={15} className={clsx('shrink-0 text-slate-500 transition-transform', historyOpen && 'rotate-90')} />
+              </button>
+              {historyOpen && (
+                <div className="border-t border-white/[0.06] bg-black/[0.07]">
+                  <GroupPlanRowsTable rows={historyRows} now={now} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function GroupPlanRowsTable({
+  rows,
+  now,
+}: {
+  rows: { lesson: GroupLesson; item: GroupLessonItem }[];
+  now: number;
+}) {
+  return (
+    <div className="overflow-hidden">
+      <Table className="min-w-[680px]">
+        <TableHeader>
+          <TableRow className="border-white/[0.06] hover:bg-transparent">
+            <TableHead className="h-9 px-5 text-[10px] font-medium text-slate-600">Материал</TableHead>
+            <TableHead className="h-9 px-4 text-[10px] font-medium text-slate-600">Занятие</TableHead>
+            <TableHead className="h-9 px-4 text-[10px] font-medium text-slate-600">Дедлайн</TableHead>
+            <TableHead className="h-9 px-5 text-right text-[10px] font-medium text-slate-600">Статус</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ lesson, item }) => <GroupPlanTableRow key={`${lesson.id}:${item.id}`} lesson={lesson} item={item} now={now} />)}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function GroupPlanTableRow({ lesson, item, now }: { lesson: GroupLesson; item: GroupLessonItem; now: number }) {
+  const { complete, deadline, overdue, status } = getGroupPlanItemState(lesson, item, now);
+  const statusClass = complete
+    ? 'border-emerald-300/15 bg-emerald-400/10 text-emerald-300'
+    : overdue
+      ? 'border-red-300/15 bg-red-400/10 text-red-300'
+      : item.completion_status === 'in_progress'
+        ? 'border-amber-300/15 bg-amber-400/10 text-amber-300'
+        : 'border-white/[0.07] bg-white/[0.035] text-slate-500';
+
+  return (
+    <TableRow className="border-white/[0.055] transition-colors hover:bg-white/[0.025]">
+      <TableCell className="max-w-[330px] px-5 py-2.5">
+        <Link to={item.href} className="group flex min-w-0 items-center gap-3 whitespace-normal">
+          <span className={clsx(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded border',
+            item.section === 'homework'
+              ? 'border-violet-300/10 bg-violet-400/10 text-violet-300'
+              : 'border-sky-300/10 bg-sky-400/10 text-sky-300',
+          )}>
+            {item.section === 'homework' ? <ListChecks size={13} /> : <FileText size={13} />}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-xs font-medium text-slate-200 transition group-hover:text-white">{item.title}</span>
+              <span className={clsx('shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide', item.section === 'homework' ? 'bg-violet-400/10 text-violet-300' : 'bg-sky-400/10 text-sky-300')}>{item.section === 'homework' ? 'ДЗ' : 'Урок'}</span>
+            </div>
+            {item.total > 0 && <span className="mt-0.5 block text-[10px] font-normal text-slate-600">{item.solved} из {item.total} выполнено</span>}
+          </div>
+        </Link>
+      </TableCell>
+      <TableCell className="max-w-[190px] px-4 py-2.5">
+        <span className="block truncate text-xs text-slate-400" title={lesson.title}>{lesson.title}</span>
+        <span className="mt-0.5 block text-[10px] text-slate-600">{formatGroupPlanDate(lesson.lesson_at)}</span>
+      </TableCell>
+      <TableCell className={clsx('px-4 py-2.5 text-xs', overdue ? 'font-medium text-red-300' : 'text-slate-400')}>{deadline ? formatGroupPlanDate(deadline) : '—'}</TableCell>
+      <TableCell className="px-5 py-2.5 text-right"><Badge variant="outline" className={clsx('h-6 rounded-md px-2 text-[9px] font-medium', statusClass)}>{status}</Badge></TableCell>
+    </TableRow>
+  );
+}
+
+function getGroupPlanItemState(lesson: GroupLesson, item: GroupLessonItem, now: number) {
+  const complete = item.completion_status === 'completed';
+  const deadline = item.section === 'homework' ? lesson.homework_deadline : null;
+  const overdue = Boolean(deadline && new Date(deadline).getTime() < now && !complete);
+  const status = complete ? 'Выполнено' : overdue ? 'Просрочено' : item.completion_status === 'in_progress' ? 'В работе' : 'Не начато';
+  return { complete, deadline, overdue, status };
+}
+
+function formatGroupPlanDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+}
+
 function ActivityCard({
   weeklyDays,
   weeklyTotal,
@@ -987,7 +1099,7 @@ function PerformanceCard({ scores }: { scores: ExamScorePoint[] }) {
 
 function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`home-panel rounded-[16px] border border-white/10 bg-[#0A1522] p-6 shadow-[0_18px_42px_rgba(0,0,0,0.25)] ${className}`}>
+    <section className={`home-panel rounded-[10px] border border-white/[0.08] bg-[#202020] p-5 shadow-[0_8px_24px_rgba(0,0,0,0.16)] ${className}`}>
       {children}
     </section>
   );

@@ -15,6 +15,7 @@ import ExamsListPage from "./pages/ExamsListPage";
 import ExamPage from "./pages/ExamPage";
 import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import TaskBankPage from "./pages/TaskBankPage";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -40,6 +41,7 @@ const PAGE_TITLES: { pattern: RegExp; title: string }[] = [
   { pattern: /^\/tasks/, title: "Разбор" },
   { pattern: /^\/admin/, title: "Админ" },
   { pattern: /^\/notifications/, title: "Уведомления" },
+  { pattern: /^\/task-bank/, title: "База заданий" },
   { pattern: /^\/$|^\/dashboard/, title: DEFAULT_SEO_TITLE },
 ];
 
@@ -97,6 +99,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return loggedIn ? <>{children}</> : <LandingPage />;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  return user.role === "admin" ? <>{children}</> : <Navigate to="/dashboard" replace />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -128,6 +136,14 @@ export default function App() {
                 <Route path="homework/:id" element={<TasksPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="admin/*" element={<AdminPage />} />
+                <Route
+                  path="task-bank"
+                  element={
+                    <AdminRoute>
+                      <TaskBankPage />
+                    </AdminRoute>
+                  }
+                />
               </Route>
 
               {/* Routes without MainLayout (keep old ones if needed or remove) */}

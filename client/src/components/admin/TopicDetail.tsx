@@ -32,6 +32,7 @@ import {
   User,
   Image as ImagePic,
   Check,
+  Settings2,
 } from 'lucide-react';
 
 // ── Пресеты персонажей и фонов из /public/character/ ───────────────────────
@@ -123,9 +124,12 @@ interface TopicDetailProps {
   onBack: () => void;
   onSaveTopic: (data: Partial<TopicAdmin>) => void;
   onSaveTask: (data: Partial<TaskAdmin>) => void;
+  onAttachTaskById: (taskId: number) => Promise<void>;
   onReorderTasks: (orderedTasks: TaskAdmin[]) => void;
   onDeleteTask: (id: number) => void;
   apiKey?: string;
+  initialTaskId?: number;
+  onExitInitialTask?: () => void;
 }
 
 export function TopicDetail({
@@ -134,20 +138,36 @@ export function TopicDetail({
   onBack,
   onSaveTopic,
   onSaveTask,
+  onAttachTaskById,
   onReorderTasks,
   onDeleteTask,
   apiKey,
+  initialTaskId,
+  onExitInitialTask,
 }: TopicDetailProps) {
   const [editingTopic, setEditingTopic] = useState(topic);
   const [editingTask, setEditingTask] = useState<Partial<TaskAdmin> | null>(null);
   const [isEditingHeader, setIsEditingHeader] = useState(false);
   const [isCardPreviewOpen, setIsCardPreviewOpen] = useState(false);
+  const [isAttachTaskOpen, setIsAttachTaskOpen] = useState(false);
+  const [attachTaskId, setAttachTaskId] = useState('');
+  const [attachTaskError, setAttachTaskError] = useState('');
+  const [isAttachingTask, setIsAttachingTask] = useState(false);
   const [search, setSearch] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
   const [dragTarget, setDragTarget] = useState<{ index: number; position: 'before' | 'after' } | null>(null);
   const [dragCursor, setDragCursor] = useState<{ x: number; y: number } | null>(null);
   const skipTaskClickRef = useRef(false);
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  const appliedInitialTaskRef = useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (!initialTaskId || appliedInitialTaskRef.current === initialTaskId) return;
+    const requestedTask = tasks.find((task) => task.id === initialTaskId);
+    if (!requestedTask) return;
+    appliedInitialTaskRef.current = initialTaskId;
+    setEditingTask(requestedTask);
+  }, [initialTaskId, tasks]);
 
   // ── Card image management ────────────────────────────────────────────────
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -350,12 +370,43 @@ export function TopicDetail({
     setIsEditingHeader(false);
   };
 
+  const handleCloseTopicSettings = () => {
+    setEditingTopic(topic);
+    setIsEditingHeader(false);
+  };
+
+  const handleAttachTask = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const taskId = Number(attachTaskId.trim().replace(/^#/, ''));
+    if (!Number.isInteger(taskId) || taskId < 1) {
+      setAttachTaskError('Введите корректный ID задания');
+      return;
+    }
+    try {
+      setIsAttachingTask(true);
+      setAttachTaskError('');
+      await onAttachTaskById(taskId);
+      setAttachTaskId('');
+      setIsAttachTaskOpen(false);
+    } catch (error) {
+      setAttachTaskError(error instanceof Error ? error.message : 'Не удалось добавить задание');
+    } finally {
+      setIsAttachingTask(false);
+    }
+  };
+
   // ── Task edit panel is open ──────────────────────────────────────────────
   if (editingTask) {
     return (
       <TaskEditPanel
         task={editingTask}
-        onBack={() => setEditingTask(null)}
+        onBack={() => {
+          if (initialTaskId && editingTask.id === initialTaskId && onExitInitialTask) {
+            onExitInitialTask();
+            return;
+          }
+          setEditingTask(null);
+        }}
         apiKey={apiKey}
         onSave={(data) => {
           onSaveTask(data);
@@ -377,128 +428,12 @@ export function TopicDetail({
           >
             <ArrowLeft size={20} />
           </button>
-          {isEditingHeader ? (
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={editingTopic.title}
-                onChange={(e) => handleTopicFieldChange('title', e.target.value)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 w-64"
-                placeholder="Название"
-              />
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-                <Hash size={14} className="text-gray-400" />
-                <select
-                  value={
-                    editingTopic.ege_number_end != null && editingTopic.ege_number != null
-                      ? `${editingTopic.ege_number}-${editingTopic.ege_number_end}`
-                      : (editingTopic.ege_number != null ? String(editingTopic.ege_number) : '')
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === '') {
-                      handleTopicFieldChange('ege_number', null);
-                      handleTopicFieldChange('ege_number_end', null);
-                    } else if (v.includes('-')) {
-                      const [a, b] = v.split('-').map(n => parseInt(n));
-                      handleTopicFieldChange('ege_number', a);
-                      handleTopicFieldChange('ege_number_end', b);
-                    } else {
-                      handleTopicFieldChange('ege_number', parseInt(v));
-                      handleTopicFieldChange('ege_number_end', null);
-                    }
-                  }}
-                  className="bg-transparent text-sm font-bold focus:outline-none"
-                >
-                  <option value="">— №</option>
-                  {Array.from({ length: 18 }, (_, i) => (
-                    <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
-                  ))}
-                  <option value="19-21">№19-21 (теория игр)</option>
-                  {[22, 23, 24, 25, 26, 27].map(n => (
-                    <option key={n} value={String(n)}>№{n}</option>
-                  ))}
-                </select>
-                <span className="text-[10px] font-bold text-gray-400 uppercase">ЕГЭ</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-                <Clock size={14} className="text-gray-400" />
-                <input
-                  type="number"
-                  value={editingTopic.time_limit_minutes || 60}
-                  onChange={(e) =>
-                    handleTopicFieldChange('time_limit_minutes', parseInt(e.target.value) || 0)
-                  }
-                  className="w-16 bg-transparent text-sm font-bold focus:outline-none"
-                  placeholder="Мин"
-                />
-                <span className="text-[10px] font-bold text-gray-400 uppercase">Мин</span>
-              </div>
-              <select
-                value={editingTopic.category}
-                onChange={(e) => {
-                  const nextCategory = e.target.value as TopicCategory;
-                  setEditingTopic((prev) => ({
-                    ...prev,
-                    category: nextCategory,
-                    subject: nextCategory === 'math' ? 'math' : (prev.subject ?? 'informatics'),
-                    course_type: isCommonCourseCategory(nextCategory)
-                      ? 'common'
-                      : prev.course_type === 'common' ? 'year' : prev.course_type,
-                  }));
-                }}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
-              >
-                <option value="tutorial">Разбор</option>
-                <option value="homework">Домашняя работа</option>
-                <option value="control">Контрольная работа</option>
-                <option value="variants">Вариант</option>
-                <option value="math">Математика</option>
-                <option value="mock">Пробник</option>
-              </select>
-              <select
-                value={editingTopic.subject ?? (editingTopic.category === 'math' ? 'math' : 'informatics')}
-                onChange={(e) => handleTopicFieldChange('subject', e.target.value as TopicSubject)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold"
-              >
-                <option value="informatics">Информатика</option>
-                <option value="math">Математика</option>
-              </select>
-              <select
-                value={isCommonCourseCategory(editingTopic.category) ? 'common' : (editingTopic.course_type ?? 'year')}
-                onChange={(e) => handleTopicFieldChange('course_type', e.target.value)}
-                disabled={isCommonCourseCategory(editingTopic.category)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-bold disabled:text-gray-400"
-              >
-                <option value="year">Годовой</option>
-                <option value="summer">Летний</option>
-                <option value="common">Общий</option>
-              </select>
-              <label className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-100 rounded-lg text-xs font-bold text-teal-700">
-                <input
-                  type="checkbox"
-                  checked={Boolean(editingTopic.open_to_groups)}
-                  onChange={(e) => handleTopicFieldChange('open_to_groups', e.target.checked)}
-                  className="h-3.5 w-3.5 accent-teal-600"
-                />
-                Для групп
-              </label>
-              <button
-                onClick={handleSaveTopicHeader}
-                className="p-1.5 bg-[#3F8C62] text-white rounded-lg hover:bg-[#357A54] transition-colors"
-              >
-                <Save size={16} />
-              </button>
-              <button
-                onClick={() => setIsEditingHeader(false)}
-                className="p-1.5 bg-gray-100 text-gray-400 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          ) : (
+          {(
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-gray-900">{topic.title}</h2>
+              <span className="px-2 py-0.5 rounded-lg bg-sky-100 text-sky-700 text-[10px] font-bold uppercase tracking-wider">
+                {(topic.exam_type ?? 'ege').toUpperCase()}
+              </span>
               <span className={clsx(
                 'px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider',
                 (topic.subject === 'math' || topic.category === 'math')
@@ -521,6 +456,11 @@ export function TopicDetail({
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded-lg">
                   <User size={12} />
                   <span className="text-[10px] font-bold">Для групп</span>
+                </div>
+              )}
+              {topic.show_in_tasks === false && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-lg">
+                  <span className="text-[10px] font-bold">Скрыт из «Заданий»</span>
                 </div>
               )}
               <span
@@ -552,15 +492,19 @@ export function TopicDetail({
                   : 'Вариант'}
               </span>
               <button
-                onClick={() => setIsEditingHeader(true)}
+                onClick={() => {
+                  setEditingTopic(topic);
+                  setIsEditingHeader(true);
+                }}
                 className="p-1.5 text-gray-400 hover:text-gray-600"
+                title="Настройки топика"
               >
                 <Pencil size={14} />
               </button>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
             <input
@@ -579,9 +523,21 @@ export function TopicDetail({
             Превью карточки
           </button>
           <button
+            onClick={() => {
+              setAttachTaskError('');
+              setIsAttachTaskOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-600 transition-all hover:border-[#3F8C62]/30 hover:bg-[#3F8C62]/5 hover:text-[#3F8C62]"
+          >
+            <Hash size={14} />
+            Добавить по ID
+          </button>
+          <button
             onClick={() =>
               setEditingTask({
                 topic_id: topic.id,
+                subject: topic.subject,
+                exam_type: topic.exam_type ?? 'ege',
                 content_html: '',
                 answer_type: 'single_number' as AnswerType,
                 difficulty: 'easy' as TaskDifficulty,
@@ -594,6 +550,320 @@ export function TopicDetail({
           </button>
         </div>
       </div>
+
+      {isEditingHeader && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) handleCloseTopicSettings();
+          }}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1d1f1e]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="topic-settings-title"
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white/95 px-6 py-5 backdrop-blur dark:border-white/10 dark:bg-[#1d1f1e]/95 sm:px-8">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#3F8C62]/12 text-[#3F8C62] dark:bg-[#21B66F]/15 dark:text-[#5ee6a5]">
+                  <Settings2 size={21} />
+                </div>
+                <div>
+                  <h3 id="topic-settings-title" className="text-lg font-black text-gray-900 dark:text-white">
+                    Настройки топика
+                  </h3>
+                  <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Основные параметры и видимость для учеников
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseTopicSettings}
+                className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-white"
+                aria-label="Закрыть настройки"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-7 px-6 py-6 sm:px-8">
+              <section>
+                <div className="mb-4">
+                  <h4 className="text-sm font-black text-gray-900 dark:text-white">Основные параметры</h4>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Название и место топика в структуре курса</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <label className="sm:col-span-2 lg:col-span-3">
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Название топика</span>
+                    <input
+                      type="text"
+                      value={editingTopic.title}
+                      onChange={(e) => handleTopicFieldChange('title', e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none transition focus:border-[#3F8C62] focus:bg-white focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-[#21B66F] dark:focus:bg-white/[0.07]"
+                      placeholder="Название"
+                      autoFocus
+                    />
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Тип экзамена</span>
+                    <select
+                      value={editingTopic.exam_type ?? 'ege'}
+                      onChange={(e) => handleTopicFieldChange('exam_type', e.target.value as 'ege' | 'oge')}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-[#252725] dark:text-white"
+                    >
+                      <option value="ege">ЕГЭ</option>
+                      <option value="oge">ОГЭ</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Номер задания</span>
+                    <select
+                      value={
+                        editingTopic.ege_number_end != null && editingTopic.ege_number != null
+                          ? `${editingTopic.ege_number}-${editingTopic.ege_number_end}`
+                          : (editingTopic.ege_number != null ? String(editingTopic.ege_number) : '')
+                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          handleTopicFieldChange('ege_number', null);
+                          handleTopicFieldChange('ege_number_end', null);
+                        } else if (value.includes('-')) {
+                          const [start, end] = value.split('-').map(Number);
+                          setEditingTopic((current) => ({ ...current, ege_number: start, ege_number_end: end }));
+                        } else {
+                          setEditingTopic((current) => ({ ...current, ege_number: Number(value), ege_number_end: null }));
+                        }
+                      }}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-[#252725] dark:text-white"
+                    >
+                      <option value="">Без номера</option>
+                      {Array.from({ length: 18 }, (_, i) => (
+                        <option key={i + 1} value={String(i + 1)}>№{i + 1}</option>
+                      ))}
+                      <option value="19-21">№19–21 (теория игр)</option>
+                      {[22, 23, 24, 25, 26, 27].map((number) => (
+                        <option key={number} value={String(number)}>№{number}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Предмет</span>
+                    <select
+                      value={editingTopic.subject ?? (editingTopic.category === 'math' ? 'math' : 'informatics')}
+                      onChange={(e) => handleTopicFieldChange('subject', e.target.value as TopicSubject)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-[#252725] dark:text-white"
+                    >
+                      <option value="informatics">Информатика</option>
+                      <option value="math">Математика</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Категория</span>
+                    <select
+                      value={editingTopic.category}
+                      onChange={(e) => {
+                        const nextCategory = e.target.value as TopicCategory;
+                        setEditingTopic((current) => ({
+                          ...current,
+                          category: nextCategory,
+                          subject: nextCategory === 'math' ? 'math' : (current.subject ?? 'informatics'),
+                          course_type: isCommonCourseCategory(nextCategory)
+                            ? 'common'
+                            : current.course_type === 'common' ? 'year' : current.course_type,
+                        }));
+                      }}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-[#252725] dark:text-white"
+                    >
+                      <option value="tutorial">Разбор</option>
+                      <option value="homework">Домашняя работа</option>
+                      <option value="control">Контрольная работа</option>
+                      <option value="variants">Вариант</option>
+                      <option value="math">Математика</option>
+                      <option value="mock">Пробник</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Тип курса</span>
+                    <select
+                      value={isCommonCourseCategory(editingTopic.category) ? 'common' : (editingTopic.course_type ?? 'year')}
+                      onChange={(e) => handleTopicFieldChange('course_type', e.target.value)}
+                      disabled={isCommonCourseCategory(editingTopic.category)}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#252725] dark:text-white"
+                    >
+                      <option value="year">Годовой</option>
+                      <option value="summer">Летний</option>
+                      <option value="common">Общий</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-2 block text-xs font-bold text-gray-600 dark:text-gray-300">Время на выполнение</span>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        value={editingTopic.time_limit_minutes || 60}
+                        onChange={(e) => handleTopicFieldChange('time_limit_minutes', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-16 text-sm font-bold text-gray-900 outline-none focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                      />
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">мин</span>
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              <section className="border-t border-gray-100 pt-6 dark:border-white/10">
+                <div className="mb-4">
+                  <h4 className="text-sm font-black text-gray-900 dark:text-white">Доступ и отображение</h4>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Укажите, где ученики смогут увидеть этот топик</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTopicFieldChange('open_to_groups', !editingTopic.open_to_groups)}
+                    className={clsx(
+                      'flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition',
+                      editingTopic.open_to_groups
+                        ? 'border-[#3F8C62]/40 bg-[#3F8C62]/10 dark:border-[#21B66F]/40 dark:bg-[#21B66F]/10'
+                        : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20'
+                    )}
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">Доступен группам</div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Можно добавлять в планы занятий</div>
+                    </div>
+                    <span className={clsx('relative h-6 w-11 shrink-0 rounded-full transition', editingTopic.open_to_groups ? 'bg-[#3F8C62] dark:bg-[#21B66F]' : 'bg-gray-300 dark:bg-white/20')}>
+                      <span className={clsx('absolute top-1 h-4 w-4 rounded-full bg-white shadow transition', editingTopic.open_to_groups ? 'left-6' : 'left-1')} />
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTopicFieldChange('show_in_tasks', editingTopic.show_in_tasks === false)}
+                    className={clsx(
+                      'flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition',
+                      editingTopic.show_in_tasks !== false
+                        ? 'border-[#3F8C62]/40 bg-[#3F8C62]/10 dark:border-[#21B66F]/40 dark:bg-[#21B66F]/10'
+                        : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20'
+                    )}
+                  >
+                    <div>
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">Во вкладке «Задания»</div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Показывать карточку ученикам</div>
+                    </div>
+                    <span className={clsx('relative h-6 w-11 shrink-0 rounded-full transition', editingTopic.show_in_tasks !== false ? 'bg-[#3F8C62] dark:bg-[#21B66F]' : 'bg-gray-300 dark:bg-white/20')}>
+                      <span className={clsx('absolute top-1 h-4 w-4 rounded-full bg-white shadow transition', editingTopic.show_in_tasks !== false ? 'left-6' : 'left-1')} />
+                    </span>
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-gray-100 bg-white/95 px-6 py-4 backdrop-blur dark:border-white/10 dark:bg-[#1d1f1e]/95 sm:flex-row sm:justify-end sm:px-8">
+              <button
+                type="button"
+                onClick={handleCloseTopicSettings}
+                className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTopicHeader}
+                disabled={!editingTopic.title.trim()}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#3F8C62] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#3F8C62]/20 transition hover:bg-[#357A54] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#21B66F] dark:text-[#06150e] dark:hover:bg-[#2bc77d]"
+              >
+                <Save size={16} />
+                Сохранить изменения
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAttachTaskOpen && (
+        <div
+          className="admin-modal-overlay fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isAttachingTask) setIsAttachTaskOpen(false);
+          }}
+        >
+          <form
+            onSubmit={handleAttachTask}
+            className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attach-task-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="attach-task-title" className="text-lg font-bold text-gray-900">Добавить задание по ID</h3>
+                <p className="mt-1 text-sm leading-5 text-gray-500">Задание будет добавлено в конец списка текущего топика.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAttachTaskOpen(false)}
+                disabled={isAttachingTask}
+                className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                aria-label="Закрыть"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">ID задания</span>
+              <input
+                value={attachTaskId}
+                onChange={(event) => setAttachTaskId(event.target.value)}
+                inputMode="numeric"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
+                placeholder="Например, 125"
+                autoFocus
+                disabled={isAttachingTask}
+              />
+            </label>
+
+            <p className="mt-2 text-xs leading-5 text-gray-400">
+              Если задание находится в другом топике, оно будет перенесено сюда.
+            </p>
+
+            {attachTaskError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
+                {attachTaskError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAttachTaskOpen(false)}
+                disabled={isAttachingTask}
+                className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={isAttachingTask}
+                className="rounded-xl bg-[#3F8C62] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#3F8C62]/20 transition hover:bg-[#357A54] disabled:opacity-50"
+              >
+                {isAttachingTask ? 'Добавление...' : 'Добавить'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Card visuals: preview + character picker + background picker */}
       {isCardPreviewOpen && (
@@ -1034,7 +1304,7 @@ export function TopicDetail({
 // ─────────────────────────────────────────────────────────────────────────────
 // Task Edit Panel — replaces task list, full height
 // ─────────────────────────────────────────────────────────────────────────────
-function TaskEditPanel({
+export function TaskEditPanel({
   task,
   onBack,
   onSave,
@@ -1047,6 +1317,8 @@ function TaskEditPanel({
 }) {
   const [form, setForm] = useState({
     ege_number: task.ege_number || 1,
+    exam_type: task.exam_type || 'ege',
+    subject: task.subject || 'informatics',
     title: task.title || '',
     content_html: task.content_html || '',
     difficulty: (task.difficulty || 'easy') as TaskDifficulty,
@@ -1211,9 +1483,31 @@ function TaskEditPanel({
 
       {/* Meta */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
           <div>
-            <label className={labelCls}>№ ЕГЭ</label>
+            <label className={labelCls}>Тип экзамена</label>
+            <select
+              value={form.exam_type}
+              onChange={(e) => setForm({ ...form, exam_type: e.target.value as 'ege' | 'oge' })}
+              className={inputCls}
+            >
+              <option value="ege">ЕГЭ</option>
+              <option value="oge">ОГЭ</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Предмет</label>
+            <select
+              value={form.subject}
+              onChange={(e) => setForm({ ...form, subject: e.target.value as 'informatics' | 'math' })}
+              className={inputCls}
+            >
+              <option value="informatics">Информатика</option>
+              <option value="math">Математика</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>№ задания</label>
             <select
               value={form.sub_tasks.length >= 2 && form.ege_number === 19 ? '19-21' : String(form.ege_number)}
               onChange={(e) => {
@@ -1592,7 +1886,7 @@ function TaskEditPanel({
           <div className="w-px h-4 bg-gray-200" />
           <span className="text-xs text-gray-400">
             {task.id ? `Задача #${task.id}` : 'Новая задача'}
-            {form.ege_number > 0 && <span className="ml-2 font-bold text-gray-600">№{form.ege_number} ЕГЭ</span>}
+            {form.ege_number > 0 && <span className="ml-2 font-bold text-gray-600">№{form.ege_number} {form.exam_type.toUpperCase()}</span>}
           </span>
         </div>
         <button onClick={handleSave}

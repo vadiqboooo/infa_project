@@ -827,7 +827,7 @@
 .dark .task-body .task-inline-svg [fill="#fff"],
 .dark .task-body .task-inline-svg [fill="#ffffff"],
 .dark .task-body .task-inline-svg [fill="white"] {
-    fill: #07111d !important;
+    fill: #202020 !important;
 }
 
 .light .task-body .task-inline-svg [stroke="#000"],

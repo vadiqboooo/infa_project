@@ -44,6 +44,8 @@ from app.schemas.admin import (
     ImportVariantResult,
     TaskAdminIn,
     TaskAdminOut,
+    AttachTaskIn,
+    TaskBankItemOut,
     TopicIn,
     TopicOut,
     StudentOut,
@@ -88,6 +90,7 @@ router = APIRouter(
 
 COMMON_TOPIC_CATEGORIES = {"variants", "math", "mock"}
 KNOWN_SUBJECTS = {"informatics", "math"}
+KNOWN_EXAM_TYPES = {"ege", "oge"}
 
 
 def _normalize_topic_course_type(category: str, course_type: str | None) -> str:
@@ -102,6 +105,10 @@ def _normalize_topic_subject(subject: str | None, category: str | None = None) -
     if category == "math":
         return "math"
     return "informatics"
+
+
+def _normalize_exam_type(exam_type: str | None) -> str:
+    return exam_type if exam_type in KNOWN_EXAM_TYPES else "ege"
 
 
 class AdminHelpNotificationOut(BaseModel):
@@ -274,11 +281,13 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             order_index=t.order_index,
             category=t.category,
             subject=t.subject,
+            exam_type=t.exam_type,
             course_type=t.course_type,
             task_count=counts.get(t.id, 0),
             time_limit_minutes=exams.get(t.id, 60),
             is_mock=t.is_mock,
             open_to_groups=t.open_to_groups,
+            show_in_tasks=t.show_in_tasks,
             ege_number=t.ege_number,
             ege_number_end=t.ege_number_end,
             has_image=t.image_data is not None,
@@ -298,9 +307,11 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         order_index=body.order_index,
         category=body.category,
         subject=_normalize_topic_subject(body.subject, body.category),
+        exam_type=_normalize_exam_type(body.exam_type),
         course_type=_normalize_topic_course_type(body.category, body.course_type),
         is_mock=body.is_mock,
         open_to_groups=body.open_to_groups,
+        show_in_tasks=body.show_in_tasks,
         ege_number=body.ege_number,
         ege_number_end=body.ege_number_end,
         image_position=body.image_position,
@@ -323,11 +334,13 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         order_index=topic.order_index,
         category=topic.category,
         subject=topic.subject,
+        exam_type=topic.exam_type,
         course_type=topic.course_type,
         task_count=0,
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
         has_image=False,
@@ -349,9 +362,11 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.order_index = body.order_index
     topic.category = body.category
     topic.subject = _normalize_topic_subject(body.subject, body.category)
+    topic.exam_type = _normalize_exam_type(body.exam_type)
     topic.course_type = _normalize_topic_course_type(body.category, body.course_type)
     topic.is_mock = body.is_mock
     topic.open_to_groups = body.open_to_groups
+    topic.show_in_tasks = body.show_in_tasks
     topic.ege_number = body.ege_number
     topic.ege_number_end = body.ege_number_end
     topic.image_position = body.image_position
@@ -381,11 +396,13 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         order_index=topic.order_index,
         category=topic.category,
         subject=topic.subject,
+        exam_type=topic.exam_type,
         course_type=topic.course_type,
         task_count=task_count,
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
         has_image=topic.image_data is not None,
@@ -472,11 +489,13 @@ async def upload_topic_image(
         order_index=topic.order_index,
         category=topic.category,
         subject=topic.subject,
+        exam_type=topic.exam_type,
         course_type=topic.course_type,
         task_count=task_count,
         time_limit_minutes=exam.time_limit_minutes if exam else 60,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
         has_image=True,
@@ -2116,10 +2135,84 @@ async def list_tasks(topic_id: int | None = None, db: AsyncSession = Depends(get
     return result.scalars().all()
 
 
+@router.post("/topics/{topic_id}/tasks/attach", response_model=TaskAdminOut)
+async def attach_task_to_topic(
+    topic_id: int,
+    body: AttachTaskIn,
+    db: AsyncSession = Depends(get_db),
+):
+    topic = await db.get(Topic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Топик не найден")
+
+    task = await db.get(Task, body.task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Задание с ID {body.task_id} не найдено")
+    if task.topic_id == topic_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Это задание уже добавлено в топик")
+
+    max_order_result = await db.execute(
+        select(func.max(Task.order_index)).where(Task.topic_id == topic_id)
+    )
+    max_order = max_order_result.scalar()
+
+    # A task belongs to one topic, so remove its stale exam link before moving it.
+    await db.execute(delete(exam_tasks).where(exam_tasks.c.task_id == task.id))
+    task.topic_id = topic.id
+    task.subject = topic.subject
+    task.exam_type = topic.exam_type
+    task.order_index = (max_order + 1) if max_order is not None else 0
+
+    exam_result = await db.execute(select(Exam).where(Exam.topic_id == topic_id))
+    exam = exam_result.scalar_one_or_none()
+    if exam is None:
+        exam = Exam(topic_id=topic_id, time_limit_minutes=60)
+        db.add(exam)
+        await db.flush()
+
+    await db.execute(exam_tasks.insert().values(exam_id=exam.id, task_id=task.id))
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.get("/task-bank", response_model=list[TaskBankItemOut])
+async def list_task_bank(
+    exam_type: str | None = Query(default=None),
+    subject: str | None = Query(default=None),
+    ege_number: int | None = Query(default=None, ge=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return every task with topic metadata for the admin-only task bank."""
+    query = select(Task, Topic).outerjoin(Topic, Topic.id == Task.topic_id)
+    task_exam_type = func.coalesce(Topic.exam_type, Task.exam_type)
+    task_subject = func.coalesce(Topic.subject, Task.subject)
+    if exam_type in KNOWN_EXAM_TYPES:
+        query = query.where(task_exam_type == exam_type)
+    if subject in KNOWN_SUBJECTS:
+        query = query.where(task_subject == subject)
+    if ege_number is not None:
+        query = query.where(Task.ege_number == ege_number)
+
+    query = query.order_by(task_exam_type, task_subject, Task.ege_number, Task.id)
+    rows = (await db.execute(query)).all()
+    return [
+        TaskBankItemOut(**(
+            TaskAdminOut.model_validate(task).model_dump()
+            | {
+                "topic_title": topic.title if topic else "Без топика",
+                "subject": topic.subject if topic else task.subject,
+                "exam_type": topic.exam_type if topic else task.exam_type,
+            }
+        ))
+        for task, topic in rows
+    ]
+
+
 @router.post("/tasks", response_model=TaskAdminOut, status_code=status.HTTP_201_CREATED)
 async def create_task(body: TaskAdminIn, db: AsyncSession = Depends(get_db)):
-    topic = await db.get(Topic, body.topic_id)
-    if topic is None:
+    topic = await db.get(Topic, body.topic_id) if body.topic_id is not None else None
+    if body.topic_id is not None and topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
 
     # Получить максимальный order_index для этой темы
@@ -2130,6 +2223,8 @@ async def create_task(body: TaskAdminIn, db: AsyncSession = Depends(get_db)):
 
     task = Task(
         topic_id=body.topic_id,
+        subject=_normalize_topic_subject(body.subject or (topic.subject if topic else None)),
+        exam_type=_normalize_exam_type(body.exam_type or (topic.exam_type if topic else None)),
         external_id=body.external_id,
         ege_number=body.ege_number,
         title=body.title,

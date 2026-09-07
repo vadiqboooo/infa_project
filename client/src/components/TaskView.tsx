@@ -563,7 +563,7 @@ function encodeSvgDataUri(svg: string): string {
 function applySvgTheme(svg: string, theme: "dark" | "light"): string {
     const ink = theme === "dark" ? "#e5edf5" : "#13231b";
     const softInk = theme === "dark" ? "#94a3b8" : "#607064";
-    const paper = theme === "dark" ? "#07111d" : "#ffffff";
+    const paper = theme === "dark" ? "#202020" : "#ffffff";
 
     let themed = svg
         .replace(/(stroke=["'])(?:#000000|#000|black|rgb\(0,\s*0,\s*0\))(["'])/gi, `$1${ink}$2`)

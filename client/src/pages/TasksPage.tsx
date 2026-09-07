@@ -599,7 +599,7 @@ export default function TasksPage() {
     };
 
     if (navLoading && !allTopics) {
-        return <div className="flex h-screen items-center justify-center bg-[#030A12] text-slate-500">Загрузка...</div>;
+        return <div className="task-solve-page flex h-screen items-center justify-center bg-[#030A12] text-slate-500">Загрузка...</div>;
     }
 
     if (!currentTopic) return null;

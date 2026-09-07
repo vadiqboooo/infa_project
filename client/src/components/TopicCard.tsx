@@ -79,7 +79,7 @@ type Accent = {
 
 const PALETTE: Accent[] = [
   {
-    background: "linear-gradient(135deg, rgba(8,47,44,0.98) 0%, rgba(7,18,28,0.98) 58%, rgba(9,14,24,0.98) 100%)",
+    background: "linear-gradient(135deg, rgba(20,72,48,0.52) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)",
     border: "border-emerald-400/15",
     glow: "rgba(16,185,129,0.18)",
     progress: "from-emerald-400 to-green-500",
@@ -88,7 +88,7 @@ const PALETTE: Accent[] = [
     dot: "bg-emerald-400",
   },
   {
-    background: "linear-gradient(135deg, rgba(35,18,64,0.98) 0%, rgba(13,17,34,0.98) 58%, rgba(7,13,24,0.98) 100%)",
+    background: "linear-gradient(135deg, rgba(65,45,92,0.48) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)",
     border: "border-violet-400/15",
     glow: "rgba(139,92,246,0.2)",
     progress: "from-violet-400 to-purple-500",
@@ -97,7 +97,7 @@ const PALETTE: Accent[] = [
     dot: "bg-violet-400",
   },
   {
-    background: "linear-gradient(135deg, rgba(67,22,45,0.98) 0%, rgba(23,18,36,0.98) 58%, rgba(8,13,24,0.98) 100%)",
+    background: "linear-gradient(135deg, rgba(91,42,59,0.46) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)",
     border: "border-rose-400/15",
     glow: "rgba(244,63,94,0.18)",
     progress: "from-rose-400 to-pink-500",
@@ -106,7 +106,7 @@ const PALETTE: Accent[] = [
     dot: "bg-rose-400",
   },
   {
-    background: "linear-gradient(135deg, rgba(58,38,11,0.98) 0%, rgba(29,23,20,0.98) 58%, rgba(8,13,24,0.98) 100%)",
+    background: "linear-gradient(135deg, rgba(91,68,27,0.46) 0%, rgba(32,32,32,0.99) 52%, rgba(24,24,24,0.99) 100%)",
     border: "border-amber-400/15",
     glow: "rgba(245,158,11,0.2)",
     progress: "from-amber-300 to-orange-500",

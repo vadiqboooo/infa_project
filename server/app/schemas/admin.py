@@ -14,10 +14,12 @@ class TopicIn(BaseModel):
     order_index: int = 0
     category: str = "tutorial"
     subject: str = "informatics"
+    exam_type: str = "ege"
     course_type: str = "year"
     time_limit_minutes: int | None = 60
     is_mock: bool = False
     open_to_groups: bool = False
+    show_in_tasks: bool = True
     ege_number: int | None = None
     ege_number_end: int | None = None
     image_position: str | None = None  # 'cover' | 'left' | 'right' | 'background'
@@ -32,11 +34,13 @@ class TopicOut(BaseModel):
     order_index: int
     category: str = "tutorial"
     subject: str = "informatics"
+    exam_type: str = "ege"
     course_type: str = "year"
     task_count: int = 0
     time_limit_minutes: int | None = 60
     is_mock: bool = False
     open_to_groups: bool = False
+    show_in_tasks: bool = True
     ege_number: int | None = None
     ege_number_end: int | None = None
     has_image: bool = False
@@ -51,7 +55,9 @@ class TopicOut(BaseModel):
 # ── Tasks ─────────────────────────────────────────────────────
 
 class TaskAdminIn(BaseModel):
-    topic_id: int
+    topic_id: int | None = None
+    subject: str | None = None
+    exam_type: str | None = None
     external_id: str | None = None
     ege_number: int | None = None
     title: str | None = None
@@ -65,6 +71,10 @@ class TaskAdminIn(BaseModel):
     full_solution_code: str | None = None
     order_index: int | None = None
     sub_tasks: list | None = None
+
+
+class AttachTaskIn(BaseModel):
+    task_id: int = Field(gt=0)
 
 
 class ImportVariantIn(BaseModel):
@@ -81,7 +91,9 @@ class ImportVariantResult(BaseModel):
 
 class TaskAdminOut(BaseModel):
     id: int
-    topic_id: int
+    topic_id: int | None = None
+    subject: str = "informatics"
+    exam_type: str = "ege"
     external_id: str | None = None
     ege_number: int | None = None
     title: str | None = None
@@ -96,6 +108,10 @@ class TaskAdminOut(BaseModel):
     sub_tasks: list | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TaskBankItemOut(TaskAdminOut):
+    topic_title: str
 
 
 # ── Students ──────────────────────────────────────────────────
