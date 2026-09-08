@@ -291,6 +291,79 @@
     box-shadow: 0 0 0 3px rgba(63, 140, 98, 0.12);
 }
 
+/* Subject settings save action. It belongs to the form and does not cover its content. */
+.subject-settings-savebar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid #eef1ef;
+}
+
+.subject-settings-saved-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #278158;
+    font-size: 0.8125rem;
+    font-weight: 700;
+}
+
+.subject-settings-save-button {
+    display: inline-flex;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 17px;
+    border: 1px solid #249d66;
+    border-radius: 10px;
+    background: #2aaa70;
+    color: #ffffff !important;
+    font-size: 0.8125rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(24, 125, 82, 0.16);
+    transition: background-color 0.16s, border-color 0.16s, transform 0.16s, box-shadow 0.16s;
+}
+
+.subject-settings-save-button:hover:not(:disabled) {
+    border-color: #208b5b;
+    background: #249d66;
+    box-shadow: 0 5px 14px rgba(24, 125, 82, 0.22);
+    transform: translateY(-1px);
+}
+
+.subject-settings-save-button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.dark .admin-page .subject-settings-savebar {
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark .admin-page .subject-settings-saved-message {
+    color: #6ee7b7;
+}
+
+@media (max-width: 520px) {
+    .subject-settings-savebar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .subject-settings-saved-message {
+        justify-content: center;
+    }
+
+    .subject-settings-save-button {
+        width: 100%;
+    }
+}
+
 /* Shared dark theme for every admin section. */
 .dark .admin-page .text-gray-950,
 .dark .admin-page .text-gray-900,

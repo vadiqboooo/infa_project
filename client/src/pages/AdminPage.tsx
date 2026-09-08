@@ -48,6 +48,7 @@ import { StudentTaskSolutionReviewModal } from "../components/admin/StudentTaskS
 import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import AdminImportPdfPage from "./AdminImportPdfPage";
 import { GroupPlanEditor } from "../components/admin/GroupPlanEditor";
+import { SubjectSettingsPanel } from "../components/admin/SubjectSettingsPanel";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
@@ -57,7 +58,7 @@ const API_BASE = "/api";
 const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
 
 type AdminDashboardState = {
-    activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics';
+    activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
     search?: string;
     filter?: FilterCategory;
     egeNumberFilter?: string;
@@ -249,7 +250,7 @@ export default function AdminPage() {
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
     const savedState = readAdminDashboardState();
-    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'metrics'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
+    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'metrics' | 'settings'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
@@ -326,7 +327,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     useEffect(() => {
         if (loading) return;
         const state = readAdminDashboardState();
-        if (activeTab === 'subscriptions' || activeTab === 'metrics') return;
+        if (activeTab === 'subscriptions' || activeTab === 'metrics' || activeTab === 'settings') return;
         const scrollTop = activeTab === 'students' ? state.studentsScrollTop : state.topicsScrollTop;
         requestAnimationFrame(() => {
             const target = activeTab === 'students' ? studentsScrollRef.current : topicsScrollRef.current;
@@ -557,6 +558,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 >
                     <BarChart3 size={16} />
                     Метрики
+                </button>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className={clsx(
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
+                        activeTab === 'settings' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    )}
+                >
+                    <Settings size={16} />
+                    Настройки предметов
                 </button>
             </div>
 
@@ -904,6 +915,8 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 </div>
             ) : activeTab === "subscriptions" ? (
                 <SubscriptionsPanel groups={groups} students={students} apiKey={apiKey} onRefresh={loadData} />
+            ) : activeTab === "settings" ? (
+                <SubjectSettingsPanel />
             ) : activeTab === "metrics" ? (
                 <MetricsPanel metrics={metrics} loading={loading && !metrics} />
             ) : (

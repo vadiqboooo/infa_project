@@ -114,6 +114,16 @@ class TaskBankItemOut(TaskAdminOut):
     topic_title: str
 
 
+class ExamSubjectSettingsIn(BaseModel):
+    task_count: int = Field(ge=1, le=100)
+    task_names: dict[str, str] = Field(default_factory=dict)
+
+
+class ExamSubjectSettingsOut(ExamSubjectSettingsIn):
+    exam_type: str
+    subject: str
+
+
 # ── Students ──────────────────────────────────────────────────
 
 class StudentTopicProgress(BaseModel):

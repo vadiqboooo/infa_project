@@ -24,6 +24,7 @@ from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.admin_help_notification_read import AdminHelpNotificationRead
 from app.models.ai_chat_log import AIChatLog
 from app.models.exam import Exam, exam_tasks
+from app.models.exam_subject_settings import ExamSubjectSettings
 from app.models.task import AnswerType, Task
 from app.models.topic import Topic
 from app.models.user import User
@@ -46,6 +47,8 @@ from app.schemas.admin import (
     TaskAdminOut,
     AttachTaskIn,
     TaskBankItemOut,
+    ExamSubjectSettingsIn,
+    ExamSubjectSettingsOut,
     TopicIn,
     TopicOut,
     StudentOut,
@@ -2174,6 +2177,81 @@ async def attach_task_to_topic(
     await db.commit()
     await db.refresh(task)
     return task
+
+
+@router.get("/subject-settings", response_model=list[ExamSubjectSettingsOut])
+async def list_exam_subject_settings(db: AsyncSession = Depends(get_db)):
+    """Return settings for every supported exam/subject pair."""
+    stored_rows = (await db.execute(select(ExamSubjectSettings))).scalars().all()
+    stored = {(row.exam_type, row.subject): row for row in stored_rows}
+
+    task_max_rows = (
+        await db.execute(
+            select(Task.exam_type, Task.subject, func.max(Task.ege_number))
+            .where(Task.exam_type.in_(KNOWN_EXAM_TYPES), Task.subject.in_(KNOWN_SUBJECTS))
+            .group_by(Task.exam_type, Task.subject)
+        )
+    ).all()
+    task_max = {
+        (exam_type, subject): min(max(maximum or 1, 1), 100)
+        for exam_type, subject, maximum in task_max_rows
+    }
+
+    result: list[ExamSubjectSettingsOut] = []
+    for exam_type in sorted(KNOWN_EXAM_TYPES):
+        for subject in sorted(KNOWN_SUBJECTS):
+            settings_row = stored.get((exam_type, subject))
+            result.append(
+                ExamSubjectSettingsOut(
+                    exam_type=exam_type,
+                    subject=subject,
+                    task_count=settings_row.task_count if settings_row else task_max.get((exam_type, subject), 1),
+                    task_names=settings_row.task_names if settings_row else {},
+                )
+            )
+    return result
+
+
+@router.put("/subject-settings/{exam_type}/{subject}", response_model=ExamSubjectSettingsOut)
+async def update_exam_subject_settings(
+    exam_type: str,
+    subject: str,
+    body: ExamSubjectSettingsIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update task-number settings for one exam/subject pair."""
+    if exam_type not in KNOWN_EXAM_TYPES or subject not in KNOWN_SUBJECTS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam or subject not found")
+
+    task_names = {
+        str(number): str(name).strip()
+        for raw_number, name in body.task_names.items()
+        if str(raw_number).isdigit()
+        and 1 <= (number := int(raw_number)) <= body.task_count
+        and str(name).strip()
+    }
+    settings_row = (
+        await db.execute(
+            select(ExamSubjectSettings).where(
+                ExamSubjectSettings.exam_type == exam_type,
+                ExamSubjectSettings.subject == subject,
+            )
+        )
+    ).scalar_one_or_none()
+    if settings_row is None:
+        settings_row = ExamSubjectSettings(exam_type=exam_type, subject=subject)
+        db.add(settings_row)
+
+    settings_row.task_count = body.task_count
+    settings_row.task_names = task_names
+    await db.commit()
+    await db.refresh(settings_row)
+    return ExamSubjectSettingsOut(
+        exam_type=settings_row.exam_type,
+        subject=settings_row.subject,
+        task_count=settings_row.task_count,
+        task_names=settings_row.task_names,
+    )
 
 
 @router.get("/task-bank", response_model=list[TaskBankItemOut])

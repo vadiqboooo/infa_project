@@ -296,6 +296,13 @@ export interface TaskBankItem extends TaskAdmin {
     exam_type: 'ege' | 'oge';
 }
 
+export interface ExamSubjectSettings {
+    exam_type: 'ege' | 'oge';
+    subject: TopicSubject;
+    task_count: number;
+    task_names: Record<string, string>;
+}
+
 export interface TopicIn {
     title: string;
     order_index: number;

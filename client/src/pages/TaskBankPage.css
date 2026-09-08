@@ -24,10 +24,9 @@
   --tb-input: #ffffff;
 }
 
-.task-bank-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; overflow-x: auto; }
-.task-bank-heading-title { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; }
-.task-bank-heading h1 { margin: 0; font-size: 27px; font-weight: 750; letter-spacing: -0.035em; }
-.task-bank-title-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; color: #86efac; background: rgba(33, 182, 111, 0.14); border: 1px solid rgba(33, 182, 111, 0.24); }
+.task-bank-heading-title { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; margin-right: 6px; }
+.task-bank-heading-title h1 { margin: 0; font-size: 23px; font-weight: 750; letter-spacing: -0.035em; white-space: nowrap; }
+.task-bank-title-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: #86efac; background: rgba(33, 182, 111, 0.14); border: 1px solid rgba(33, 182, 111, 0.24); }
 .light .task-bank-title-icon { color: #177c4b; }
 .task-bank-create-button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 15px; border: 0; border-radius: 11px; color: #fff; background: #21b66f; font-size: 13px; font-weight: 750; cursor: pointer; box-shadow: 0 8px 22px rgba(33, 182, 111, 0.18); }
 .task-bank-create-button:hover { background: #199c5e; }
@@ -35,30 +34,38 @@
 .task-bank-editor-shell { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--tb-border); border-radius: 16px; background: #f8f7f4; }
 .task-bank-editor-body { flex: 1; min-height: 0; }
 
-.task-bank-filters { display: flex; flex: 1 0 700px; align-items: end; gap: 12px; padding: 10px 12px; overflow: visible; border: 1px solid var(--tb-border); border-radius: 16px; background: var(--tb-panel); }
-.task-bank-filter-title { display: flex; align-items: center; gap: 8px; align-self: center; padding-right: 5px; font-size: 14px; font-weight: 700; }
-.task-bank-filters label { display: grid; flex: 0 0 150px; gap: 5px; color: var(--tb-muted); font-size: 11px; font-weight: 650; }
-.task-bank-filters .task-bank-search-label { flex: 1 0 190px; }
+.task-bank-filters { display: flex; align-items: end; gap: 14px; margin-bottom: 20px; padding: 14px 16px; border: 1px solid var(--tb-border); border-radius: 16px; background: var(--tb-panel); }
+.task-bank-filter-title { display: flex; align-items: center; gap: 6px; align-self: center; padding: 18px 2px 0 14px; border-left: 1px solid var(--tb-border); color: var(--tb-muted); font-size: 12px; font-weight: 700; }
+.task-bank-filters label { display: grid; flex: 0 1 145px; min-width: 115px; gap: 6px; color: var(--tb-muted); font-size: 11px; font-weight: 650; }
+.task-bank-filters .task-bank-number-filter { flex-basis: 205px; min-width: 165px; }
+.task-bank-filters .task-bank-search-label { flex: 0 1 300px; width: 300px; min-width: 220px; }
 .task-bank-filters select, .task-bank-search { height: 42px; border: 1px solid var(--tb-border); border-radius: 11px; color: var(--tb-text); background: var(--tb-input); outline: none; transition: border-color 160ms, box-shadow 160ms; }
-.task-bank-filters select { padding: 0 35px 0 12px; font-size: 14px; }
+.task-bank-filters select { width: 100%; min-width: 0; padding: 0 35px 0 12px; font-size: 14px; }
 .task-bank-filters select:focus, .task-bank-search:focus-within { border-color: rgba(33, 182, 111, 0.7); box-shadow: 0 0 0 3px rgba(33, 182, 111, 0.12); }
 .task-bank-search { display: flex; align-items: center; gap: 9px; padding: 0 12px; }
 .task-bank-search svg { color: var(--tb-muted); flex: none; }
 .task-bank-search input { min-width: 0; width: 100%; border: 0; color: var(--tb-text); background: transparent; outline: 0; font-size: 14px; }
 .task-bank-search input::placeholder { color: var(--tb-muted); }
-.task-bank-count { align-self: center; white-space: nowrap; color: var(--tb-muted); font-size: 13px; }
+.task-bank-search button { display: grid; flex: none; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 7px; color: var(--tb-muted); background: transparent; cursor: pointer; }
+.task-bank-search button:hover { color: var(--tb-text); background: var(--tb-panel-soft); }
+.task-bank-count { align-self: center; padding-top: 18px; white-space: nowrap; color: var(--tb-muted); font-size: 13px; }
 .task-bank-count strong { color: var(--tb-text); }
 
-.task-bank-table-wrap { overflow: auto; border: 1px solid var(--tb-border); border-radius: 16px; background: var(--tb-panel); }
-.task-bank-table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
-.task-bank-table th { padding: 13px 14px; text-align: left; color: var(--tb-muted); background: var(--tb-panel-soft); border-bottom: 1px solid var(--tb-border); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.055em; }
-.task-bank-table th:nth-child(1) { width: 105px; }
-.task-bank-table th:nth-child(2) { width: 70px; }
-.task-bank-table td { padding: 16px 14px; vertical-align: top; border-bottom: 1px solid var(--tb-border); color: var(--tb-text); font-size: 14px; }
-.task-bank-table tbody tr:last-child td { border-bottom: 0; }
-.task-bank-table tbody tr:hover { background: rgba(33, 182, 111, 0.035); }
+.task-bank-results { overflow: hidden; border: 1px solid var(--tb-border); border-radius: 16px; background: var(--tb-panel); }
+.task-bank-results-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 17px 20px; border-bottom: 1px solid var(--tb-border); background: var(--tb-panel-soft); }
+.task-bank-results-heading h2 { margin: 0; color: var(--tb-text); font-size: 18px; letter-spacing: -0.015em; }
+.task-bank-results-heading p { margin: 0; color: var(--tb-muted); font-size: 12px; }
+.task-bank-list { display: grid; }
+.task-bank-card { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 16px; padding: 22px 20px; border-bottom: 1px solid var(--tb-border); }
+.task-bank-card:last-child { border-bottom: 0; }
+.task-bank-card:hover { background: rgba(33, 182, 111, 0.025); }
+.task-bank-number { display: grid; width: 42px; height: 36px; place-items: center; border: 1px solid rgba(33, 182, 111, 0.42); border-radius: 9px; color: #8aefb8; background: rgba(33, 182, 111, 0.09); font-size: 18px; font-weight: 800; }
+.light .task-bank-number { color: #177c4b; }
+.task-bank-card-body { min-width: 0; }
 .task-bank-id { color: var(--tb-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-.task-bank-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.task-bank-source-id { color: var(--tb-text); font-size: 12px; font-weight: 800; }
+.task-bank-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 8px; }
+.task-bank-number-name { margin-bottom: 6px; color: var(--tb-text); font-size: 13px; font-weight: 750; }
 .task-bank-badge { display: inline-flex; align-items: center; min-height: 25px; padding: 3px 8px; border-radius: 7px; font-size: 11px; font-weight: 750; white-space: nowrap; }
 .task-bank-exam { color: #7dd3fc; background: rgba(14, 165, 233, 0.12); }
 .task-bank-subject-informatics { color: #86efac; background: rgba(34, 197, 94, 0.12); }
@@ -66,10 +73,10 @@
 .light .task-bank-exam { color: #036b9d; }
 .light .task-bank-subject-informatics { color: #177c4b; }
 .light .task-bank-subject-math { color: #9a5b05; }
-.task-bank-topic { margin-bottom: 6px; color: #59d995; font-size: 12px; font-weight: 700; }
+.task-bank-topic { margin-bottom: 7px; color: #59d995; font-size: 12px; font-weight: 700; }
 .light .task-bank-topic { color: #177c4b; }
 .task-bank-task-title { margin-bottom: 7px; font-weight: 700; }
-.task-bank-condition { width: 100%; max-width: none; overflow-wrap: anywhere; color: var(--tb-text); line-height: 1.58; }
+.task-bank-condition { width: 100%; max-width: none; overflow-x: auto; overflow-wrap: anywhere; color: var(--tb-text); line-height: 1.58; }
 .task-bank-condition p { margin: 0 0 8px; }
 .task-bank-condition p:last-child { margin-bottom: 0; }
 .task-bank-condition img { max-width: 100%; height: auto; border-radius: 8px; }
@@ -87,7 +94,22 @@
 .task-bank-state { display: grid; min-height: 260px; place-items: center; padding: 30px; color: var(--tb-muted); font-size: 14px; }
 .task-bank-error { color: #fda4af; }
 
+@media (max-width: 1100px) {
+  .task-bank-filters { flex-wrap: wrap; }
+  .task-bank-filters .task-bank-search-label { flex: 1 1 260px; width: auto; }
+  .task-bank-filter-title { padding-top: 18px; }
+}
+
 @media (max-width: 700px) {
   .task-bank-page { padding: 18px 14px; }
-  .task-bank-heading h1 { font-size: 23px; }
+  .task-bank-heading-title h1 { font-size: 22px; }
+  .task-bank-create-button { width: 42px; padding: 0; font-size: 0; }
+  .task-bank-filters { align-items: stretch; flex-direction: column; }
+  .task-bank-filters label, .task-bank-filters .task-bank-search-label { flex: none; width: 100%; }
+  .task-bank-heading-title { margin-right: 0; }
+  .task-bank-filter-title { padding: 10px 0 0; border-top: 1px solid var(--tb-border); border-left: 0; }
+  .task-bank-count { align-self: flex-start; padding-top: 0; }
+  .task-bank-results-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .task-bank-card { grid-template-columns: 42px minmax(0, 1fr); gap: 11px; padding: 18px 14px; }
+  .task-bank-number { width: 38px; height: 34px; }
 }

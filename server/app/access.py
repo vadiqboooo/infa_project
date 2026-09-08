@@ -132,7 +132,9 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
         trial_task_ids=trial_task_ids,
         assigned_topic_ids=assigned_topic_ids,
         assigned_task_ids=assigned_task_ids,
-        can_access_all=user.role == "admin",
+        # Group membership is enough for full access to all course content.
+        # Students outside groups keep the existing subscription/trial rules.
+        can_access_all=user.role == "admin" or has_group_access,
     )
 
 

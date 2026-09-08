@@ -21,6 +21,7 @@ from app.models.payment import Payment
 from app.models.site_visit import SiteVisit
 from app.models.group import Group, user_groups
 from app.models.group_plan import GroupLesson, GroupLessonItem
+from app.models.exam_subject_settings import ExamSubjectSettings
 
 __all__ = [
     "Topic",
@@ -51,4 +52,5 @@ __all__ = [
     "user_groups",
     "GroupLesson",
     "GroupLessonItem",
+    "ExamSubjectSettings",
 ]

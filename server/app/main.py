@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
         from app.models import exam_analysis  # noqa: ensure model is registered
         from app.models import group as group_module  # noqa: ensure models are registered
         from app.models import topic_seen  # noqa: ensure model is registered
-        from app.models import course_lead, payment, site_visit  # noqa: ensure models are registered
+        from app.models import course_lead, exam_subject_settings, payment, site_visit  # noqa: ensure models are registered
         from app.models import (
             admin_help_notification_read,
             task_solution,
@@ -99,6 +99,11 @@ async def lifespan(app: FastAPI):
             )
             await conn.run_sync(
                 lambda sync_conn: site_visit.SiteVisit.__table__.create(sync_conn, checkfirst=True)
+            )
+            await conn.run_sync(
+                lambda sync_conn: exam_subject_settings.ExamSubjectSettings.__table__.create(
+                    sync_conn, checkfirst=True
+                )
             )
             await conn.execute(text("ALTER TABLE user_task_solutions ADD COLUMN IF NOT EXISTS recognized_text TEXT"))
             await conn.execute(text("ALTER TABLE user_task_solutions ADD COLUMN IF NOT EXISTS board_data JSON"))
