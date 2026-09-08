@@ -178,9 +178,126 @@ function normalizeBareRoots(html: string): string {
     );
 }
 
+function escapeSvgText(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+/** Render the coordinate-line subset of TikZ used by imported math tasks. */
+function tikzNumberLineToSvg(block: string): string {
+    const source = block
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&minus;/g, "−")
+        .replace(/&amp;/g, "&")
+        .replace(/&nbsp;/g, " ");
+
+    type Segment = { options: string; x1: number; y1: number; x2: number; y2: number };
+    type Point = { x: number; y: number; label: string; placement: string; filled: boolean };
+    const segments: Segment[] = [];
+    const points: Point[] = [];
+    const number = "(-?\\d+(?:[.,]\\d+)?)";
+    const segmentPattern = new RegExp(`\\\\draw(?:\\[([^\\]]*)\\])?\\s*\\(\\s*${number}\\s*,\\s*${number}\\s*\\)\\s*--\\s*\\(\\s*${number}\\s*,\\s*${number}\\s*\\)\\s*;`, "g");
+    const fillPattern = new RegExp(`\\\\fill\\s*\\(\\s*${number}\\s*,\\s*${number}\\s*\\)\\s*circle\\s*\\([^)]*\\)\\s*(?:node(?:\\[([^\\]]*)\\])?\\s*\\{([^{}]*)\\})?\\s*;`, "g");
+    const nodePattern = new RegExp(`\\\\node(?:\\[([^\\]]*)\\])?\\s*at\\s*\\(\\s*${number}\\s*,\\s*${number}\\s*\\)\\s*\\{([^{}]*)\\}\\s*;`, "g");
+    const toNumber = (value: string) => Number(value.replace(",", "."));
+    const normalizePointLabel = (value: string) => value
+        .trim()
+        .replace(/^\\\(([\s\S]*)\\\)$/, "$1")
+        .replace(/^\$([\s\S]*)\$$/, "$1");
+
+    for (const match of source.matchAll(segmentPattern)) {
+        segments.push({
+            options: match[1] ?? "",
+            x1: toNumber(match[2]),
+            y1: toNumber(match[3]),
+            x2: toNumber(match[4]),
+            y2: toNumber(match[5]),
+        });
+    }
+    for (const match of source.matchAll(fillPattern)) {
+        points.push({
+            x: toNumber(match[1]),
+            y: toNumber(match[2]),
+            placement: match[3] ?? "below",
+            label: normalizePointLabel(match[4] ?? ""),
+            filled: true,
+        });
+    }
+    for (const match of source.matchAll(nodePattern)) {
+        points.push({
+            placement: match[1] ?? "below",
+            x: toNumber(match[2]),
+            y: toNumber(match[3]),
+            label: normalizePointLabel(match[4] ?? ""),
+            filled: false,
+        });
+    }
+
+    if (segments.length === 0) return block;
+    const xValues = segments.flatMap((item) => [item.x1, item.x2]).concat(points.map((item) => item.x));
+    const minX = Math.min(...xValues);
+    const maxX = Math.max(...xValues);
+    const range = Math.max(1, maxX - minX);
+    const width = 640;
+    const height = 105;
+    const padding = 32;
+    const mapX = (x: number) => padding + ((x - minX) / range) * (width - padding * 2);
+    const mapY = (y: number) => 43 - y * 30;
+    const elements: string[] = [];
+
+    segments.forEach((item) => {
+        const x1 = mapX(item.x1);
+        const y1 = mapY(item.y1);
+        const x2 = mapX(item.x2);
+        const y2 = mapY(item.y2);
+        elements.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="tikz-line" />`);
+        if (item.options.includes("->")) {
+            const length = Math.max(1, Math.hypot(x2 - x1, y2 - y1));
+            const ux = (x2 - x1) / length;
+            const uy = (y2 - y1) / length;
+            const backX = x2 - ux * 10;
+            const backY = y2 - uy * 10;
+            elements.push(`<polygon points="${x2},${y2} ${backX - uy * 4},${backY + ux * 4} ${backX + uy * 4},${backY - ux * 4}" class="tikz-fill" />`);
+        }
+    });
+
+    points.forEach((point) => {
+        const x = mapX(point.x);
+        const y = mapY(point.y);
+        if (point.filled) elements.push(`<circle cx="${x}" cy="${y}" r="4" class="tikz-fill" />`);
+        if (point.label) {
+            const above = point.placement.includes("above");
+            elements.push(`<text x="${x}" y="${y + (above ? -12 : 23)}" text-anchor="middle" class="tikz-label">${escapeSvgText(point.label)}</text>`);
+        }
+    });
+
+    return `<svg class="task-generated-number-line" viewBox="0 0 ${width} ${height}" role="img" aria-label="Координатная прямая">${elements.join("")}</svg>`;
+}
+
+function renderTikzPictures(html: string): string {
+    const centeredPicture = /\\begin\{center\}[\s\S]*?\\begin\{tikzpicture\}(?:\[[^\]]*\])?[\s\S]*?\\end\{tikzpicture\}[\s\S]*?\\end\{center\}/g;
+    const standalonePicture = /\\begin\{tikzpicture\}(?:\[[^\]]*\])?[\s\S]*?\\end\{tikzpicture\}/g;
+    let result = html.replace(centeredPicture, tikzNumberLineToSvg);
+    result = result.replace(standalonePicture, tikzNumberLineToSvg);
+
+    // Rich-text imports often wrap every source line in code/paragraph tags.
+    for (let pass = 0; pass < 3; pass += 1) {
+        result = result.replace(/<(?:code|pre|p)[^>]*>\s*(<svg class="task-generated-number-line"[\s\S]*?<\/svg>)\s*<\/(?:code|pre|p)>/gi, "$1");
+    }
+    return result;
+}
+
 // Декодируем HTML-сущности внутри формулы в LaTeX-команды
 function decodeHtmlEntitiesInFormula(formula: string): string {
-    return formula.replace(htmlEntityPattern, (match) => {
+    return formula
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/?(?:p|div|pre|code|span)\b[^>]*>/gi, "")
+        .replace(/&amp;/gi, "&")
+        .replace(htmlEntityPattern, (match) => {
         return HTML_ENTITY_TO_LATEX[match.toLowerCase()] || match;
     });
 }
@@ -307,6 +424,17 @@ function normalizeEntities(html: string): string {
     result = result.replace(/&gt;/g, ">");
     result = result.replace(/&lt;/g, "<");
     result = result.replace(/&nbsp;/g, "\u00A0");
+    result = result.replace(/<\s*br\s*\/?\s*>/gi, "<br>");
+    result = result.replace(/(?:&amp;|\bamp;)\s*(?=\d+\))/gi, "");
+    result = result.replace(/```(?:arduino|latex|tex|text)?\s*\n?([\s\S]*?)\n?```/gi, '<div class="task-imported-plain-text">$1</div>');
+    result = result.replace(/<pre\b[^>]*>\s*<code\b[^>]*>([\s\S]*?\\begin\{tikzpicture\}[\s\S]*?)<\/code>\s*<\/pre>/gi, '<div class="task-imported-plain-text">$1</div>');
+    result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (match, inner: string) => {
+        const plain = inner.replace(/<[^>]+>/g, " ");
+        const looksLikeProse = /[А-Яа-яЁё]/.test(plain)
+            && !/[{};]/.test(plain)
+            && !/\b(?:print|input|if|else|for|while|def|class|select|from|where|begin|end|var)\b/i.test(plain);
+        return looksLikeProse ? inner : match;
+    });
     return result;
 }
 
@@ -1017,7 +1145,8 @@ export default function TaskView({
     }, [annotatable, getPlaneRect, handleSvgZoomChange, theme]);
 
     const parsedContent = useMemo(() => {
-        const processedContent = renderLatex(normalizeEntities(content));
+        const normalizedContent = normalizeEntities(content);
+        const processedContent = renderLatex(renderTikzPictures(normalizedContent));
         return parse(processedContent, parseOptions);
     }, [content, parseOptions]);
 

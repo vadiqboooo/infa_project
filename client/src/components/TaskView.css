@@ -691,6 +691,38 @@
     text-rendering: geometricPrecision;
 }
 
+.task-body .task-generated-number-line {
+    display: block;
+    width: min(100%, 640px);
+    height: auto;
+    margin: 0.9rem auto 1.1rem;
+    overflow: visible;
+    color: currentColor;
+}
+
+.task-body .task-imported-plain-text {
+    white-space: pre-wrap;
+    font-family: inherit;
+}
+
+.task-body .task-generated-number-line .tikz-line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.task-body .task-generated-number-line .tikz-fill {
+    fill: currentColor;
+}
+
+.task-body .task-generated-number-line .tikz-label {
+    fill: currentColor;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    font-style: italic;
+}
+
 .task-body .katex-html {
     color: #f8fafc;
 }
