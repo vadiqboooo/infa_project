@@ -77,6 +77,15 @@
 .light .task-bank-topic { color: #177c4b; }
 .task-bank-task-title { margin-bottom: 7px; font-weight: 700; }
 .task-bank-condition { width: 100%; max-width: none; overflow-x: auto; overflow-wrap: anywhere; color: var(--tb-text); line-height: 1.58; }
+.task-bank-condition .task-view { color: inherit; }
+.task-bank-condition .task-body { color: inherit; font-size: inherit; line-height: 1.58; }
+.task-bank-condition .task-body strong,
+.task-bank-condition .task-body b,
+.task-bank-condition .task-body em,
+.task-bank-condition .task-body i,
+.task-bank-condition .task-body .katex,
+.task-bank-condition .task-body .katex-html { color: inherit; }
+.task-bank-condition .task-body .katex-display { margin: 0.7em 0; overflow-x: auto; overflow-y: hidden; }
 .task-bank-condition p { margin: 0 0 8px; }
 .task-bank-condition p:last-child { margin-bottom: 0; }
 .task-bank-condition img { max-width: 100%; height: auto; border-radius: 8px; }

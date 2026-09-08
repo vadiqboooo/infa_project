@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import parse from 'html-react-parser';
 import { useNavigate } from 'react-router-dom';
 import { Database, Eye, EyeOff, Filter, Pencil, Plus, Search, X } from 'lucide-react';
 import { api } from '../api/client';
 import { AnswerType, TaskDifficulty, type ExamSubjectSettings, type TaskAdmin, type TaskBankItem } from '../api/types';
 import { TaskEditPanel } from '../components/admin/TopicDetail';
+import TaskView from '../components/TaskView';
 import './TaskBankPage.css';
 
 type ExamFilter = 'all' | 'ege' | 'oge';
@@ -356,7 +356,7 @@ export default function TaskBankPage() {
                     <div className="task-bank-topic">{task.topic_title}</div>
                     {task.title && <div className="task-bank-task-title">{task.title}</div>}
                     <div className="task-bank-condition">
-                      {task.content_html ? parse(task.content_html) : task.description || 'Условие не добавлено'}
+                      <TaskView content={task.content_html || task.description || 'Условие не добавлено'} />
                     </div>
                     <div className="task-bank-answer-row">
                       <div className="task-bank-actions">
