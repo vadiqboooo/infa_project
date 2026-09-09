@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, FileDown, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { GroupLesson, GroupLessonIn, GroupLessonItemIn, GroupPlanResources, GroupOut, StudentOut } from '../../api/types';
 import { handleSessionExpired } from '../../api/client';
 
@@ -302,7 +302,24 @@ function ResourceSection({ title, icon, section, value, onChange, onAdd, resourc
     <div className="mt-2 space-y-1.5">{items.map((item, index) => {
       if (item.section !== section) return null;
       const key = item.topic_id ? `topic:${item.topic_id}` : `task:${item.task_id}`;
-      return <div key={`${key}:${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2 text-xs font-medium text-slate-300"><span className="truncate">{labels.get(key) || 'Материал'}</span><button type="button" onClick={() => onRemove(index)} className="shrink-0 text-slate-600 hover:text-red-400"><X size={14} /></button></div>;
+      return (
+        <div key={`${key}:${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2 text-xs font-medium text-slate-300">
+          <span className="min-w-0 flex-1 truncate">{labels.get(key) || 'Материал'}</span>
+          {item.topic_id && (
+            <a
+              href={`/worksheet/${item.topic_id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-1 text-[10px] font-bold text-emerald-300 transition hover:bg-emerald-400/20 hover:text-emerald-200"
+              title="Открыть рабочий лист PDF"
+            >
+              <FileDown size={12} />
+              Рабочий лист
+            </a>
+          )}
+          <button type="button" onClick={() => onRemove(index)} className="shrink-0 text-slate-600 hover:text-red-400" title="Убрать топик"><X size={14} /></button>
+        </div>
+      );
     })}</div>
   </div>;
 }
@@ -376,9 +393,21 @@ function LessonMaterials({ items, tone }: { items: GroupLesson['items']; tone: '
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item) => (
-        <span key={item.id} className={`inline-flex max-w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold ${tone === 'lesson' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-violet-400/10 text-violet-300'}`} title={item.title}>
-          <span className="truncate">{item.title}</span>
-        </span>
+        <div key={item.id} className={`flex max-w-full items-center gap-1 rounded-lg py-1 pl-2.5 pr-1 text-xs font-semibold ${tone === 'lesson' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-violet-400/10 text-violet-300'}`} title={item.title}>
+          <span className="min-w-0 truncate">{item.title}</span>
+          {item.resource_type === 'topic' && item.topic_id && (
+            <a
+              href={`/worksheet/${item.topic_id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-black/15 px-1.5 text-[10px] font-bold text-current transition hover:bg-white/10"
+              title="Открыть рабочий лист PDF"
+            >
+              <FileDown size={12} />
+              Лист
+            </a>
+          )}
+        </div>
       ))}
     </div>
   );

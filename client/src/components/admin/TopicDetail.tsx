@@ -33,6 +33,8 @@ import {
   Image as ImagePic,
   Check,
   Settings2,
+  ExternalLink,
+  FileDown,
 } from 'lucide-react';
 
 // ── Пресеты персонажей и фонов из /public/character/ ───────────────────────
@@ -90,6 +92,14 @@ function formatTaskCorrectAnswer(task: TaskAdmin): string {
     return parts.join(' · ');
 }
 
+function getTopicPreviewHref(topic: Pick<TopicAdmin, 'id' | 'category'>): string {
+  if (topic.category === 'homework') return `/homework/${topic.id}`;
+  if (topic.category === 'control' || topic.category === 'variants' || topic.category === 'mock') {
+    return `/exams/${topic.id}`;
+  }
+  return `/tasks/${topic.id}`;
+}
+
 // Parse user input back into stored shape {val: ...} based on answer_type
 function parseAnswerInput(text: string, answerType: string): any | null {
     if (!text || !text.trim()) return null;
@@ -123,7 +133,7 @@ interface TopicDetailProps {
   tasks: TaskAdmin[];
   onBack: () => void;
   onSaveTopic: (data: Partial<TopicAdmin>) => void;
-  onSaveTask: (data: Partial<TaskAdmin>) => void;
+  onSaveTask: (data: Partial<TaskAdmin>) => Promise<void>;
   onAttachTaskById: (taskId: number) => Promise<void>;
   onReorderTasks: (orderedTasks: TaskAdmin[]) => void;
   onDeleteTask: (id: number) => void;
@@ -408,8 +418,8 @@ export function TopicDetail({
           setEditingTask(null);
         }}
         apiKey={apiKey}
-        onSave={(data) => {
-          onSaveTask(data);
+        onSave={async (data) => {
+          await onSaveTask(data);
           setEditingTask(null);
         }}
       />
@@ -515,6 +525,24 @@ export function TopicDetail({
               className="pl-9 pr-4 py-2 bg-gray-50 border border-transparent rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-[#3F8C62]/20 outline-none w-48 transition-all"
             />
           </div>
+          <a
+            href={getTopicPreviewHref(topic)}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-600 transition-all hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+          >
+            <ExternalLink size={14} />
+            Посмотреть топик
+          </a>
+          <a
+            href={`/worksheet/${topic.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 transition-all hover:border-emerald-300 hover:bg-emerald-100"
+          >
+            <FileDown size={14} />
+            Рабочий лист PDF
+          </a>
           <button
             onClick={() => setIsCardPreviewOpen(true)}
             className="flex items-center gap-2 bg-white border border-gray-200 hover:border-[#3F8C62]/30 hover:bg-[#3F8C62]/5 text-gray-600 hover:text-[#3F8C62] px-4 py-2 rounded-xl text-xs font-bold transition-all"
@@ -1312,7 +1340,7 @@ export function TaskEditPanel({
 }: {
   task: Partial<TaskAdmin>;
   onBack: () => void;
-  onSave: (data: Partial<TaskAdmin>) => void;
+  onSave: (data: Partial<TaskAdmin>) => Promise<void>;
   apiKey?: string;
 }) {
   const [form, setForm] = useState({
@@ -1338,6 +1366,8 @@ export function TaskEditPanel({
   const [stepCodeOpen, setStepCodeOpen] = useState<Set<number>>(new Set());
   const [generateNotice, setGenerateNotice] = useState<'success' | 'error' | null>(null);
   const [generateError, setGenerateError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [graphEditorOpen, setGraphEditorOpen] = useState(false);
   const [geometryEditorOpen, setGeometryEditorOpen] = useState(false);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -1375,7 +1405,7 @@ export function TaskEditPanel({
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const subTasksPayload = form.sub_tasks.length > 0
       ? form.sub_tasks.map(s => ({
           number: s.number,
@@ -1384,12 +1414,20 @@ export function TaskEditPanel({
           correct_answer: s.correct_answer ?? null,
         }))
       : null;
-    onSave({
-      ...task,
-      ...form,
-      correct_answer: parseAnswerInput(form.correct_answer ?? '', form.answer_type),
-      sub_tasks: subTasksPayload,
-    });
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onSave({
+        ...task,
+        ...form,
+        correct_answer: parseAnswerInput(form.correct_answer ?? '', form.answer_type),
+        sub_tasks: subTasksPayload,
+      });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить задачу');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const uploadStepImage = async (stepIdx: number, file: File) => {
@@ -1889,11 +1927,14 @@ export function TaskEditPanel({
             {form.ege_number > 0 && <span className="ml-2 font-bold text-gray-600">№{form.ege_number} {form.exam_type.toUpperCase()}</span>}
           </span>
         </div>
-        <button onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-[#3F8C62]/20">
-          <Save size={14} />
-          Сохранить
-        </button>
+        <div className="flex items-center gap-3">
+          {saveError && <span className="max-w-72 text-right text-xs font-semibold text-red-600">{saveError}</span>}
+          <button onClick={handleSave} disabled={isSaving}
+            className="flex items-center gap-2 px-5 py-2 bg-[#3F8C62] hover:bg-[#357A54] disabled:cursor-wait disabled:opacity-60 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-[#3F8C62]/20">
+            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {isSaving ? 'Сохранение…' : 'Сохранить'}
+          </button>
+        </div>
       </div>
 
       {/* Body */}

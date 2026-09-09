@@ -2328,10 +2328,15 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-    # Use a safer update pattern
-    for field, value in body.model_dump(exclude_unset=True).items():
+    update_data = body.model_dump(exclude_unset=True)
+
+    # Topic membership is managed only by the dedicated attach endpoint.  A task
+    # edit must never detach or move a task because of a missing/stale form value.
+    update_data.pop("topic_id", None)
+
+    for field, value in update_data.items():
         setattr(task, field, value)
     
     await db.commit()

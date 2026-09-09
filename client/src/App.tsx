@@ -16,6 +16,7 @@ import ExamPage from "./pages/ExamPage";
 import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import TaskBankPage from "./pages/TaskBankPage";
+import WorksheetPage from "./pages/WorksheetPage";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -152,6 +153,15 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <ExamPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/worksheet/:id"
+                element={
+                  <ProtectedRoute>
+                    <WorksheetPage />
                   </ProtectedRoute>
                 }
               />

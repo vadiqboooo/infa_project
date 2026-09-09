@@ -211,9 +211,10 @@ export default function TaskBankPage() {
 
   const saveStandaloneTask = async (taskData: Partial<TaskAdmin>) => {
     const isNew = !taskData.id;
+    const payload = isNew ? { ...taskData, topic_id: null } : taskData;
     const saved = await api<TaskAdmin>(isNew ? '/admin/tasks' : `/admin/tasks/${taskData.id}`, {
       method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify({ ...taskData, topic_id: null }),
+      body: JSON.stringify(payload),
     });
     const bankItem: TaskBankItem = {
       ...saved,
@@ -235,7 +236,7 @@ export default function TaskBankPage() {
             <TaskEditPanel
               task={editingStandaloneTask}
               onBack={() => setEditingStandaloneTask(null)}
-              onSave={(data) => { void saveStandaloneTask(data); }}
+              onSave={saveStandaloneTask}
             />
           </div>
         </div>

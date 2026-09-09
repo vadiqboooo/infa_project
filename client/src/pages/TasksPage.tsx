@@ -1,6 +1,6 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocation, useParams, useNavigate, Link } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
 import ChatWidget from "../components/ChatWidget";
@@ -9,9 +9,9 @@ import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import ExamIntro from "../components/ExamIntro";
 import ExamTimer from "../components/ExamTimer";
 import Skeleton from "../components/Skeleton";
-import { ArrowLeft, Send, Bot, X, BookOpen, ChevronRight, CheckCircle2, Eye, HelpCircle, MessageSquare, Paperclip, ClipboardList, Lock, PenLine } from "lucide-react";
+import { ArrowLeft, Send, Bot, X, BookOpen, ChevronRight, CheckCircle2, Eye, HelpCircle, MessageSquare, Paperclip, Lock, PenLine } from "lucide-react";
 import { clsx } from "clsx";
-import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer, useCurrentPreparationPlan } from "../hooks/useApi";
+import { useTask, useCheckAnswer, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveExamDraftAnswer } from "../hooks/useApi";
 import { TopicCategory, type AnswerVal, type TaskNav, type TopicNav, type ExamResult } from "../api/types";
 import confetti from "canvas-confetti";
 import { StepByStepSolution } from "../components/StepByStepSolution";
@@ -111,7 +111,6 @@ export default function TasksPage() {
     const [modeMenuOpen, setModeMenuOpen] = useState(false);
 
     const { data: allTopics, isLoading: navLoading } = useNavigation();
-    const { data: currentPlan } = useCurrentPreparationPlan();
 
     const categoryFilter = useMemo(() => {
         if (location.pathname.startsWith('/homework')) return 'homework';
@@ -256,12 +255,6 @@ export default function TasksPage() {
 
     const openTaskId = currentTaskNav && !currentTaskNav.is_locked ? currentTaskNav.id : null;
     const { data: task, isLoading: taskLoading } = useTask(openTaskId);
-    const isPlanTask = Boolean(
-        currentPlan?.today_ege_numbers?.some((egeNumber) =>
-            egeNumber === task?.ege_number || egeNumber === currentTopic?.ege_number,
-        ),
-    );
-
     useEffect(() => {
         if (!task?.id) return;
         let cancelled = false;
@@ -998,27 +991,6 @@ export default function TasksPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            )}
-                                            {isPlanTask && currentPlan?.plan && (
-                                                <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4e8c5a] text-white">
-                                                            <ClipboardList size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-black">Это задание стоит решить по плану сегодня</div>
-                                                            <div className="mt-1 text-xs font-semibold text-slate-400">
-                                                                {currentPlan.current_block_title || currentPlan.plan.title}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <Link
-                                                        to="/"
-                                                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-300/20 bg-white/[0.06] px-3 py-1.5 text-xs font-black text-emerald-200 shadow-sm hover:bg-white/[0.10]"
-                                                    >
-                                                        План подготовки
-                                                    </Link>
-                                                </div>
                                             )}
                                             {!solutionHelpMode && attachSolutionOpen && !taskConditionVisibleInHelp && (
                                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
