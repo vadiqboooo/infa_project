@@ -5,6 +5,7 @@ function getToken(): string | null {
 }
 
 export function setToken(token: string) {
+    sessionExpiredHandled = false;
     localStorage.setItem("jwt_token", token);
 }
 
@@ -47,6 +48,8 @@ export async function api<T>(
         headers,
     });
 
+    if (token !== getToken()) throw new Error("Аккаунт изменился. Повторите запрос.");
+
     if (res.status === 401) {
         handleSessionExpired();
         throw new Error("Сессия истекла. Войдите снова.");
@@ -71,6 +74,7 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(input, { ...init, headers });
+    if (token !== getToken()) throw new Error("Аккаунт изменился. Повторите запрос.");
     if (res.status === 401 && token) {
         handleSessionExpired();
     }

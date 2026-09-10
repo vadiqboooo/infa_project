@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Circle, Trash2, X, Loader2, ChevronDo
 import { clsx } from "clsx";
 import type { TopicStatsOut, GroupOut, TopicStatsStudentRow, TopicStatsTaskInfo } from "../../api/types";
 import { AnalysisModal } from "./AnalysisModal";
+import "./TopicStats.css";
 
 const API_BASE = "/api";
 
@@ -13,6 +14,7 @@ interface Props {
     apiKey?: string;
     onRefresh?: () => void;
     onReviewSolution?: (student: TopicStatsStudentRow, task: TopicStatsTaskInfo) => void;
+    embedded?: boolean;
 }
 
 /** Format {"val": ...} answer to a compact display string */
@@ -295,7 +297,7 @@ function Cell({
 
 // ── TopicStats ─────────────────────────────────────────────────────────────────
 
-export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewSolution }: Props) {
+export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewSolution, embedded = false }: Props) {
     const [deletingId, setDeletingId] = useState<number | null>(null);
     const [analysisFor, setAnalysisFor] = useState<{ studentId: number; studentName: string; attemptId: number } | null>(null);
     const [groupFilter, setGroupFilter] = useState<number | null>(null);
@@ -327,6 +329,7 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewS
     };
 
     if (stats.tasks.length === 0) {
+        if (embedded) return <p className="p-6 text-sm text-gray-400">Нет задач в этом топике</p>;
         return (
             <div className="flex flex-col h-full">
                 <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-100">
@@ -359,8 +362,9 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewS
 
     return (
         <>
-            <div className="flex flex-col h-full">
+            <div className={embedded ? "w-full" : "flex flex-col h-full"}>
                 {/* Header */}
+                {!embedded && (
                 <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-100 shrink-0 flex-wrap">
                     <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-bold transition-colors">
                         <ArrowLeft size={18} /> Назад
@@ -398,22 +402,25 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewS
                         </div>
                     )}
                 </div>
+                )}
 
                 {/* Scrollable table */}
-                <div className="flex-1 overflow-auto px-6 py-4">
-                    <div className="border border-gray-200 rounded-2xl shadow-sm bg-white">
-                        <div className="overflow-x-auto rounded-2xl">
-                            <table className="border-collapse" style={{ width: `${Math.max(totalW, 600)}px` }}>
+                <div className={embedded ? "w-full" : "flex-1 overflow-auto px-6 py-4"}>
+                    <div className={embedded ? "w-full bg-white" : "border border-gray-200 rounded-2xl shadow-sm bg-white"}>
+                        <div className={embedded ? "w-full" : "overflow-x-auto rounded-2xl"}>
+                            <table className="topic-stats-matrix border-collapse" style={embedded ? { width: "100%", minWidth: Math.max(totalW, 600) } : { width: `${Math.max(totalW, 600)}px` }}>
                                 <thead>
                                     <tr className="bg-gray-50" style={{ borderBottom: "1px solid #e5e7eb" }}>
                                         <th className="text-left text-xs font-bold text-gray-500 bg-gray-50"
                                             style={{ width: nameColW, minWidth: nameColW, padding: "10px 16px", position: "sticky", left: 0, zIndex: 10 }}>
                                             Ученик
                                         </th>
-                                        {stats.tasks.map(task => (
+                                        {stats.tasks.map((task, index) => (
                                             <th key={task.task_id} className="text-center text-xs font-bold text-gray-500"
+                                                scope="col"
+                                                title={`Задание ${index + 1}${task.ege_number != null ? ` · №${task.ege_number} в экзамене` : ''}`}
                                                 style={{ width: taskColW, padding: "10px 4px" }}>
-                                                {task.ege_number ?? task.order_index + 1}
+                                                <span className="topic-stats-task-number">{index + 1}</span>
                                             </th>
                                         ))}
                                         <th className="text-center text-xs font-bold text-gray-500" style={{ width: countColW, padding: "10px 8px" }}>Итог</th>
@@ -456,8 +463,8 @@ export function TopicStats({ stats, groups, onBack, apiKey, onRefresh, onReviewS
                                         const isDeleting = deletingId === student.student_id;
                                         return (
                                             <tr key={student.student_id}
-                                                className={clsx("transition-colors hover:bg-gray-50/50", isDeleting && "opacity-40 pointer-events-none")}>
-                                                <td className="bg-white"
+                                                className={clsx("topic-stats-student-row", isDeleting && "opacity-40 pointer-events-none")}>
+                                                <td
                                                     style={{ padding: "10px 16px", borderBottom: "1px solid #f9fafb", position: "sticky", left: 0, minWidth: nameColW }}>
                                                     <div className="flex items-center gap-2">
                                                         {student.photo_url ? (

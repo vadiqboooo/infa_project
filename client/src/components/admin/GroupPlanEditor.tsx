@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, FileDown, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, BarChart3, BookOpen, CalendarDays, CheckCircle2, FileDown, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { GroupLesson, GroupLessonIn, GroupLessonItemIn, GroupPlanResources, GroupOut, StudentOut } from '../../api/types';
 import { handleSessionExpired } from '../../api/client';
+import { GroupLessonProgress } from './GroupLessonProgress';
+import { TopicPreviewButton } from './TopicPreviewButton';
 
 type Props = { group: GroupOut; students: StudentOut[]; apiKey: string; onClose: () => void };
 type TopicFilter = 'tutorial' | 'homework' | 'variants' | 'control';
@@ -254,7 +256,7 @@ export function GroupPlanEditor({ group, students, apiKey, onClose }: Props) {
         ) : (
           isIndividualGroup && programStudentId == null
             ? <div className="flex flex-1 flex-col items-center justify-center p-8 text-center"><CalendarDays size={38} className="text-slate-700" /><p className="mt-3 text-base font-bold text-slate-300">В группе нет учеников</p><p className="mt-1 text-sm text-slate-500">Сначала добавьте ученика в группу «Индивидуалы».</p></div>
-            : <LessonPlanTable lessons={lessons} loading={loading} error={error} onAdd={startNew} onEdit={startEdit} onDelete={removeLesson} />
+            : <LessonPlanTable key={`${group.id}:${programStudentId ?? 'group'}`} groupId={group.id} apiKey={apiKey} lessons={lessons} loading={loading} error={error} onAdd={startNew} onEdit={startEdit} onDelete={removeLesson} />
         )}
       </div>
   );
@@ -331,6 +333,8 @@ function subjectLabel(subject: string) {
 }
 
 function LessonPlanTable({
+  groupId,
+  apiKey,
   lessons,
   loading,
   error,
@@ -338,6 +342,8 @@ function LessonPlanTable({
   onEdit,
   onDelete,
 }: {
+  groupId: number;
+  apiKey: string;
   lessons: GroupLesson[];
   loading: boolean;
   error: string;
@@ -345,6 +351,7 @@ function LessonPlanTable({
   onEdit: (lesson: GroupLesson) => void;
   onDelete: (lesson: GroupLesson) => void;
 }) {
+  const [selected, setSelected] = useState<{ lessonId: number; itemId: number } | null>(null);
   if (loading) return <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Загрузка плана...</div>;
   if (error) return <div className="m-6 rounded-lg border border-red-400/15 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</div>;
   if (lessons.length === 0) {
@@ -370,16 +377,25 @@ function LessonPlanTable({
             const lessonTopics = lesson.items.filter((item) => item.section === 'lesson');
             const homeworkTopics = lesson.items.filter((item) => item.section === 'homework');
             const statusLabel = lesson.status === 'completed' ? 'Проведён' : lesson.status === 'published' ? 'Опубликован' : 'Черновик';
+            const selectedItem = selected?.lessonId === lesson.id ? lesson.items.find(item => item.id === selected.itemId) : undefined;
+            const showProgress = (itemId: number) => setSelected(current => current?.lessonId === lesson.id && current.itemId === itemId ? null : { lessonId: lesson.id, itemId });
             return (
-              <tr key={lesson.id} className="border-b border-white/[0.055] align-top transition-colors last:border-b-0 hover:bg-white/[0.025]">
+              <Fragment key={lesson.id}>
+              <tr className="border-b border-white/[0.055] align-top transition-colors last:border-b-0 hover:bg-white/[0.025]">
                 <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-300">{formatDate(lesson.lesson_at)}</td>
                 <td className="max-w-[220px] px-5 py-4"><p className="text-sm font-bold text-slate-100">{lesson.title}</p>{lesson.note && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{lesson.note}</p>}</td>
-                <td className="max-w-[260px] px-5 py-4"><LessonMaterials items={lessonTopics} tone="lesson" /></td>
-                <td className="max-w-[260px] px-5 py-4"><LessonMaterials items={homeworkTopics} tone="homework" /></td>
+                <td className="max-w-[260px] px-5 py-4"><LessonMaterials apiKey={apiKey} items={lessonTopics} tone="lesson" selectedId={selectedItem?.id} onShowProgress={showProgress} /></td>
+                <td className="max-w-[260px] px-5 py-4"><LessonMaterials apiKey={apiKey} items={homeworkTopics} tone="homework" selectedId={selectedItem?.id} onShowProgress={showProgress} /></td>
                 <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-400">{lesson.homework_deadline ? formatDate(lesson.homework_deadline) : '—'}</td>
                 <td className="px-5 py-4"><span className={`inline-flex rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide ${lesson.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : lesson.status === 'published' ? 'bg-sky-400/10 text-sky-300' : 'bg-white/[0.05] text-slate-500'}`}>{statusLabel}</span></td>
                 <td className="px-6 py-4"><div className="flex justify-end gap-1"><button onClick={() => onEdit(lesson)} className="rounded-lg p-2 text-slate-500 transition hover:bg-sky-400/10 hover:text-sky-400" title="Изменить урок"><Pencil size={16} /></button><button onClick={() => onDelete(lesson)} className="rounded-lg p-2 text-slate-500 transition hover:bg-red-400/10 hover:text-red-400" title="Удалить урок"><Trash2 size={16} /></button></div></td>
               </tr>
+              {selectedItem && (
+                <tr><td colSpan={7} className="p-0">
+                  <GroupLessonProgress key={`${lesson.id}:${selectedItem.id}`} groupId={groupId} studentId={lesson.student_id} item={selectedItem} apiKey={apiKey} onClose={() => setSelected(null)} />
+                </td></tr>
+              )}
+              </Fragment>
             );
           })}
         </tbody>
@@ -388,13 +404,19 @@ function LessonPlanTable({
   );
 }
 
-function LessonMaterials({ items, tone }: { items: GroupLesson['items']; tone: 'lesson' | 'homework' }) {
+function LessonMaterials({ items, tone, selectedId, onShowProgress, apiKey }: { items: GroupLesson['items']; tone: 'lesson' | 'homework'; selectedId?: number; onShowProgress: (itemId: number) => void; apiKey: string }) {
   if (items.length === 0) return <span className="text-sm text-slate-600">—</span>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item) => (
         <div key={item.id} className={`flex max-w-full items-center gap-1 rounded-lg py-1 pl-2.5 pr-1 text-xs font-semibold ${tone === 'lesson' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-violet-400/10 text-violet-300'}`} title={item.title}>
-          <span className="min-w-0 truncate">{item.title}</span>
+          <button type="button" disabled={item.topic_id == null} onClick={() => onShowProgress(item.id)} aria-expanded={selectedId === item.id} title="Показать выполнение учениками" className="inline-flex min-w-0 items-center gap-1.5 rounded-md py-1 text-left hover:underline disabled:opacity-50">
+            <BarChart3 size={14} className="shrink-0" />
+            <span className="truncate">{item.title}</span>
+          </button>
+          {item.resource_type === 'topic' && item.topic_id != null && (
+            <TopicPreviewButton topicId={item.topic_id} title={item.title} apiKey={apiKey} />
+          )}
           {item.resource_type === 'topic' && item.topic_id && (
             <a
               href={`/worksheet/${item.topic_id}`}

@@ -96,7 +96,8 @@ function AnalyticsTracker() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { loggedIn } = useAuth();
+  const { loggedIn, loading } = useAuth();
+  if (loading) return <div role="status" className="flex h-full items-center justify-center">Загрузка профиля…</div>;
   return loggedIn ? <>{children}</> : <LandingPage />;
 }
 

@@ -1647,7 +1647,7 @@ async def remove_student_from_group(group_id: int, user_id: int, db: AsyncSessio
 
 
 @router.get("/topics/{topic_id}/stats", response_model=TopicStatsOut)
-async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncSession = Depends(get_db)):
+async def get_topic_stats(topic_id: int, group_id: int | None = None, include_unstarted: bool = False, db: AsyncSession = Depends(get_db)):
     """Get a student×task matrix of results for a topic."""
     topic_result = await db.execute(select(Topic).where(Topic.id == topic_id))
     topic = topic_result.scalar_one_or_none()
@@ -1702,7 +1702,7 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, db: AsyncS
             select(user_groups.c.user_id).where(user_groups.c.group_id == group_id)
         )
         member_ids = {row[0] for row in members_res.all()}
-        user_ids = [uid for uid in all_user_ids if uid in member_ids]
+        user_ids = sorted(member_ids) if include_unstarted else [uid for uid in all_user_ids if uid in member_ids]
     else:
         user_ids = all_user_ids
 

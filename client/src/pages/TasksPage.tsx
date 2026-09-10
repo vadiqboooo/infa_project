@@ -18,6 +18,8 @@ import { StepByStepSolution } from "../components/StepByStepSolution";
 import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
 import "./TasksPage.css";
 import { api } from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { readUserStorage, writeUserStorage } from "../lib/userStorage";
 
 interface ChatMessage {
   id: number;
@@ -69,6 +71,7 @@ function CategoryTab({
 }
 
 export default function TasksPage() {
+    const { user } = useAuth();
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -76,11 +79,11 @@ export default function TasksPage() {
     
     const [taskIndex, setTaskIndex] = useState(0);
     const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>(() => {
-        try { return JSON.parse(localStorage.getItem('edu_task_answers') || '{}'); } catch { return {}; }
+        return readUserStorage(user?.id, 'edu_task_answers', {});
     });
     // Sub-task answers: keyed by `${taskId}:${subIndex}`
     const [savedSubAnswers, setSavedSubAnswers] = useState<Record<string, AnswerVal>>(() => {
-        try { return JSON.parse(localStorage.getItem('edu_task_sub_answers') || '{}'); } catch { return {}; }
+        return readUserStorage(user?.id, 'edu_task_sub_answers', {});
     });
     const [checkResult, setCheckResult] = useState<'correct' | 'wrong' | null>(null);
     const [subResults, setSubResults] = useState<boolean[] | null>(null);
@@ -441,13 +444,13 @@ export default function TasksPage() {
         return () => ws.close();
     }, [currentTaskNav?.id, queryClient]);
 
-    // Persist answers to localStorage
+    // AuthProvider remounts account content when the user changes.
     useEffect(() => {
-        try { localStorage.setItem('edu_task_answers', JSON.stringify(savedAnswers)); } catch {}
-    }, [savedAnswers]);
+        writeUserStorage(user?.id, 'edu_task_answers', savedAnswers);
+    }, [savedAnswers, user?.id]);
     useEffect(() => {
-        try { localStorage.setItem('edu_task_sub_answers', JSON.stringify(savedSubAnswers)); } catch {}
-    }, [savedSubAnswers]);
+        writeUserStorage(user?.id, 'edu_task_sub_answers', savedSubAnswers);
+    }, [savedSubAnswers, user?.id]);
 
     // Reset check result when task changes
     useEffect(() => {

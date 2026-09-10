@@ -8,6 +8,8 @@ import { Check, Circle, Code2, Eraser, Loader2, Minus, MousePointer2, PenLine, P
 import { authFetch } from "../api/client";
 import type { TaskFile } from "../api/types";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import { userStorageKey } from "../lib/userStorage";
 import "./TaskView.css";
 
 interface Props {
@@ -914,6 +916,7 @@ export default function TaskView({
     onDrawingRecognized,
 }: Props) {
     const { theme } = useTheme();
+    const { user } = useAuth();
     const contentRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLDivElement | null>(null);
     const planeRef = useRef<HTMLDivElement | null>(null);
@@ -1150,7 +1153,7 @@ export default function TaskView({
         return parse(processedContent, parseOptions);
     }, [content, parseOptions]);
 
-    const storageKey = annotationKey ? `task-annotations:${annotationKey}` : "";
+    const storageKey = annotationKey ? userStorageKey(user?.id, `task-annotations:${annotationKey}`) : null;
 
     useEffect(() => {
         setAnnotationsLoaded(false);
