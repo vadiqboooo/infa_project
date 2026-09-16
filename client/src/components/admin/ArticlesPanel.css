@@ -1,0 +1,25 @@
+.articles-admin { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 24px 40px; color: var(--foreground, #283e32); }
+.articles-admin > form, .articles-admin__list { max-width: 1000px; margin: 0 auto; }
+.articles-admin h2 { font-size: 26px; font-weight: 750; } .articles-admin h3 { font-size: 20px; font-weight: 700; } .articles-admin h4 { font-weight: 700; }
+.articles-admin__toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.articles-admin__hint { font-size: 13px; opacity: .65; line-height: 1.7; margin: 6px 0 14px; }
+.articles-admin__fields { border: 0; min-width: 0; }
+.articles-admin__field { display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 600; margin: 16px 0; }
+.articles-admin input:not([type=checkbox]):not([type=radio]), .articles-admin textarea, .articles-admin select { background: var(--card, #fff); color: inherit; border: 1px solid var(--border, #cfdad3); border-radius: 8px; padding: 10px 12px; min-width: 0; font-weight: 400; }
+.articles-admin textarea { resize: vertical; line-height: 1.65; }
+.articles-admin input[type=checkbox], .articles-admin input[type=radio] { accent-color: #168460; width: 17px; height: 17px; flex-shrink: 0; }
+.articles-admin__publish { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.articles-admin__links { display: flex; flex-wrap: wrap; gap: 18px; margin: 16px 0; font-size: 13px; color: #2d9c77; }
+.articles-admin__links a { display: inline-flex; align-items: center; gap: 6px; text-decoration: underline; }
+.articles-admin__preview, .articles-admin__question { border: 1px solid var(--border, #cfdad3); background: var(--card, #fff); border-radius: 14px; padding: 24px; margin: 18px 0; }
+.articles-admin__actions, .articles-admin__option { display: flex; align-items: center; gap: 10px; }
+.articles-admin__toolbar > .articles-admin__actions { flex-wrap: wrap; }
+.articles-admin__actions button { padding: 7px; border-radius: 6px; } .articles-admin button:disabled { opacity: .4; }
+.articles-admin__option { margin-bottom: 10px; } .articles-admin__option input:not([type=checkbox]):not([type=radio]) { flex: 1; }
+.articles-admin__example { display: block; color: #29906d; font-weight: 650; text-align: left; font-size: 13px; margin-top: 12px; text-decoration: underline; }
+.articles-admin__search { display: flex; align-items: center; gap: 10px; margin: 16px 0 24px; } .articles-admin__search input { width: 100%; max-width: 460px; }
+.articles-admin__row { display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--border, #dfe7e1); padding: 20px 0; }
+.articles-admin__title { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; text-align: left; overflow-wrap: anywhere; } .articles-admin__title span { font-size: 12px; opacity: .6; }
+.articles-admin__footer { border-top: 1px solid var(--border, #dfe7e1); padding-top: 20px; font-size: 13px; margin-top: 25px; }
+.dark .articles-admin__links, .dark .articles-admin__example { color: #6acaa8; }
+@media (max-width: 600px) { .articles-admin { padding: 12px; } .articles-admin__question { padding: 14px; } }

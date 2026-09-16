@@ -1,19 +1,32 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BarChart3, BookOpen, CalendarDays, CheckCircle2, FileDown, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { GroupLesson, GroupLessonIn, GroupLessonItemIn, GroupPlanResources, GroupOut, StudentOut } from '../../api/types';
+import { ArrowLeft, BarChart3, BookOpen, CalendarDays, CheckCircle2, ClipboardCheck, FileDown, Home, Pencil, Plus, Trash2, X } from 'lucide-react';
+import type { GroupLesson, GroupLessonIn, GroupLessonItemIn, GroupLessonSection, GroupPlanResources, GroupOut, StudentOut } from '../../api/types';
 import { handleSessionExpired } from '../../api/client';
 import { GroupLessonProgress } from './GroupLessonProgress';
 import { TopicPreviewButton } from './TopicPreviewButton';
 
 type Props = { group: GroupOut; students: StudentOut[]; apiKey: string; onClose: () => void };
-type TopicFilter = 'tutorial' | 'homework' | 'variants' | 'control';
+type TopicFilter = 'tutorial' | 'homework' | 'variants' | 'control' | 'articles' | 'quizzes';
 
 const TOPIC_FILTERS: { value: TopicFilter; label: string }[] = [
   { value: 'tutorial', label: 'Разбор' },
   { value: 'homework', label: 'ДЗ' },
   { value: 'variants', label: 'Вариант' },
   { value: 'control', label: 'КР' },
+  { value: 'articles', label: 'Статьи' },
+  { value: 'quizzes', label: 'Тестирование' },
 ];
+
+const PLAN_SECTIONS = [
+  { section: 'theory', title: 'Теория', icon: BookOpen, description: 'Статьи для изучения перед решением задач' },
+  { section: 'testing', title: 'Тестирование по теории', icon: ClipboardCheck, description: 'Тесты из статей для проверки понимания' },
+  { section: 'lesson', title: 'Решение на уроке', icon: Pencil, description: 'Можно добавить несколько топиков' },
+  { section: 'homework', title: 'Домашняя работа', icon: Home, description: 'Топики и тесты для самостоятельной работы' },
+] as const;
+
+function resourceKey(item: GroupLessonItemIn) {
+  return item.article_id != null ? `${item.article_mode === 'quiz' ? 'quiz' : 'article'}:${item.article_id}` : item.topic_id != null ? `topic:${item.topic_id}` : `task:${item.task_id}`;
+}
 
 const emptyForm = (): GroupLessonIn => {
   const lesson = new Date();
@@ -41,12 +54,10 @@ export function GroupPlanEditor({ group, students, apiKey, onClose }: Props) {
   const selectedStudent = groupStudents.find((student) => student.id === programStudentId) ?? null;
   const studentQuery = programStudentId == null ? '' : `?student_id=${programStudentId}`;
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
-  const [resources, setResources] = useState<GroupPlanResources>({ topics: [] });
+  const [resources, setResources] = useState<GroupPlanResources>({ topics: [], articles: [] });
   const [form, setForm] = useState<GroupLessonIn>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [lessonResource, setLessonResource] = useState('');
-  const [homeworkResource, setHomeworkResource] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -101,14 +112,16 @@ export function GroupPlanEditor({ group, students, apiKey, onClose }: Props) {
       map.set(`topic:${topic.id}`, topic.title);
       topic.tasks.forEach((task) => map.set(`task:${task.id}`, `${topic.title} · ${task.title}`));
     });
+    resources.articles.forEach(article => {
+      map.set(`article:${article.id}`, `Статья · ${article.title}${article.published ? '' : ' (черновик)'}`);
+      map.set(`quiz:${article.id}`, `Тест · ${article.title}${article.published ? '' : ' (черновик)'}`);
+    });
     return map;
   }, [resources]);
 
   const startNew = () => {
     setEditingId(null);
     setForm(emptyForm());
-    setLessonResource('');
-    setHomeworkResource('');
     setError('');
     setEditorOpen(true);
   };
@@ -116,35 +129,29 @@ export function GroupPlanEditor({ group, students, apiKey, onClose }: Props) {
   const closeEditor = () => {
     setEditingId(null);
     setForm(emptyForm());
-    setLessonResource('');
-    setHomeworkResource('');
     setError('');
     setEditorOpen(false);
   };
 
   const startEdit = (lesson: GroupLesson) => {
     setEditingId(lesson.id);
-    setLessonResource('');
-    setHomeworkResource('');
     setForm({
       title: lesson.title,
       lesson_at: toLocalValue(new Date(lesson.lesson_at)),
       homework_deadline: lesson.homework_deadline ? toLocalValue(new Date(lesson.homework_deadline)) : null,
       note: lesson.note || '',
       status: lesson.status,
-      items: lesson.items.map((item, index) => ({ section: item.section, topic_id: item.resource_type === 'topic' ? item.topic_id : null, task_id: item.resource_type === 'task' ? item.task_id : null, order_index: index })),
+      items: lesson.items.map((item, index) => ({ section: item.section, topic_id: item.resource_type === 'topic' ? item.topic_id : null, task_id: item.resource_type === 'task' ? item.task_id : null, article_id: ['article', 'quiz'].includes(item.resource_type) ? item.article_id : null, article_mode: item.resource_type === 'quiz' ? 'quiz' : 'reading', order_index: index })),
     });
     setError('');
     setEditorOpen(true);
   };
 
-  const addResource = (section: 'lesson' | 'homework', value: string) => {
+  const addResource = (section: GroupLessonSection, value: string) => {
     if (!value) return;
-    const item: GroupLessonItemIn = { section, topic_id: Number(value), task_id: null };
-    const duplicate = form.items.some((current) => current.section === section && current.topic_id === item.topic_id && current.task_id === item.task_id);
-    if (!duplicate) setForm((current) => ({ ...current, items: [...current.items, item] }));
-    if (section === 'lesson') setLessonResource('');
-    else setHomeworkResource('');
+    const [type, id] = value.split(':');
+    const item: GroupLessonItemIn = { section, topic_id: type === 'topic' ? Number(id) : null, task_id: null, article_id: type === 'article' || type === 'quiz' ? Number(id) : null, article_mode: type === 'quiz' ? 'quiz' : 'reading' };
+    setForm(current => current.items.some(existing => existing.section === section && resourceKey(existing) === resourceKey(item)) ? current : { ...current, items: [...current.items, item] });
   };
 
   const removeResource = (index: number) => setForm((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) }));
@@ -241,8 +248,7 @@ export function GroupPlanEditor({ group, students, apiKey, onClose }: Props) {
                 </div>
                 <Field label="Статус"><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as GroupLessonIn['status'] })} className="admin-plan-input"><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="completed">Урок проведён</option></select></Field>
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <ResourceSection title="Топики на уроке" icon={<BookOpen size={16} />} section="lesson" value={lessonResource} onChange={setLessonResource} onAdd={() => addResource('lesson', lessonResource)} resources={resources} items={form.items} labels={labels} onRemove={removeResource} />
-                  <ResourceSection title="Топики на дом" icon={<Home size={16} />} section="homework" value={homeworkResource} onChange={setHomeworkResource} onAdd={() => addResource('homework', homeworkResource)} resources={resources} items={form.items} labels={labels} onRemove={removeResource} />
+                  {PLAN_SECTIONS.map(({ section, title, icon: Icon, description }) => <ResourceSection key={section} title={title} description={description} icon={<Icon size={16} />} section={section} onAdd={value => addResource(section, value)} resources={resources} items={form.items} labels={labels} onRemove={removeResource} />)}
                 </div>
                 <Field label="Комментарий"><textarea rows={3} value={form.note || ''} onChange={(e) => setForm({ ...form, note: e.target.value })} className="admin-plan-input resize-none" placeholder="Что важно повторить или принести на урок" /></Field>
                 {error && <p className="rounded-lg border border-red-400/15 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p>}
@@ -266,8 +272,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="mb-1.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500">{label}</span>{children}</label>;
 }
 
-function ResourceSection({ title, icon, section, value, onChange, onAdd, resources, items, labels, onRemove }: { title: string; icon: React.ReactNode; section: 'lesson' | 'homework'; value: string; onChange: (value: string) => void; onAdd: () => void; resources: GroupPlanResources; items: GroupLessonItemIn[]; labels: Map<string, string>; onRemove: (index: number) => void }) {
-  const [filter, setFilter] = useState<TopicFilter>(section === 'homework' ? 'homework' : 'tutorial');
+function ResourceSection({ title, description, icon, section, onAdd, resources, items, labels, onRemove }: { title: string; description: string; icon: React.ReactNode; section: GroupLessonSection; onAdd: (value: string) => void; resources: GroupPlanResources; items: GroupLessonItemIn[]; labels: Map<string, string>; onRemove: (index: number) => void }) {
+  const [value, onChange] = useState('');
+  const [filter, setFilter] = useState<TopicFilter>(section === 'theory' ? 'articles' : section === 'testing' ? 'quizzes' : section === 'homework' ? 'homework' : 'tutorial');
+  const fixedType = section === 'theory' || section === 'testing';
   const [subject, setSubject] = useState('all');
   const subjects = useMemo(() => Array.from(new Set(resources.topics.map((topic) => topic.subject).filter(Boolean))).sort(), [resources.topics]);
   const filteredTopics = resources.topics.filter((topic) => {
@@ -289,24 +297,33 @@ function ResourceSection({ title, icon, section, value, onChange, onAdd, resourc
     onChange('');
   };
 
-  return <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] p-3">
-    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-300">{icon}{title}</div>
-    <div className="mb-2 grid grid-cols-2 gap-2">
-      <select value={filter} onChange={(event) => changeFilter(event.target.value as TopicFilter)} className="admin-plan-input">
-        {TOPIC_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+  const selectedKeys = new Set(items.filter(item => item.section === section).map(resourceKey));
+  const articleFilter = filter === 'articles' || filter === 'quizzes';
+  const options = articleFilter
+    ? resources.articles.filter(article => filter !== 'quizzes' || article.question_count > 0).map(article => ({ value: `${filter === 'quizzes' ? 'quiz' : 'article'}:${article.id}`, title: `${article.title}${filter === 'quizzes' ? ` · ${article.question_count} вопросов` : ''}${article.published ? '' : ' (черновик)'}` }))
+    : filteredTopics.map(topic => ({ value: `topic:${topic.id}`, title: topic.title }));
+
+  return <section aria-label={title} className="rounded-lg border border-white/[0.07] bg-white/[0.025] p-4">
+    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-300">{icon}{title}<span className="ml-auto text-xs text-slate-500">{selectedKeys.size}</span></div>
+    <p className="mb-3 text-xs leading-5 text-slate-400">{description}</p>
+    {!fixedType && <div className="mb-2 grid grid-cols-2 gap-2">
+      <select aria-label={`Тип материала: ${title}`} value={filter} onChange={(event) => changeFilter(event.target.value as TopicFilter)} className="admin-plan-input">
+        {TOPIC_FILTERS.filter(option => section === 'homework' || !['articles', 'quizzes'].includes(option.value)).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <select value={subject} onChange={(event) => changeSubject(event.target.value)} className="admin-plan-input">
+      <select aria-label={`Предмет: ${title}`} value={subject} disabled={articleFilter} onChange={(event) => changeSubject(event.target.value)} className="admin-plan-input">
         <option value="all">Все предметы</option>
         {subjects.map((item) => <option key={item} value={item}>{subjectLabel(item)}</option>)}
       </select>
-    </div>
-    <div className="flex gap-2"><select value={value} onChange={(e) => onChange(e.target.value)} className="admin-plan-input min-w-0 flex-1"><option value="">{filteredTopics.length ? 'Выберите топик' : 'Топиков этого типа нет'}</option>{filteredTopics.map((topic) => <option key={topic.id} value={String(topic.id)}>{topic.title}</option>)}</select><button type="button" onClick={onAdd} disabled={!value} className="rounded-lg bg-emerald-500 px-3 text-white disabled:opacity-30"><Plus size={17} /></button></div>
+    </div>}
+    <div className="flex gap-2"><select aria-label={`Выбрать материал: ${title}`} value={value} onChange={(e) => onChange(e.target.value)} className="admin-plan-input min-w-0 flex-1"><option value="">{options.length ? filter === 'quizzes' ? 'Выберите тест' : filter === 'articles' ? 'Выберите статью' : 'Выберите топик' : articleFilter ? 'Добавьте материал в разделе «Статьи»' : 'Топиков этого типа нет'}</option>{options.map(option => <option key={option.value} value={option.value} disabled={selectedKeys.has(option.value)}>{option.title}{selectedKeys.has(option.value) ? ' — добавлено' : ''}</option>)}</select><button type="button" aria-label={`Добавить материал: ${title}`} onClick={() => { onAdd(value); onChange(''); }} disabled={!value || selectedKeys.has(value)} className="rounded-lg bg-emerald-500 px-3 text-white disabled:opacity-30"><Plus size={17} /></button></div>
+    {articleFilter && <p className="mt-2 text-xs text-slate-500">{filter === 'quizzes' ? 'Здесь доступны статьи, в которых есть вопросы теста.' : 'Черновики появятся у учеников после публикации.'}</p>}
     <div className="mt-2 space-y-1.5">{items.map((item, index) => {
       if (item.section !== section) return null;
-      const key = item.topic_id ? `topic:${item.topic_id}` : `task:${item.task_id}`;
+      const key = resourceKey(item);
       return (
         <div key={`${key}:${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2 text-xs font-medium text-slate-300">
           <span className="min-w-0 flex-1 truncate">{labels.get(key) || 'Материал'}</span>
+          {item.article_id && <a href={`/articles/${item.article_id}?preview=1&mode=${item.article_mode === 'quiz' ? 'quiz' : 'theory'}`} target="_blank" rel="noreferrer" className="text-emerald-300 hover:underline">Открыть</a>}
           {item.topic_id && (
             <a
               href={`/worksheet/${item.topic_id}`}
@@ -319,11 +336,11 @@ function ResourceSection({ title, icon, section, value, onChange, onAdd, resourc
               Рабочий лист
             </a>
           )}
-          <button type="button" onClick={() => onRemove(index)} className="shrink-0 text-slate-600 hover:text-red-400" title="Убрать топик"><X size={14} /></button>
+          <button type="button" onClick={() => onRemove(index)} className="shrink-0 text-slate-600 hover:text-red-400" title="Убрать материал"><X size={14} /></button>
         </div>
       );
     })}</div>
-  </div>;
+  </section>;
 }
 
 function subjectLabel(subject: string) {
@@ -360,13 +377,12 @@ function LessonPlanTable({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <table className="w-full min-w-[960px] border-collapse">
+      <table className="w-full min-w-[1260px] border-collapse">
         <thead className="sticky top-0 z-10 bg-[#202020]">
           <tr className="border-b border-white/[0.07] text-left">
             <th className="h-12 px-6 text-[11px] font-bold uppercase tracking-wide text-slate-500">Дата урока</th>
             <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Урок</th>
-            <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Топики на уроке</th>
-            <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Топики на дом</th>
+            {PLAN_SECTIONS.map(({ section, title }) => <th key={section} className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</th>)}
             <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Дедлайн ДЗ</th>
             <th className="h-12 px-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">Статус</th>
             <th className="h-12 px-6 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Управление</th>
@@ -374,8 +390,6 @@ function LessonPlanTable({
         </thead>
         <tbody>
           {lessons.map((lesson) => {
-            const lessonTopics = lesson.items.filter((item) => item.section === 'lesson');
-            const homeworkTopics = lesson.items.filter((item) => item.section === 'homework');
             const statusLabel = lesson.status === 'completed' ? 'Проведён' : lesson.status === 'published' ? 'Опубликован' : 'Черновик';
             const selectedItem = selected?.lessonId === lesson.id ? lesson.items.find(item => item.id === selected.itemId) : undefined;
             const showProgress = (itemId: number) => setSelected(current => current?.lessonId === lesson.id && current.itemId === itemId ? null : { lessonId: lesson.id, itemId });
@@ -384,14 +398,13 @@ function LessonPlanTable({
               <tr className="border-b border-white/[0.055] align-top transition-colors last:border-b-0 hover:bg-white/[0.025]">
                 <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-300">{formatDate(lesson.lesson_at)}</td>
                 <td className="max-w-[220px] px-5 py-4"><p className="text-sm font-bold text-slate-100">{lesson.title}</p>{lesson.note && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{lesson.note}</p>}</td>
-                <td className="max-w-[260px] px-5 py-4"><LessonMaterials apiKey={apiKey} items={lessonTopics} tone="lesson" selectedId={selectedItem?.id} onShowProgress={showProgress} /></td>
-                <td className="max-w-[260px] px-5 py-4"><LessonMaterials apiKey={apiKey} items={homeworkTopics} tone="homework" selectedId={selectedItem?.id} onShowProgress={showProgress} /></td>
+                {PLAN_SECTIONS.map(({ section }) => <td key={section} className="max-w-[260px] px-5 py-4"><LessonMaterials apiKey={apiKey} items={lesson.items.filter(item => item.section === section)} tone={section === 'homework' ? 'homework' : 'lesson'} selectedId={selectedItem?.id} onShowProgress={showProgress} /></td>)}
                 <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-400">{lesson.homework_deadline ? formatDate(lesson.homework_deadline) : '—'}</td>
                 <td className="px-5 py-4"><span className={`inline-flex rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide ${lesson.status === 'completed' ? 'bg-emerald-400/10 text-emerald-300' : lesson.status === 'published' ? 'bg-sky-400/10 text-sky-300' : 'bg-white/[0.05] text-slate-500'}`}>{statusLabel}</span></td>
                 <td className="px-6 py-4"><div className="flex justify-end gap-1"><button onClick={() => onEdit(lesson)} className="rounded-lg p-2 text-slate-500 transition hover:bg-sky-400/10 hover:text-sky-400" title="Изменить урок"><Pencil size={16} /></button><button onClick={() => onDelete(lesson)} className="rounded-lg p-2 text-slate-500 transition hover:bg-red-400/10 hover:text-red-400" title="Удалить урок"><Trash2 size={16} /></button></div></td>
               </tr>
               {selectedItem && (
-                <tr><td colSpan={7} className="p-0">
+                <tr><td colSpan={9} className="p-0">
                   <GroupLessonProgress key={`${lesson.id}:${selectedItem.id}`} groupId={groupId} studentId={lesson.student_id} item={selectedItem} apiKey={apiKey} onClose={() => setSelected(null)} />
                 </td></tr>
               )}
@@ -410,10 +423,10 @@ function LessonMaterials({ items, tone, selectedId, onShowProgress, apiKey }: { 
     <div className="flex flex-wrap gap-1.5">
       {items.map((item) => (
         <div key={item.id} className={`flex max-w-full items-center gap-1 rounded-lg py-1 pl-2.5 pr-1 text-xs font-semibold ${tone === 'lesson' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-violet-400/10 text-violet-300'}`} title={item.title}>
-          <button type="button" disabled={item.topic_id == null} onClick={() => onShowProgress(item.id)} aria-expanded={selectedId === item.id} title="Показать выполнение учениками" className="inline-flex min-w-0 items-center gap-1.5 rounded-md py-1 text-left hover:underline disabled:opacity-50">
+          {item.article_id != null ? <a href={`/articles/${item.article_id}?preview=1&mode=${item.resource_type === 'quiz' ? 'quiz' : 'theory'}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 py-1 hover:underline">{item.resource_type === 'quiz' ? <ClipboardCheck size={14} /> : <BookOpen size={14} />}<span className="truncate">{item.resource_type === 'quiz' ? 'Тест' : 'Статья'} · {item.title}</span></a> : <button type="button" disabled={item.topic_id == null} onClick={() => onShowProgress(item.id)} aria-expanded={selectedId === item.id} title="Показать выполнение учениками" className="inline-flex min-w-0 items-center gap-1.5 rounded-md py-1 text-left hover:underline disabled:opacity-50">
             <BarChart3 size={14} className="shrink-0" />
             <span className="truncate">{item.title}</span>
-          </button>
+          </button>}
           {item.resource_type === 'topic' && item.topic_id != null && (
             <TopicPreviewButton topicId={item.topic_id} title={item.title} apiKey={apiKey} />
           )}

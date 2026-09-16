@@ -290,6 +290,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             time_limit_minutes=exams.get(t.id, 60),
             is_mock=t.is_mock,
             open_to_groups=t.open_to_groups,
+            task_layout=t.task_layout,
             show_in_tasks=t.show_in_tasks,
             ege_number=t.ege_number,
             ege_number_end=t.ege_number_end,
@@ -314,6 +315,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         course_type=_normalize_topic_course_type(body.category, body.course_type),
         is_mock=body.is_mock,
         open_to_groups=body.open_to_groups,
+        task_layout=body.task_layout,
         show_in_tasks=body.show_in_tasks,
         ege_number=body.ege_number,
         ege_number_end=body.ege_number_end,
@@ -343,6 +345,7 @@ async def create_topic(body: TopicIn, db: AsyncSession = Depends(get_db)):
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        task_layout=topic.task_layout,
         show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
@@ -369,6 +372,8 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.course_type = _normalize_topic_course_type(body.category, body.course_type)
     topic.is_mock = body.is_mock
     topic.open_to_groups = body.open_to_groups
+    if "task_layout" in body.model_fields_set:
+        topic.task_layout = body.task_layout
     topic.show_in_tasks = body.show_in_tasks
     topic.ege_number = body.ege_number
     topic.ege_number_end = body.ege_number_end
@@ -405,6 +410,7 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
         time_limit_minutes=exam.time_limit_minutes,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        task_layout=topic.task_layout,
         show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
@@ -498,6 +504,7 @@ async def upload_topic_image(
         time_limit_minutes=exam.time_limit_minutes if exam else 60,
         is_mock=topic.is_mock,
         open_to_groups=topic.open_to_groups,
+        task_layout=topic.task_layout,
         show_in_tasks=topic.show_in_tasks,
         ege_number=topic.ege_number,
         ege_number_end=topic.ege_number_end,
@@ -2332,7 +2339,7 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
 
     update_data = body.model_dump(exclude_unset=True)
 
-    # Topic membership is managed only by the dedicated attach endpoint.  A task
+    # Topic membership is managed only by dedicated attach/detach endpoints. A task
     # edit must never detach or move a task because of a missing/stale form value.
     update_data.pop("topic_id", None)
 
@@ -2342,6 +2349,29 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
     await db.commit()
     await db.refresh(task)
     return task
+
+
+@router.delete("/topics/{topic_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def detach_task_from_topic(topic_id: int, task_id: int, db: AsyncSession = Depends(get_db)):
+    """Remove topic membership while keeping the task and student work in the bank."""
+    topic = await db.get(Topic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Топик не найден")
+
+    result = await db.execute(select(Task).where(Task.id == task_id).with_for_update())
+    task = result.scalar_one_or_none()
+    if task is None or task.topic_id != topic_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена в этом топике")
+
+    # The bank uses topic metadata for attached tasks and task metadata otherwise.
+    task.subject = topic.subject
+    task.exam_type = topic.exam_type
+    task.topic_id = None
+    await db.execute(delete(exam_tasks).where(
+        exam_tasks.c.task_id == task_id,
+        exam_tasks.c.exam_id.in_(select(Exam.id).where(Exam.topic_id == topic_id)),
+    ))
+    await db.commit()
 
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

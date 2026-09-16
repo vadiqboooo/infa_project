@@ -19,6 +19,7 @@ class Topic(Base):
     is_mock: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
     open_to_groups: Mapped[bool] = mapped_column(Integer, default=False, server_default="0", nullable=False)
     show_in_tasks: Mapped[bool] = mapped_column(Integer, default=True, server_default="1", nullable=False)
+    task_layout: Mapped[str] = mapped_column(String(16), default="single", server_default="single", nullable=False)
     ege_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     ege_number_end: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 

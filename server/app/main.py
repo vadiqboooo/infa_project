@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.routers import admin, analytics, auth, billing, content, course_leads, exams, group_plan, preparation, solving, stats
+from app.routers import admin, analytics, articles, auth, billing, content, course_leads, exams, group_plan, preparation, solving, stats
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,8 @@ app.include_router(stats.router)
 app.include_router(preparation.router)
 app.include_router(group_plan.router)
 app.include_router(group_plan.admin_router)
+app.include_router(articles.router)
+app.include_router(articles.admin_router)
 app.include_router(admin.router, prefix="/admin")
 
 # Serve uploaded files (exam solutions)

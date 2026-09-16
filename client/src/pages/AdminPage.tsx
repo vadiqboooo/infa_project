@@ -49,6 +49,7 @@ import { ImportTopicModal } from "../components/admin/ImportTopicModal";
 import AdminImportPdfPage from "./AdminImportPdfPage";
 import { GroupPlanEditor } from "../components/admin/GroupPlanEditor";
 import { SubjectSettingsPanel } from "../components/admin/SubjectSettingsPanel";
+import { ArticlesPanel } from "../components/admin/ArticlesPanel";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
@@ -58,7 +59,7 @@ const API_BASE = "/api";
 const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
 
 type AdminDashboardState = {
-    activeTab?: 'topics' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
+    activeTab?: 'topics' | 'articles' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
     search?: string;
     filter?: FilterCategory;
     egeNumberFilter?: string;
@@ -250,7 +251,7 @@ export default function AdminPage() {
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
     const savedState = readAdminDashboardState();
-    const [activeTab, setActiveTab] = useState<'topics' | 'students' | 'subscriptions' | 'metrics' | 'settings'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
+    const [activeTab, setActiveTab] = useState<'topics' | 'articles' | 'students' | 'subscriptions' | 'metrics' | 'settings'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
@@ -392,6 +393,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
             is_mock: topic.is_mock,
             open_to_groups: !topic.open_to_groups,
             show_in_tasks: topic.show_in_tasks ?? true,
+            task_layout: topic.task_layout ?? 'single',
             ege_number: topic.ege_number ?? null,
             ege_number_end: topic.ege_number_end ?? null,
             image_position: topic.image_position ?? null,
@@ -519,6 +521,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
 
             {/* Tabs */}
             <div className="admin-tabs mb-5 flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-gray-200/50 p-1">
+                <button onClick={() => setActiveTab('articles')} className={clsx('flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all', activeTab === 'articles' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><FileText size={16} />Статьи</button>
                 <button
                     onClick={() => setActiveTab('topics')}
                     className={clsx(
@@ -899,6 +902,8 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                         </div>
                     </div>
                 </div>
+            ) : activeTab === "articles" ? (
+                <ArticlesPanel apiKey={apiKey} />
             ) : activeTab === "students" ? (
                 <div
                     ref={studentsScrollRef}
@@ -1944,6 +1949,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
             is_mock: data.is_mock !== undefined ? data.is_mock : topic.is_mock,
             open_to_groups: data.open_to_groups !== undefined ? data.open_to_groups : topic.open_to_groups ?? false,
             show_in_tasks: data.show_in_tasks !== undefined ? data.show_in_tasks : topic.show_in_tasks ?? true,
+            task_layout: data.task_layout ?? topic.task_layout ?? 'single',
             ege_number: data.ege_number !== undefined ? data.ege_number : topic.ege_number ?? null,
             ege_number_end: data.ege_number_end !== undefined ? data.ege_number_end : topic.ege_number_end ?? null,
             image_position: data.image_position !== undefined ? data.image_position : topic.image_position ?? null,
@@ -2042,11 +2048,16 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
         }
     };
 
-    const handleDeleteTask = async (taskId: number) => {
-        if (!confirm("Удалить задачу?")) return;
-        await adminFetch(`/admin/tasks/${taskId}`, apiKey, { method: "DELETE" });
-        queryClient.invalidateQueries({ queryKey: ["navigation"] });
-        await loadTopicData();
+    const handleRemoveTask = async (taskId: number) => {
+        if (!topic || !confirm("Убрать задачу из топика? Она останется в базе заданий вместе с ответами и решениями учеников.")) return;
+        try {
+            await adminFetch(`/admin/topics/${topic.id}/tasks/${taskId}`, apiKey, { method: "DELETE" });
+            queryClient.invalidateQueries({ queryKey: ["navigation"] });
+            queryClient.invalidateQueries({ queryKey: ["exam"] });
+            await loadTopicData();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Не удалось убрать задачу из топика");
+        }
     };
 
     if (loading) return <div className="flex items-center justify-center h-full text-gray-400">Загрузка...</div>;
@@ -2063,7 +2074,7 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
                     onSaveTask={handleSaveTask}
                     onAttachTaskById={handleAttachTaskById}
                     onReorderTasks={handleReorderTasks}
-                    onDeleteTask={handleDeleteTask}
+                    onRemoveTask={handleRemoveTask}
                     apiKey={apiKey}
                     initialTaskId={Number(searchParams.get('task')) || undefined}
                     onExitInitialTask={openedFromTaskBank ? handleBack : undefined}

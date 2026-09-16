@@ -70,6 +70,7 @@ export interface TopicNav {
     is_mock: boolean;
     open_to_groups?: boolean;
     show_in_tasks?: boolean;
+    task_layout?: "single" | "vertical";
     ege_number?: number | null;
     ege_number_end?: number | null;
     analysis_published?: boolean;
@@ -254,6 +255,7 @@ export interface TopicAdmin {
     is_mock: boolean;
     open_to_groups: boolean;
     show_in_tasks: boolean;
+    task_layout?: "single" | "vertical";
     ege_number?: number | null;
     ege_number_end?: number | null;
     has_image?: boolean;
@@ -314,6 +316,7 @@ export interface TopicIn {
     is_mock: boolean;
     open_to_groups?: boolean;
     show_in_tasks?: boolean;
+    task_layout?: "single" | "vertical";
     ege_number?: number | null;
     ege_number_end?: number | null;
     image_position?: TopicImagePosition | null;
@@ -583,12 +586,13 @@ export interface GroupOut {
 }
 
 export type GroupLessonStatus = "draft" | "published" | "completed";
-export type GroupLessonSection = "lesson" | "homework";
+export type GroupLessonSection = "theory" | "testing" | "lesson" | "homework";
 
 export interface GroupLessonItem {
     id: number;
     section: GroupLessonSection;
-    resource_type: "topic" | "task";
+    resource_type: "topic" | "task" | "article" | "quiz";
+    article_id?: number | null;
     topic_id: number | null;
     task_id: number | null;
     title: string;
@@ -616,6 +620,8 @@ export interface GroupLesson {
 
 export interface GroupLessonItemIn {
     section: GroupLessonSection;
+    article_id?: number | null;
+    article_mode?: "reading" | "quiz";
     topic_id?: number | null;
     task_id?: number | null;
     order_index?: number;
@@ -647,6 +653,7 @@ export interface GroupPlanTopicOption {
 
 export interface GroupPlanResources {
     topics: GroupPlanTopicOption[];
+    articles: { id: number; title: string; published: boolean; question_count: number }[];
 }
 
 export interface PreparationPlanBlock {

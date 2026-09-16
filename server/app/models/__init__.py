@@ -1,4 +1,5 @@
 from app.models.topic import Topic
+from app.models.article import Article, ArticleProgress
 from app.models.task import Task
 from app.models.exam import Exam, exam_tasks
 from app.models.user import User

@@ -1,0 +1,67 @@
+/* Shared typography for Markdown and the isolated HTML document. */
+.article-reading {
+  --reader-text: #202124;
+  --reader-muted: #6b6f73;
+  color: var(--reader-text);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 22px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.dark .article-reading, .article-reading[data-reading-theme='dark'] {
+  --reader-text: #e6e6e6;
+  --reader-muted: #a6aaa8;
+}
+.article-reading p, .article-reading li {
+  color: inherit !important;
+  font-family: Georgia, 'Times New Roman', serif !important;
+  font-size: 22px !important;
+  line-height: 1.55 !important;
+}
+.article-reading p { margin: 0 0 28px !important; }
+.article-reading :is(ul, ol) { margin: 0 0 28px; padding-left: 1.25em; }
+.article-reading li { margin: 8px 0; padding-left: 4px; }
+.article-reading :is(h1, h2, h3, h4) {
+  color: inherit !important;
+  font-family: Inter, system-ui, sans-serif !important;
+  font-weight: 750 !important;
+  line-height: 1.2 !important;
+  letter-spacing: -.025em;
+}
+.article-reading h1 { font-size: 44px !important; margin: 0 0 24px !important; }
+.article-reading h2 { font-size: 28px !important; margin: 48px 0 22px !important; }
+.article-reading h3 { font-size: 23px !important; margin: 36px 0 18px !important; }
+.article-reading p > strong, .article-reading li > strong {
+  color: inherit !important;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: .88em;
+  font-weight: 700;
+}
+.article-reading p.lead {
+  color: var(--reader-muted) !important;
+  font-family: Inter, system-ui, sans-serif !important;
+  font-size: 22px !important;
+  line-height: 1.5 !important;
+  margin-bottom: 40px !important;
+}
+.article-reading :is(table, figure, pre, .visual, .summary) { font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.6; }
+.article-reading :is(.visual, .summary) { color: #172033; }
+.article-reading--html, .article-reading--html > :is(article, main), .article-reading--html > main > article {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--reader-text) !important;
+}
+@media (max-width: 600px) {
+  .article-reading, .article-reading p, .article-reading li { font-size: 19px !important; line-height: 1.6 !important; }
+  .article-reading p { margin-bottom: 24px !important; }
+  .article-reading h1 { font-size: 32px !important; }
+  .article-reading h2 { font-size: 25px !important; margin-top: 36px !important; }
+  .article-reading h3 { font-size: 21px !important; }
+  .article-reading p.lead { font-size: 19px !important; margin-bottom: 32px !important; }
+}

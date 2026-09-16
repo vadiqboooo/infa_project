@@ -136,7 +136,7 @@ interface TopicDetailProps {
   onSaveTask: (data: Partial<TaskAdmin>) => Promise<void>;
   onAttachTaskById: (taskId: number) => Promise<void>;
   onReorderTasks: (orderedTasks: TaskAdmin[]) => void;
-  onDeleteTask: (id: number) => void;
+  onRemoveTask: (id: number) => void;
   apiKey?: string;
   initialTaskId?: number;
   onExitInitialTask?: () => void;
@@ -150,7 +150,7 @@ export function TopicDetail({
   onSaveTask,
   onAttachTaskById,
   onReorderTasks,
-  onDeleteTask,
+  onRemoveTask,
   apiKey,
   initialTaskId,
   onExitInitialTask,
@@ -754,6 +754,20 @@ export function TopicDetail({
                   <h4 className="text-sm font-black text-gray-900 dark:text-white">Доступ и отображение</h4>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Укажите, где ученики смогут увидеть этот топик</p>
                 </div>
+                <label className="block rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                  <span className="mb-2 block text-sm font-bold text-gray-900 dark:text-white">Отображение задач</span>
+                  <select
+                    value={editingTopic.task_layout ?? 'single'}
+                    onChange={(e) => handleTopicFieldChange('task_layout', e.target.value as 'single' | 'vertical')}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 dark:border-white/10 dark:bg-[#151716] dark:text-white"
+                  >
+                    <option value="single">По одной задаче</option>
+                    <option value="vertical">Вертикальный список</option>
+                  </select>
+                  <span className="mt-2 block text-xs text-gray-500 dark:text-gray-400">
+                    Условие, ответ и кнопка проверки в каждой карточке. Варианты в режиме экзамена открываются по одной задаче.
+                  </span>
+                </label>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <button
                     type="button"
@@ -1303,9 +1317,11 @@ export function TopicDetail({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteTask(task.id);
+                          onRemoveTask(task.id);
                         }}
                         className="p-1.5 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-500 transition-all"
+                        title="Убрать из топика"
+                        aria-label="Убрать задачу из топика"
                       >
                         <Trash2 size={14} />
                       </button>

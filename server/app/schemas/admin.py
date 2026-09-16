@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 from app.models.task import AnswerType, TaskDifficulty
 
@@ -20,6 +20,7 @@ class TopicIn(BaseModel):
     is_mock: bool = False
     open_to_groups: bool = False
     show_in_tasks: bool = True
+    task_layout: Literal["single", "vertical"] = "single"
     ege_number: int | None = None
     ege_number_end: int | None = None
     image_position: str | None = None  # 'cover' | 'left' | 'right' | 'background'
@@ -41,6 +42,7 @@ class TopicOut(BaseModel):
     is_mock: bool = False
     open_to_groups: bool = False
     show_in_tasks: bool = True
+    task_layout: Literal["single", "vertical"] = "single"
     ege_number: int | None = None
     ege_number_end: int | None = None
     has_image: bool = False

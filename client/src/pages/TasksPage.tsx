@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import TaskView from "../components/TaskView";
 import AnswerInput from "../components/AnswerInput";
+import VerticalTaskList from "../components/VerticalTaskList";
 import ChatWidget from "../components/ChatWidget";
 import MentorPanel from "../components/MentorPanel";
 import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
@@ -78,6 +79,7 @@ export default function TasksPage() {
     const queryClient = useQueryClient();
     
     const [taskIndex, setTaskIndex] = useState(0);
+    const [listScrollTarget, setListScrollTarget] = useState<{ topicId: number; taskId: number } | null>(null);
     const [savedAnswers, setSavedAnswers] = useState<Record<number, AnswerVal>>(() => {
         return readUserStorage(user?.id, 'edu_task_answers', {});
     });
@@ -202,6 +204,9 @@ export default function TasksPage() {
 
     const tasks: TaskNav[] = currentTopic?.tasks ?? [];
     const currentTaskNav = tasks[taskIndex] ?? null;
+    const hasVerticalLayout = currentTopic?.task_layout === 'vertical' && currentTopic.category !== 'variants';
+    const showVerticalList = hasVerticalLayout && new URLSearchParams(location.search).get('view') !== 'single'
+        && new URLSearchParams(location.search).get('solution') !== '1';
 
     useEffect(() => {
         setDrawingPanelOpen(false);
@@ -230,8 +235,10 @@ export default function TasksPage() {
         const nextIndex = tasks.findIndex((item) => item.id === Number(taskParam));
         if (nextIndex >= 0 && !tasks[nextIndex]?.is_locked) {
             appliedTaskDeepLinkRef.current = taskParam;
+            setListScrollTarget({ topicId: Number(id), taskId: Number(taskParam) });
             if (params.get("solution") === "1") {
                 setPendingSolutionTaskId(Number(taskParam));
+                if (hasVerticalLayout) params.set('view', 'single');
             }
             setTaskIndex((currentIndex) => nextIndex !== currentIndex ? nextIndex : currentIndex);
             params.delete("task");
@@ -239,7 +246,7 @@ export default function TasksPage() {
             const nextSearch = params.toString();
             navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
         }
-    }, [location.pathname, location.search, navigate, tasks]);
+    }, [location.pathname, location.search, navigate, tasks, hasVerticalLayout, id]);
 
     const isVariant = currentTopic?.category === "variants";
     const canAnnotateTask = currentTopic != null && [
@@ -256,7 +263,7 @@ export default function TasksPage() {
     const saveExamDraftAnswer = useSaveExamDraftAnswer(examInfo?.active_attempt?.id ?? 0);
     const hasFinishedAttempt = examInfo?.finished_attempt != null;
 
-    const openTaskId = currentTaskNav && !currentTaskNav.is_locked ? currentTaskNav.id : null;
+    const openTaskId = !showVerticalList && currentTaskNav && !currentTaskNav.is_locked ? currentTaskNav.id : null;
     const { data: task, isLoading: taskLoading } = useTask(openTaskId);
     useEffect(() => {
         if (!task?.id) return;
@@ -428,7 +435,7 @@ export default function TasksPage() {
     };
 
     useEffect(() => {
-        if (!currentTaskNav?.id) return;
+        if (!currentTaskNav?.id || showVerticalList) return;
         const token = localStorage.getItem("jwt_token");
         if (!token) return;
 
@@ -442,7 +449,7 @@ export default function TasksPage() {
             setAnnotationRefreshKey((current) => current + 1);
         };
         return () => ws.close();
-    }, [currentTaskNav?.id, queryClient]);
+    }, [currentTaskNav?.id, queryClient, showVerticalList]);
 
     // AuthProvider remounts account content when the user changes.
     useEffect(() => {
@@ -525,6 +532,7 @@ export default function TasksPage() {
         };
 
         const onKeyDown = (event: KeyboardEvent) => {
+            if (showVerticalList) return;
             if (attachSolutionOpen || mentorOpen || solutionOpen || viewingFinishedExam || taskLoading) return;
             if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
 
@@ -554,6 +562,7 @@ export default function TasksPage() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [
         attachSolutionOpen,
+        showVerticalList,
         mentorOpen,
         solutionOpen,
         viewingFinishedExam,
@@ -753,17 +762,53 @@ export default function TasksPage() {
         ) : null
     );
 
+    if (showVerticalList) {
+        return (
+            <div className="vertical-tasks-page">
+                <header className="vertical-tasks-header">
+                    <button type="button" className="vertical-task-link" onClick={() => navigate(backPath)}><ArrowLeft size={16} /> Назад</button>
+                    {showModeTabs && modeOptions.length > 1 && <nav className="vertical-tasks-modes" aria-label="Топики">
+                        {modeOptions.map(({ topic, path, label }) => <button key={topic.id} type="button" aria-current={topic.id === currentTopic.id ? 'page' : undefined} onClick={() => navigate(path)}>{label}</button>)}
+                    </nav>}
+                </header>
+                <main className="vertical-tasks-scroll">
+                    <VerticalTaskList
+                        key={currentTopic.id}
+                        topic={currentTopic}
+                        answers={savedAnswers}
+                        subAnswers={savedSubAnswers}
+                        onAnswerChange={(taskId, value) => setSavedAnswers(prev => ({ ...prev, [taskId]: value }))}
+                        onSubAnswerChange={(key, value) => setSavedSubAnswers(prev => ({ ...prev, [key]: value }))}
+                        scrollToTaskId={listScrollTarget?.topicId === currentTopic.id ? listScrollTarget.taskId : null}
+                    />
+                </main>
+            </div>
+        );
+    }
+
     return (
         <div className="task-solve-page flex h-full flex-col overflow-hidden bg-[#030A12]">
             {/* Header */}
             <div className="relative z-10 flex min-h-16 shrink-0 items-center border-b border-white/10 bg-[#07111D]/92 px-4 shadow-[0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl md:px-6">
                 <div className="flex w-full min-w-0 items-center gap-3">
                     <button
-                        onClick={() => navigate(backPath)}
+                        onClick={() => {
+                            if (!hasVerticalLayout) { navigate(backPath); return; }
+                            if (attachSolutionBeforeCloseRef.current?.() === false) return;
+                            setAttachSolutionOpen(false);
+                            setSolutionOpen(false);
+                            setMentorOpen(false);
+                            if (currentTaskNav) setListScrollTarget({ topicId: currentTopic.id, taskId: currentTaskNav.id });
+                            const params = new URLSearchParams(location.search);
+                            params.delete('view');
+                            params.delete('solution');
+                            params.delete('task');
+                            navigate(`${location.pathname}${params.size ? `?${params}` : ''}`);
+                        }}
                         className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
                     >
                         <ArrowLeft size={16} />
-                        <span className="hidden sm:inline">Назад</span>
+                        <span className="hidden sm:inline">{hasVerticalLayout ? 'К списку' : 'Назад'}</span>
                     </button>
 
                     {showModeTabs && modeOptions.length > 1 && currentModeOption && (

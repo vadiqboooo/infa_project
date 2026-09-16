@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.group import Group, user_groups
 from app.models.group_plan import GroupLesson, GroupLessonItem
+from app.models.article import Article, ArticleProgress
 from app.models.progress import ProgressStatus, UserProgress
 from app.models.task import Task
 from app.models.topic import Topic
@@ -19,6 +20,7 @@ from app.schemas.group_plan import (
     GroupPlanResourcesOut,
     GroupPlanTaskOptionOut,
     GroupPlanTopicOptionOut,
+    GroupPlanArticleOptionOut,
 )
 
 router = APIRouter(tags=["group-plan"])
@@ -33,6 +35,7 @@ def _is_individual_group(group: Group) -> bool:
 def _lesson_options():
     return (
         selectinload(GroupLesson.group),
+        selectinload(GroupLesson.items).selectinload(GroupLessonItem.article),
         selectinload(GroupLesson.items).selectinload(GroupLessonItem.topic).selectinload(Topic.tasks),
         selectinload(GroupLesson.items)
         .selectinload(GroupLessonItem.task)
@@ -61,7 +64,25 @@ def _topic_title(topic: Topic) -> str:
     return f"№{number} · {topic.title}"
 
 
-def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus]) -> GroupLessonItemOut:
+def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus], article_progress: dict[int, ArticleProgress] | None = None) -> GroupLessonItemOut:
+    if item.article_id is not None and item.article is not None:
+        article = item.article
+        saved = (article_progress or {}).get(article.id)
+        current = saved is not None and saved.revision == article.revision
+        read = bool(current and saved.read)
+        score = saved.best_score if current else 0
+        quiz = item.article_mode == "quiz"
+        total = len(article.questions) if quiz else 1
+        solved = score if quiz else int(read)
+        completed = total > 0 and solved == total
+        started = bool(current and saved.attempts) if quiz else read
+        return GroupLessonItemOut(
+            id=item.id, section=item.section, resource_type="quiz" if quiz else "article", article_id=article.id,
+            title=article.title, subtitle=f"Тест · {score}/{total} вопросов" if quiz else "Статья прочитана" if read else "Чтение статьи",
+            href=f"/articles/{article.id}?mode={'quiz' if quiz else 'theory'}&from=home", solved=solved, total=total,
+            progress_percent=round(solved / total * 100) if total else 0,
+            completion_status="completed" if completed else "in_progress" if started else "not_started",
+        )
     if item.task_id is not None and item.task is not None:
         task = item.task
         topic = task.topic
@@ -107,7 +128,7 @@ def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus]) -> Gro
     )
 
 
-def _lesson_out(lesson: GroupLesson, progress: dict[int, ProgressStatus] | None = None) -> GroupLessonOut:
+def _lesson_out(lesson: GroupLesson, progress: dict[int, ProgressStatus] | None = None, article_progress: dict[int, ArticleProgress] | None = None, published_only: bool = False) -> GroupLessonOut:
     return GroupLessonOut(
         id=lesson.id,
         group_id=lesson.group_id,
@@ -119,7 +140,8 @@ def _lesson_out(lesson: GroupLesson, progress: dict[int, ProgressStatus] | None 
         homework_deadline=lesson.homework_deadline,
         note=lesson.note,
         status=lesson.status,
-        items=[_item_out(item, progress or {}) for item in lesson.items],
+        items=[_item_out(item, progress or {}, article_progress) for item in lesson.items
+               if not published_only or item.article_id is None or (item.article is not None and item.article.published)],
     )
 
 
@@ -134,6 +156,14 @@ async def _get_lesson(lesson_id: int, db: AsyncSession) -> GroupLesson:
 async def _validate_items(body: GroupLessonIn, db: AsyncSession) -> None:
     topic_ids = {item.topic_id for item in body.items if item.topic_id is not None}
     task_ids = {item.task_id for item in body.items if item.task_id is not None}
+    article_ids = {item.article_id for item in body.items if item.article_id is not None}
+    if article_ids:
+        result = await db.execute(select(Article).where(Article.id.in_(article_ids)).with_for_update())
+        articles = {article.id: article for article in result.scalars().all()}
+        if set(articles) != article_ids:
+            raise HTTPException(status_code=400, detail="Одна или несколько статей не найдены")
+        if any(item.article_mode == "quiz" and not articles[item.article_id].questions for item in body.items):
+            raise HTTPException(status_code=400, detail="В выбранной статье нет теста. Сначала добавьте вопросы в редакторе статьи.")
     if topic_ids:
         result = await db.execute(select(Topic.id).where(Topic.id.in_(topic_ids)))
         if set(result.scalars().all()) != topic_ids:
@@ -164,7 +194,7 @@ async def _validate_program_student(group: Group, student_id: int | None, db: As
 def _replace_items(lesson: GroupLesson, body: GroupLessonIn) -> None:
     lesson.items.clear()
     lesson.items.extend(
-        GroupLessonItem(section=item.section, topic_id=item.topic_id, task_id=item.task_id, order_index=index)
+        GroupLessonItem(section=item.section, topic_id=item.topic_id, task_id=item.task_id, article_id=item.article_id, article_mode=item.article_mode, order_index=index)
         for index, item in enumerate(body.items)
     )
 
@@ -192,13 +222,16 @@ async def get_group_plan(user: User = Depends(get_current_user), db: AsyncSessio
     )
     progress_result = await db.execute(select(UserProgress).where(UserProgress.user_id == user.id))
     progress = {row.task_id: row.status for row in progress_result.scalars().all()}
-    return [_lesson_out(lesson, progress) for lesson in result.scalars().unique().all()]
+    article_rows = await db.execute(select(ArticleProgress).where(ArticleProgress.user_id == user.id))
+    article_progress = {row.article_id: row for row in article_rows.scalars().all()}
+    return [_lesson_out(lesson, progress, article_progress, published_only=True) for lesson in result.scalars().unique().all()]
 
 
 @admin_router.get("/group-plan/resources", response_model=GroupPlanResourcesOut)
 async def get_group_plan_resources(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Topic).options(selectinload(Topic.tasks)).order_by(Topic.order_index, Topic.id))
-    return GroupPlanResourcesOut(topics=[
+    articles = (await db.execute(select(Article).order_by(Article.title, Article.id))).scalars().all()
+    return GroupPlanResourcesOut(articles=[GroupPlanArticleOptionOut(id=row.id, title=row.title, published=row.published, question_count=len(row.questions)) for row in articles], topics=[
         GroupPlanTopicOptionOut(
             id=topic.id,
             title=_topic_title(topic),

@@ -17,6 +17,7 @@ import AdminPage from "./pages/AdminPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import TaskBankPage from "./pages/TaskBankPage";
 import WorksheetPage from "./pages/WorksheetPage";
+import ArticlePage from "./pages/ArticlePage";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -134,6 +135,7 @@ export default function App() {
                 <Route path="exams" element={<ExamsListPage />} />
                 <Route path="tasks" element={<TasksListPage />} />
                 <Route path="tasks/:id" element={<TasksPage />} />
+                <Route path="articles/:id" element={<ArticlePage />} />
                 <Route path="homework" element={<TasksListPage />} />
                 <Route path="homework/:id" element={<TasksPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />

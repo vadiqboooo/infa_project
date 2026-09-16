@@ -5,15 +5,23 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class GroupLessonItemIn(BaseModel):
-    section: Literal["lesson", "homework"]
+    section: Literal["theory", "testing", "lesson", "homework"]
     topic_id: int | None = None
     task_id: int | None = None
+    article_id: int | None = None
+    article_mode: Literal["reading", "quiz"] = "reading"
     order_index: int = 0
 
     @model_validator(mode="after")
     def validate_resource(self):
-        if (self.topic_id is None) == (self.task_id is None):
-            raise ValueError("Choose exactly one topic or task")
+        if sum(value is not None for value in (self.topic_id, self.task_id, self.article_id)) != 1:
+            raise ValueError("Choose exactly one topic, task or article")
+        if self.article_mode == "quiz" and self.article_id is None:
+            raise ValueError("Для тестирования выберите статью с тестом")
+        if self.section == "theory" and (self.article_id is None or self.article_mode != "reading"):
+            raise ValueError("В теорию можно добавить только статью")
+        if self.section == "testing" and (self.article_id is None or self.article_mode != "quiz"):
+            raise ValueError("В тестирование по теории можно добавить только тест")
         return self
 
 
@@ -32,6 +40,7 @@ class GroupLessonItemOut(BaseModel):
     resource_type: str
     topic_id: int | None = None
     task_id: int | None = None
+    article_id: int | None = None
     title: str
     subtitle: str | None = None
     href: str
@@ -70,5 +79,13 @@ class GroupPlanTopicOptionOut(BaseModel):
     tasks: list[GroupPlanTaskOptionOut] = Field(default_factory=list)
 
 
+class GroupPlanArticleOptionOut(BaseModel):
+    id: int
+    title: str
+    published: bool
+    question_count: int = 0
+
+
 class GroupPlanResourcesOut(BaseModel):
     topics: list[GroupPlanTopicOptionOut] = Field(default_factory=list)
+    articles: list[GroupPlanArticleOptionOut] = Field(default_factory=list)

@@ -35,15 +35,19 @@ class GroupLessonItem(Base):
     section: Mapped[str] = mapped_column(String(20), nullable=False)
     topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), nullable=True, index=True)
     task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    article_id: Mapped[int | None] = mapped_column(ForeignKey("articles.id", ondelete="RESTRICT"), nullable=True, index=True)
+    article_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="reading", server_default="reading")
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     lesson = relationship("GroupLesson", back_populates="items")
     topic = relationship("Topic")
     task = relationship("Task")
+    article = relationship("Article")
 
     __table_args__ = (
+        CheckConstraint("article_mode = 'reading' OR (article_mode = 'quiz' AND article_id IS NOT NULL)", name="ck_group_lesson_article_mode"),
         CheckConstraint(
-            "(topic_id IS NOT NULL AND task_id IS NULL) OR (topic_id IS NULL AND task_id IS NOT NULL)",
+            "(CASE WHEN topic_id IS NULL THEN 0 ELSE 1 END + CASE WHEN task_id IS NULL THEN 0 ELSE 1 END + CASE WHEN article_id IS NULL THEN 0 ELSE 1 END) = 1",
             name="ck_group_lesson_item_resource",
         ),
     )
