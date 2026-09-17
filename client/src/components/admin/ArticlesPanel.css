@@ -17,6 +17,7 @@
 .articles-admin__actions button { padding: 7px; border-radius: 6px; } .articles-admin button:disabled { opacity: .4; }
 .articles-admin__option { margin-bottom: 10px; } .articles-admin__option input:not([type=checkbox]):not([type=radio]) { flex: 1; }
 .articles-admin__example { display: block; color: #29906d; font-weight: 650; text-align: left; font-size: 13px; margin-top: 12px; text-decoration: underline; }
+.articles-admin__import { border: 1px dashed var(--border, #cfdad3); border-radius: 14px; padding: 18px; margin: 18px 0; }
 .articles-admin__search { display: flex; align-items: center; gap: 10px; margin: 16px 0 24px; } .articles-admin__search input { width: 100%; max-width: 460px; }
 .articles-admin__row { display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--border, #dfe7e1); padding: 20px 0; }
 .articles-admin__title { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; text-align: left; overflow-wrap: anywhere; } .articles-admin__title span { font-size: 12px; opacity: .6; }

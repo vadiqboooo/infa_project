@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, FileText, Plus, Save, Search, Trash2, Upload } from 'lucide-react';
 import { articleRequest, type AdminArticle, type AdminArticleQuestion, type ArticleDraft, type ArticleSummary } from '../../api/articles';
 import { ArticleContent } from '../ArticleContent';
+import { ArticleQuizImport } from './ArticleQuizImport';
 import { articleQuizExample } from '../../data/articleQuizExample';
 import { ARTICLE_CONTENT_LIMIT, importArticleHtml } from '../../lib/articleHtml';
 import './ArticlesPanel.css';
@@ -61,6 +62,13 @@ export function ArticlesPanel({ apiKey }: { apiKey: string }) {
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft) return;
+    const unanswered = draft.questions.flatMap((question, index) => question.correct_answers.length ? [] : [index + 1]);
+    if (unanswered.length) {
+      setError(`Отметьте правильные ответы в вопросах: ${unanswered.join(', ')}.`);
+      setMessage('');
+      document.getElementById(`article-question-${unanswered[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     setBusy(true); setError(''); setMessage('');
     try {
       const payload = { ...draft, ...(saved ? { revision: saved.revision } : {}) };
@@ -99,14 +107,21 @@ export function ArticlesPanel({ apiKey }: { apiKey: string }) {
         {preview ? <div className="articles-admin__preview"><ArticleContent content={draft.content || 'Здесь появится текст статьи'} format={draft.content_format} /></div> : <label className="articles-admin__field"><span className="sr-only">{draft.content_format === 'html' ? 'HTML-код статьи' : 'Текст статьи в Markdown'}</span><textarea rows={16} maxLength={ARTICLE_CONTENT_LIMIT} value={draft.content} onChange={event => edit({ content: event.target.value })} placeholder={draft.content_format === 'html' ? '<!DOCTYPE html>… или <article>…</article>' : 'Текст статьи…'} spellCheck={draft.content_format !== 'html'} /></label>}
         {(error || message) && <p className={error ? 'article-error' : 'article-notice'} role={error ? 'alert' : 'status'}>{error || message}</p>}
         <div className="articles-admin__toolbar"><div><h3>Тест после статьи</h3><p className="articles-admin__hint">Необязательно. Отметьте правильные варианты слева от ответа.</p></div><span>{draft.questions.length}/100</span></div>
+        <ArticleQuizImport remaining={100 - draft.questions.length} onImport={questions => {
+          edit({ questions: [...draft.questions, ...questions] });
+          setError('');
+          const missing = questions.filter(question => question.correct_answers.length === 0).length;
+          setMessage(`Добавлено вопросов: ${questions.length}. ${missing ? `Без правильных ответов: ${missing}. Отметьте их ниже и сохраните статью.` : 'Проверьте вопросы и сохраните статью.'}`);
+        }} />
         {draft.questions.length === 0 && <div className="article-notice">Без теста материал завершается после отметки «Прочитано».<button className="articles-admin__example" type="button" onClick={() => edit({ title: draft.title || 'Как компьютер научился понимать буквы', questions: structuredClone(articleQuizExample) })}>Загрузить пример: «Как компьютер научился понимать буквы» (10 вопросов)</button></div>}
-        {draft.questions.map((question, index) => <div className="articles-admin__question" key={index}>
+        {draft.questions.map((question, index) => <div className="articles-admin__question" id={`article-question-${index + 1}`} key={index}>
           <div className="articles-admin__toolbar"><h4>Вопрос {index + 1}</h4><div className="articles-admin__actions"><button type="button" aria-label="Поднять вопрос" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><ArrowUp size={16} /></button><button type="button" aria-label="Опустить вопрос" disabled={index === draft.questions.length - 1} onClick={() => moveQuestion(index, 1)}><ArrowDown size={16} /></button><button type="button" aria-label="Удалить вопрос" onClick={() => edit({ questions: draft.questions.filter((_, i) => i !== index) })}><Trash2 size={16} /></button></div></div>
           <label className="articles-admin__field">Вопрос<textarea required rows={2} maxLength={2000} value={question.prompt} onChange={event => updateQuestion(index, { ...question, prompt: event.target.value })} /></label>
           <label className="articles-admin__field">Тип ответа<select value={question.type} onChange={event => {
             const type = event.target.value as AdminArticleQuestion['type'];
-            updateQuestion(index, { ...question, type, options: type === 'boolean' ? ['Верно', 'Неверно'] : question.options, correct_answers: type === 'boolean' ? [0] : type === 'single' ? [question.correct_answers[0] ?? 0] : question.correct_answers });
+            updateQuestion(index, { ...question, type, options: type === 'boolean' ? ['Верно', 'Неверно'] : question.options, correct_answers: type === 'boolean' ? [] : type === 'single' ? question.correct_answers.slice(0, 1) : question.correct_answers });
           }}><option value="single">Один правильный ответ</option><option value="multiple">Несколько правильных ответов</option><option value="boolean">Верно / Неверно</option></select></label>
+          {question.correct_answers.length === 0 && <p className="article-error">Отметьте правильный ответ{question.type === 'multiple' ? ' или несколько ответов' : ''}.</p>}
           {question.options.map((option, optionIndex) => <div className="articles-admin__option" key={optionIndex}>
             <input aria-label={`Правильный ответ ${String.fromCharCode(65 + optionIndex)}, вопрос ${index + 1}`} type={question.type === 'multiple' ? 'checkbox' : 'radio'} name={`correct-${index}`} checked={question.correct_answers.includes(optionIndex)} onChange={() => updateQuestion(index, { ...question, correct_answers: question.type !== 'multiple' ? [optionIndex] : question.correct_answers.includes(optionIndex) ? question.correct_answers.filter(item => item !== optionIndex) : [...question.correct_answers, optionIndex] })} />
             <span>{String.fromCharCode(65 + optionIndex)}.</span><input aria-label={`Вариант ${String.fromCharCode(65 + optionIndex)}, вопрос ${index + 1}`} required maxLength={2000} readOnly={question.type === 'boolean'} value={option} onChange={event => updateQuestion(index, { ...question, options: question.options.map((value, i) => i === optionIndex ? event.target.value : value) })} />
