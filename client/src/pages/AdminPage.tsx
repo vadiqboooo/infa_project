@@ -618,7 +618,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                                 className="flex items-center gap-2 px-4 py-2.5 border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-sm font-bold transition-all"
                             >
                                 <FileText size={16} />
-                                PDF
+                                PDF / LaTeX
                             </button>
                             <button
                                 onClick={() => {

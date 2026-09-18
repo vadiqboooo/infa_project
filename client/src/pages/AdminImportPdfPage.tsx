@@ -9,6 +9,8 @@ import {
 import { clsx } from 'clsx';
 import GraphSvgEditor from '../components/admin/GraphSvgEditor';
 import GeometrySvgEditor from '../components/admin/GeometrySvgEditor';
+import TaskView from '../components/TaskView';
+import InlineMath from '../components/InlineMath';
 
 const API_BASE = '/api';
 
@@ -70,6 +72,7 @@ const ANSWER_TYPES = [
     { value: 'pair', label: 'Пара чисел' },
     { value: 'table', label: 'Таблица' },
     { value: 'text', label: 'Текст' },
+    { value: 'math_expression', label: 'Математическое выражение' },
 ];
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string
@@ -146,6 +149,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
 
     // ── Upload step state ─────────────────────────────────────
     const [pdfFile, setPdfFile] = useState<File | null>(null);
+    const isLatex = /\.(txt|tex)$/i.test(pdfFile?.name ?? '');
     const [dragOver, setDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [topicTitle, setTopicTitle] = useState(initial?.topic_title ?? '');
@@ -193,17 +197,32 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
     const [geometryEditorOpen, setGeometryEditorOpen] = useState(false);
 
     // ── Handlers ──────────────────────────────────────────────
+    const selectImportFile = useCallback((file: File) => {
+        if (!/\.(pdf|txt|tex)$/i.test(file.name)) {
+            setError('Выберите PDF или LaTeX-файл (.txt, .tex)');
+            return;
+        }
+        if (/\.(txt|tex)$/i.test(file.name)) {
+            if (file.size > 1024 * 1024) { setError('Максимальный размер LaTeX-файла — 1 МБ'); return; }
+            setCategory('math');
+            setCourseType('common');
+            setIsMock(false);
+            setParseMode('auto');
+        }
+        setPdfFile(file);
+        setError(null);
+    }, []);
+
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setDragOver(false);
         const f = e.dataTransfer.files[0];
-        if (f?.type === 'application/pdf') { setPdfFile(f); setError(null); }
-        else setError('Пожалуйста, загрузите PDF файл');
-    }, []);
+        if (f) selectImportFile(f);
+    }, [selectImportFile]);
 
     const handleParse = async () => {
-        if (!pdfFile) { setError('Выберите PDF файл'); return; }
-        if (!topicTitle.trim()) { setError('Введите название топика'); return; }
+        if (!pdfFile) { setError('Выберите файл'); return; }
+        if (!isLatex && !topicTitle.trim()) { setError('Введите название топика'); return; }
         setLoading(true);
         setError(null);
         try {
@@ -214,16 +233,20 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
             fd.append('file', pdfFile);
             fd.append('use_llm', parseMode === 'llm' ? 'true' : 'false');
             fd.append('subject', category === 'math' && parseMode !== 'manual' ? 'math' : 'informatics');
-            const res = await fetch(`${API_BASE}/admin/import-pdf/parse`, { method: 'POST', headers, body: fd });
+            const res = await fetch(`${API_BASE}/admin/${isLatex ? 'import-latex' : 'import-pdf'}/parse`, { method: 'POST', headers, body: fd });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ detail: res.statusText }));
                 throw new Error(err.detail || 'Ошибка разбора');
             }
-            const data: { tasks: ParsedTask[]; page_count: number; full_text?: string } = await res.json();
+            const data: { tasks: ParsedTask[]; page_count?: number; full_text?: string; topic_title?: string } = await res.json();
+            if (isLatex) {
+                if (!topicTitle.trim()) setTopicTitle(data.topic_title || pdfFile.name);
+                setPreviewMode(true);
+            }
             const text = data.full_text || '';
             setFullText(text);
 
-            if (parseMode === 'manual') {
+            if (!isLatex && parseMode === 'manual') {
                 // Go to annotation step: show raw text, let user place markers
                 setAnnotatedText(text);
                 setNextTaskNum(1);
@@ -476,7 +499,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                 body: JSON.stringify({
                     topic_title: topicTitle.trim(),
                     category,
-                    subject: category === 'math' ? 'math' : 'informatics',
+                    subject: isLatex || category === 'math' ? 'math' : 'informatics',
                     course_type: category === 'variants' || category === 'math' || category === 'mock' ? 'common' : courseType,
                     is_mock: isMock,
                     time_limit_minutes: timeLimitMinutes,
@@ -518,7 +541,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                             <FileText size={16} className="text-orange-600" />
                         </div>
                         <div>
-                            <h1 className="font-bold text-gray-900 text-sm">Импорт из PDF</h1>
+                            <h1 className="font-bold text-gray-900 text-sm">Импорт из PDF / LaTeX</h1>
                             <p className="text-[10px] text-gray-400 uppercase tracking-wider">Шаг 1 — Настройки и загрузка</p>
                         </div>
                     </div>
@@ -540,7 +563,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                         'border-gray-200 hover:border-orange-300 hover:bg-orange-50/30',
                             )}
                         >
-                            <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { setPdfFile(f); setError(null); } }} />
+                            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.tex" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) selectImportFile(f); }} />
                             {pdfFile ? (
                                 <div className="flex flex-col items-center gap-3">
                                     <CheckCircle2 size={40} className="text-green-500" />
@@ -550,17 +573,26 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                             ) : (
                                 <div className="flex flex-col items-center gap-3">
                                     <Upload size={40} className="text-gray-300" />
-                                    <p className="font-semibold text-gray-600 text-lg">Перетащите PDF или нажмите для выбора</p>
-                                    <p className="text-sm text-gray-400">Поддерживаются текстовые PDF (Статград, ФИПИ, варианты ЕГЭ)</p>
+                                    <p className="font-semibold text-gray-600 text-lg">Перетащите PDF или LaTeX-файл</p>
+                                    <p className="text-sm text-gray-400">Нажмите для выбора: PDF, .txt или .tex (UTF-8)</p>
                                 </div>
                             )}
                         </div>
+
+                        {isLatex && (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 space-y-2">
+                                <p>Каждое задание начинается со строки «№ 2.1» или «Задание 1» и заканчивается строкой «Ответ: …». Формулы сохраняются в LaTeX.</p>
+                                <p>Название возьмём из первой строки файла. Перед созданием темы проверьте условия и ответы в редакторе.</p>
+                                <pre className="whitespace-pre-wrap text-xs">{'Название темы\n\n№ 1\nВычислите \\( \\sqrt{8}/2 \\).\nОтвет: \\( \\sqrt{2} \\).'}</pre>
+                                <p>Поддерживается этот формат разметки заданий; полный LaTeX-документ с командами оформления сначала преобразуйте в него.</p>
+                            </div>
+                        )}
 
                         {/* Settings */}
                         <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4 shadow-sm">
                             <h2 className="font-bold text-gray-900">Настройки топика</h2>
                             <div>
-                                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5">Название *</label>
+                                <label className="block text-xs font-semibold text-gray-400 uppercase mb-1.5">{isLatex ? 'Название (из файла, если оставить пустым)' : 'Название *'}</label>
                                 <input
                                     type="text"
                                     value={topicTitle}
@@ -613,7 +645,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                         </div>
 
                         {/* Parser mode */}
-                        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                        {!isLatex && <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
                             <h2 className="font-bold text-gray-900 mb-4">Режим разбора</h2>
                             <div className="grid grid-cols-3 gap-3">
                                 <button
@@ -657,8 +689,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                     <p className="text-[11px] text-gray-500 leading-relaxed">Просмотр текста и расстановка границ.</p>
                                 </button>
                             </div>
-                        </div>
-
+                        </div>}
                         {error && (
                             <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-600 text-sm">
                                 <AlertCircle size={16} />
@@ -668,7 +699,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
 
                         <button
                             onClick={handleParse}
-                            disabled={loading || !pdfFile || !topicTitle.trim()}
+                            disabled={loading || !pdfFile || (!isLatex && !topicTitle.trim())}
                             className={clsx(
                                 'w-full flex items-center justify-center gap-3 py-4 bg-orange-500 text-white rounded-2xl text-base font-bold shadow-lg shadow-orange-500/25 hover:bg-orange-600 transition-all disabled:opacity-50 disabled:shadow-none',
                                 loading && 'cursor-wait',
@@ -1083,6 +1114,12 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                         placeholder="Оставьте пустым если неизвестен"
                                         className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition-all shadow-sm"
                                     />
+                                    {currentTask.answer_type === 'math_expression' && (
+                                        <div className="mt-2 text-xs text-gray-600 space-y-2">
+                                            <InlineMath math={formatAnswerForInput(currentTask.correct_answer)} />
+                                            <p>Точный ответ: sqrt(2), √2, 1/2, sin(alpha) или LaTeX. Равнозначные выражения принимаются без округления.</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1120,10 +1157,7 @@ export default function AdminImportPdfPage({ apiKey }: AdminImportPdfPageProps) 
                                     </div>
                                 </div>
                                 {previewMode ? (
-                                    <div
-                                        className="w-full min-h-[300px] p-5 bg-white border border-gray-200 rounded-xl text-sm leading-relaxed shadow-sm prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: currentTask.content_html }}
-                                    />
+                                    <TaskView content={currentTask.content_html} />
                                 ) : (
                                     <textarea
                                         value={currentTask.content_html}

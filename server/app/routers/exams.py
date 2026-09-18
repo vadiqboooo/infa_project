@@ -7,6 +7,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -326,7 +327,7 @@ async def save_draft_answer(
                     is_correct = pts == 2
                     points = pts
                 else:
-                    is_correct = _answers_equal(task.correct_answer, answer_obj)
+                    is_correct = await run_in_threadpool(_answers_equal, task.correct_answer, answer_obj, task.answer_type)
                     points = 1 if is_correct else 0
                 scored[task_id] = {"is_correct": is_correct, "points": points}
 
@@ -407,7 +408,7 @@ async def submit_exam(
                 is_correct = task_points == 2
             else:
                 # Binary scoring for tasks 1-25
-                is_correct = _answers_equal(task.correct_answer, user_answer)
+                is_correct = await run_in_threadpool(_answers_equal, task.correct_answer, user_answer, task.answer_type)
                 task_points = 1 if is_correct else 0
 
         if task_points > 0:

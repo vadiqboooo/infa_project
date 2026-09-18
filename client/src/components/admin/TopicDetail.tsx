@@ -1604,6 +1604,7 @@ export function TaskEditPanel({
               className={inputCls}>
               <option value="single_number">Число</option>
               <option value="text">Текст</option>
+              <option value="math_expression">Математическое выражение</option>
               <option value="pair">Пара чисел</option>
               <option value="table">Таблица</option>
             </select>
@@ -1656,6 +1657,7 @@ export function TaskEditPanel({
                     className={inputCls}>
                     <option value="single_number">Число</option>
                     <option value="text">Текст</option>
+                    <option value="math_expression">Математическое выражение</option>
                     <option value="pair">Пара чисел</option>
                     <option value="table">Таблица</option>
                   </select>

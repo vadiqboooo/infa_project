@@ -4,7 +4,8 @@ export enum AnswerType {
     single_number = "single_number",
     pair = "pair",
     table = "table",
-    text = "text"
+    text = "text",
+    math_expression = "math_expression"
 }
 
 export enum ProgressStatus {

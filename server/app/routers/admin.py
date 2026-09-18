@@ -14,11 +14,14 @@ import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect, status
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import settings
+from app.services.latex_import import MAX_FILE_BYTES, parse_latex_worksheet
+from app.services.math_answers import validate_math_answers, MathAnswerError
 from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.admin_help_notification_read import AdminHelpNotificationRead
@@ -2294,8 +2297,25 @@ async def list_task_bank(
     ]
 
 
+async def _validate_task_math_answers(answer_type, correct_answer, sub_tasks):
+    items = [{"answer_type": answer_type, "correct_answer": correct_answer}, *(sub_tasks or [])]
+    values = []
+    for item in items:
+        if item.get("answer_type") == "math_expression":
+            answer = item.get("correct_answer")
+            values.append(answer.get("val") if isinstance(answer, dict) else answer)
+    try:
+        errors = await run_in_threadpool(validate_math_answers, values)
+    except MathAnswerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    for error in errors:
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+
+
 @router.post("/tasks", response_model=TaskAdminOut, status_code=status.HTTP_201_CREATED)
 async def create_task(body: TaskAdminIn, db: AsyncSession = Depends(get_db)):
+    await _validate_task_math_answers(body.answer_type, body.correct_answer, body.sub_tasks)
     topic = await db.get(Topic, body.topic_id) if body.topic_id is not None else None
     if body.topic_id is not None and topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
@@ -2338,6 +2358,12 @@ async def update_task(task_id: int, body: TaskAdminIn, db: AsyncSession = Depend
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
     update_data = body.model_dump(exclude_unset=True)
+
+    await _validate_task_math_answers(
+        update_data.get("answer_type", task.answer_type),
+        update_data.get("correct_answer", task.correct_answer),
+        update_data.get("sub_tasks", task.sub_tasks),
+    )
 
     # Topic membership is managed only by dedicated attach/detach endpoints. A task
     # edit must never detach or move a task because of a missing/stale form value.
@@ -3475,6 +3501,23 @@ async def parse_pdf_tasks(
     return {"tasks": result, "page_count": len(text_pages), "full_text": full_text}
 
 
+@router.post("/import-latex/parse")
+async def parse_latex_import(file: UploadFile = File(...)):
+    if Path(file.filename or "").suffix.lower() not in {".txt", ".tex"}:
+        raise HTTPException(status_code=400, detail="Загрузите файл .txt или .tex в UTF-8")
+    data = await file.read(MAX_FILE_BYTES + 1)
+    if len(data) > MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="Максимальный размер файла — 1 МБ")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Сохраните файл в кодировке UTF-8")
+    try:
+        return await run_in_threadpool(parse_latex_worksheet, text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post("/import-pdf/upload-image")
 async def upload_task_image(
     file: UploadFile = File(...),
@@ -3559,6 +3602,24 @@ async def confirm_pdf_import(
     """Save confirmed tasks from PDF import as a new topic."""
     from app.schemas.admin import ImportVariantResult as _IVR
 
+    if not body.tasks or len(body.tasks) > 200:
+        raise HTTPException(status_code=400, detail="Добавьте от 1 до 200 заданий")
+    math_answers = []
+    math_labels = []
+    for i, task in enumerate(body.tasks):
+        for item in [task, *task.sub_tasks]:
+            if item.answer_type == "math_expression":
+                answer = item.correct_answer
+                math_answers.append(answer.get("val") if isinstance(answer, dict) else answer)
+                math_labels.append(task.title or f"Задание {i + 1}")
+    try:
+        errors = await run_in_threadpool(validate_math_answers, math_answers)
+    except MathAnswerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    for label, error in zip(math_labels, errors):
+        if error:
+            raise HTTPException(status_code=400, detail=f"{label}: {error}")
+
     title = body.topic_title.strip() or "Импорт из PDF"
 
     # Determine order_index
@@ -3621,6 +3682,8 @@ async def confirm_pdf_import(
 
         task = Task(
             topic_id=topic.id,
+            subject=topic.subject,
+            exam_type=topic.exam_type,
             ege_number=t.ege_number,
             title=t.title,
             order_index=i,

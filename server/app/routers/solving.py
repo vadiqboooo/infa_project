@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect, status
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,7 @@ from app.models.user import User
 from app.realtime import solution_comment_ws_manager
 from app.schemas.ai import AIAssistRequest, AIAssistResponse
 from app.schemas.task import AnswerIn, CheckResult
+from app.services.math_answers import math_answers_equal, MathAnswerError
 
 router = APIRouter(prefix="/tasks", tags=["solving"])
 
@@ -152,7 +154,7 @@ class TaskSolutionHelpThreadOut(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────
 
-def _answers_equal(correct: dict | None, given: AnswerIn) -> bool:
+def _answers_equal(correct: dict | None, given: AnswerIn, answer_type: str | None = None) -> bool:
     """Compare user answer with correct answer following the TZ format."""
     if correct is None:
         return False
@@ -161,6 +163,12 @@ def _answers_equal(correct: dict | None, given: AnswerIn) -> bool:
 
     if expected is None or user_val is None:
         return False
+
+    if answer_type == "math_expression":
+        try:
+            return math_answers_equal(expected, user_val)
+        except MathAnswerError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
     # Helper to convert anything to float if possible
     def to_float(v):
@@ -1284,16 +1292,17 @@ async def check_answer(
                 sub_results.append(False)
                 continue
             given = AnswerIn(val=user_v)
-            sub_results.append(_answers_equal(exp, given))
+            answer_type = task.answer_type if i == 0 else task.sub_tasks[i - 1].get("answer_type")
+            sub_results.append(await run_in_threadpool(_answers_equal, exp, given, answer_type))
 
         correct = all(sub_results) if sub_results else False
     else:
         # Legacy single-answer mode
         if body.val is None and body.answers:
-            given = AnswerIn(val=body.answers[0]) if body.answers[0] is not None else AnswerIn(val=0)
+            given = AnswerIn(val=body.answers[0])
         else:
             given = body
-        correct = _answers_equal(task.correct_answer, given)
+        correct = await run_in_threadpool(_answers_equal, task.correct_answer, given, task.answer_type)
 
     # Upsert progress
     prog_result = await db.execute(

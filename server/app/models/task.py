@@ -14,6 +14,7 @@ class AnswerType(str, enum.Enum):
     pair = "pair"
     table = "table"
     text = "text"
+    math_expression = "math_expression"
 
 
 class TaskDifficulty(str, enum.Enum):

@@ -83,6 +83,28 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
         ok === true ? "!border-emerald-400 !bg-emerald-400/10 !text-emerald-200" :
         ok === false ? "!border-red-400 !bg-red-400/10 !text-red-200" : "";
 
+    if (type === 'math_expression') {
+        return (
+            <label className="flex flex-col gap-2 w-full">
+                <input
+                    type="text"
+                    className="input answer-input-single"
+                    value={formatValue(value)}
+                    onChange={(e) => onChange(e.target.value)}
+                    disabled={disabled}
+                    maxLength={256}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label="Математический ответ"
+                    placeholder="Например: -sqrt(2)"
+                />
+                <span className="text-xs opacity-70">
+                    Корень: sqrt(2) или √2; дробь: 1/2; степень: x^2; sin(alpha), cos(α), tg(α), ctg(α). Можно вводить LaTeX. Ответ — точный, без округления.
+                </span>
+            </label>
+        );
+    }
+
     if (isMath && (egeNumber === 13 || egeNumber === 19)) {
         const labels = egeNumber === 13 ? ["А", "Б"] : ["А", "Б", "В"];
         const val = getArrayValue(value, labels.length);

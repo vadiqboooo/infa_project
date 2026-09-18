@@ -11,3 +11,4 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.12
 pdfplumber==0.11.4
 Pillow==10.4.0
+sympy==1.14.0
