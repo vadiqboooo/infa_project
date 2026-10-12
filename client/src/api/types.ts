@@ -76,6 +76,8 @@ export interface TopicNav {
     ege_number_end?: number | null;
     analysis_published?: boolean;
     draft_count?: number;
+    has_active_attempt?: boolean;
+    active_exam_mode?: ExamMode | null;
     new_tasks_count?: number;
     has_image?: boolean;
     image_position?: TopicImagePosition | null;
@@ -109,6 +111,8 @@ export interface SubTask {
 export interface TaskOut {
     id: number;
     topic_id: number;
+    subject?: TopicSubject;
+    exam_type?: 'ege' | 'oge';
     external_id: string | null;
     ege_number: number | null;
     content_html: string;
@@ -124,6 +128,8 @@ export interface TaskOut {
     has_own_solution?: boolean;
     solution_comments_count?: number;
     is_trial?: boolean;
+    last_answer?: { val?: AnswerVal; answers?: AnswerVal[] } | null;
+    last_correct?: boolean | null;
 }
 
 /* ── Answers ───────────────────────────────────────── */
@@ -148,6 +154,8 @@ export interface AIAssistResponse {
 }
 
 /* ── Exam ──────────────────────────────────────────── */
+export type ExamMode = "practice" | "exam";
+
 export interface ExamInfo {
     id: number;
     topic_id: number;
@@ -156,6 +164,7 @@ export interface ExamInfo {
     active_attempt: {
         id: number;
         started_at: string;
+        mode: ExamMode | null;
         draft_answers?: Record<string, { val: AnswerVal }>;
         draft_codes?: Record<string, string>;
         scored_answers?: Record<string, { is_correct: boolean; points: number }>;
@@ -166,6 +175,7 @@ export interface ExamInfo {
         finished_at: string;
         primary_score: number;
         score: number;
+        mode?: ExamMode;
         task_results?: TaskResult[];
         submitted_for_review?: boolean;
     } | null;
@@ -192,6 +202,7 @@ export interface TaskResult {
 
 export interface ExamResult {
     attempt_id: number;
+    mode?: ExamMode;
     total_tasks: number;
     correct_count: number;
     primary_score: number;
@@ -617,6 +628,58 @@ export interface GroupLesson {
     note: string | null;
     status: GroupLessonStatus;
     items: GroupLessonItem[];
+}
+
+export interface LessonProgressStudent {
+    id: number;
+    name: string;
+    last_active_at: string;
+}
+
+export interface LessonItemStudentProgress {
+    user_id: number;
+    solved: number;
+    total: number;
+    completion_status: "not_started" | "in_progress" | "completed";
+}
+
+export interface LessonProgressItem extends GroupLessonItem {
+    progress: LessonItemStudentProgress[];
+}
+
+export interface LessonProgressLesson {
+    id: number;
+    title: string;
+    lesson_at: string;
+    homework_deadline: string | null;
+    status: GroupLessonStatus;
+    items: LessonProgressItem[];
+}
+
+export interface GroupLessonProgress {
+    group_id: number;
+    group_name: string;
+    group_color: string;
+    students: LessonProgressStudent[];
+    lessons: LessonProgressLesson[];
+}
+
+export interface TaskResultCell {
+    state: "none" | "ok" | "bad";
+    answer: string;
+}
+
+export interface TaskResultStep {
+    item_id: number;
+    title: string;
+    section: string;
+    tasks: { task_id: number; number: number; correct: string }[];
+    rows: { user_id: number; cells: TaskResultCell[] }[];
+}
+
+export interface LessonTaskResults {
+    lesson_id: number;
+    steps: TaskResultStep[];
 }
 
 export interface GroupLessonItemIn {

@@ -56,6 +56,7 @@ const BACKGROUND_PRESETS: { url: string; label: string }[] = [
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
+import './TopicDetail.css';
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string
 function formatAnswerForInput(correct: any): string {
@@ -427,140 +428,76 @@ export function TopicDetail({
   }
 
   // ── Task list ────────────────────────────────────────────────────────────
+  const isMathTopic = topic.subject === 'math' || topic.category === 'math';
+  const subjectLabel = isMathTopic ? 'Математика' : 'Информатика';
+  const examLabel = (topic.exam_type ?? 'ege').toUpperCase();
+  const categoryLabel = topic.category === 'tutorial'
+    ? 'Разбор'
+    : topic.category === 'homework'
+    ? 'Домашнее задание'
+    : topic.category === 'control'
+    ? 'Контрольная'
+    : topic.category === 'math'
+    ? 'Математика'
+    : topic.category === 'mock'
+    ? 'Пробный вариант'
+    : 'Вариант';
+  const categoryTone = topic.category === 'tutorial'
+    ? 'em'
+    : topic.category === 'homework'
+    ? 'sky'
+    : topic.category === 'control'
+    ? 'am'
+    : topic.category === 'mock'
+    ? 'bad'
+    : 'plain';
+  const egeNumberLabel = topic.ege_number == null
+    ? null
+    : topic.ege_number_end != null && topic.ege_number_end > topic.ege_number
+    ? `Задания ${topic.ege_number}–${topic.ege_number_end}`
+    : `Задание ${topic.ege_number}`;
+
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="topic-detail flex h-full flex-col">
+      <header className="td-header">
+        <div className="td-header-top">
+          <div className="td-identity">
           <button
+            type="button"
             onClick={onBack}
-            className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-colors"
+            className="td-icon-button td-back"
+            aria-label="Вернуться к топикам"
+            title="Вернуться к топикам"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
-          {(
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-gray-900">{topic.title}</h2>
-              <span className="px-2 py-0.5 rounded-lg bg-sky-100 text-sky-700 text-[10px] font-bold uppercase tracking-wider">
-                {(topic.exam_type ?? 'ege').toUpperCase()}
-              </span>
-              <span className={clsx(
-                'px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider',
-                (topic.subject === 'math' || topic.category === 'math')
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-emerald-100 text-emerald-700'
-              )}>
-                {(topic.subject === 'math' || topic.category === 'math') ? 'Математика' : 'Информатика'}
-              </span>
-              {topic.ege_number != null && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#3F8C62]/10 text-[#3F8C62] rounded-lg">
-                  <Hash size={12} />
-                  <span className="text-[10px] font-bold">Задание {topic.ege_number}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-lg">
-                <Clock size={12} />
-                <span className="text-[10px] font-bold">{topic.time_limit_minutes || 60} мин</span>
-              </div>
-              {topic.open_to_groups && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-teal-100 text-teal-700 rounded-lg">
-                  <User size={12} />
-                  <span className="text-[10px] font-bold">Для групп</span>
-                </div>
-              )}
-              {topic.show_in_tasks === false && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-lg">
-                  <span className="text-[10px] font-bold">Скрыт из «Заданий»</span>
-                </div>
-              )}
-              <span
-                className={clsx(
-                  'px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider',
-                  topic.category === 'tutorial'
-                    ? 'bg-blue-100 text-blue-700'
-                    : topic.category === 'homework'
-                    ? 'bg-violet-100 text-violet-700'
-                    : topic.category === 'control'
-                    ? 'bg-sky-100 text-sky-700'
-                    : topic.category === 'math'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : topic.category === 'mock'
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-orange-100 text-orange-700'
-                )}
-              >
-                {topic.category === 'tutorial'
-                  ? 'Разбор'
-                  : topic.category === 'homework'
-                  ? 'ДЗ'
-                  : topic.category === 'control'
-                  ? 'КР'
-                  : topic.category === 'math'
-                  ? 'Математика'
-                  : topic.category === 'mock'
-                  ? 'Пробник'
-                  : 'Вариант'}
-              </span>
+            <div className="td-heading">
+              <nav className="td-crumbs" aria-label="Путь к топику">
+                <button type="button" onClick={onBack}>Топики</button>
+                <ArrowRight size={13} aria-hidden />
+                <span>{subjectLabel}</span>
+                <ArrowRight size={13} aria-hidden />
+                <span>{examLabel}</span>
+              </nav>
+              <div className="td-title-row">
+                <h1>{topic.title}</h1>
               <button
+                type="button"
                 onClick={() => {
                   setEditingTopic(topic);
                   setIsEditingHeader(true);
                 }}
-                className="p-1.5 text-gray-400 hover:text-gray-600"
+                className="td-title-edit"
                 title="Настройки топика"
+                aria-label="Открыть настройки топика"
               >
                 <Pencil size={14} />
               </button>
             </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-            <input
-              type="text"
-              placeholder="Поиск задачи..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-gray-50 border border-transparent rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-[#3F8C62]/20 outline-none w-48 transition-all"
-            />
+            </div>
           </div>
-          <a
-            href={getTopicPreviewHref(topic)}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-600 transition-all hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-          >
-            <ExternalLink size={14} />
-            Посмотреть топик
-          </a>
-          <a
-            href={`/worksheet/${topic.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700 transition-all hover:border-emerald-300 hover:bg-emerald-100"
-          >
-            <FileDown size={14} />
-            Рабочий лист PDF
-          </a>
           <button
-            onClick={() => setIsCardPreviewOpen(true)}
-            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-[#3F8C62]/30 hover:bg-[#3F8C62]/5 text-gray-600 hover:text-[#3F8C62] px-4 py-2 rounded-xl text-xs font-bold transition-all"
-          >
-            <ImageIcon size={14} />
-            Превью карточки
-          </button>
-          <button
-            onClick={() => {
-              setAttachTaskError('');
-              setIsAttachTaskOpen(true);
-            }}
-            className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-600 transition-all hover:border-[#3F8C62]/30 hover:bg-[#3F8C62]/5 hover:text-[#3F8C62]"
-          >
-            <Hash size={14} />
-            Добавить по ID
-          </button>
-          <button
+            type="button"
             onClick={() =>
               setEditingTask({
                 topic_id: topic.id,
@@ -571,13 +508,93 @@ export function TopicDetail({
                 difficulty: 'easy' as TaskDifficulty,
               })
             }
-            className="flex items-center gap-2 bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
+            className="td-primary-button"
           >
-            <Plus size={14} />
+            <Plus size={16} strokeWidth={2.4} />
             Добавить задачу
           </button>
         </div>
-      </div>
+
+        <div className="td-header-bottom">
+          <div className="td-meta-list" aria-label="Параметры топика">
+            <span className="td-badge" data-tone={categoryTone}>{categoryLabel}</span>
+            <span className="td-badge" data-tone={isMathTopic ? 'am' : 'em'}>{subjectLabel}</span>
+            <span className="td-badge" data-tone="sky">{examLabel}</span>
+            {egeNumberLabel && (
+              <span className="td-meta-item">
+                <Hash size={13} aria-hidden />
+                {egeNumberLabel}
+              </span>
+            )}
+            <span className="td-meta-item">
+              <ListChecks size={13} aria-hidden />
+              {tasks.length} задач
+            </span>
+            <span className="td-meta-item">
+              <Clock size={13} aria-hidden />
+              {topic.time_limit_minutes || 60} мин
+            </span>
+            {topic.open_to_groups && (
+              <span className="td-meta-item td-meta-positive">
+                <User size={13} aria-hidden />
+                Для групп
+              </span>
+            )}
+            {topic.show_in_tasks === false && <span className="td-badge">Скрыт из «Заданий»</span>}
+          </div>
+
+          <div className="td-controls">
+            <label className="td-search">
+              <Search size={15} aria-hidden />
+            <input
+              type="text"
+              placeholder="Поиск задачи..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+                className="td-search-input"
+                aria-label="Поиск задачи"
+            />
+            </label>
+          <a
+            href={getTopicPreviewHref(topic)}
+            target="_blank"
+            rel="noreferrer"
+              className="td-action-button"
+          >
+            <ExternalLink size={14} />
+              <span>Посмотреть</span>
+          </a>
+          <a
+            href={`/worksheet/${topic.id}`}
+            target="_blank"
+            rel="noreferrer"
+              className="td-action-button"
+          >
+            <FileDown size={14} />
+              <span>PDF</span>
+          </a>
+          <button
+              type="button"
+            onClick={() => setIsCardPreviewOpen(true)}
+              className="td-action-button"
+          >
+            <ImageIcon size={14} />
+              <span>Карточка</span>
+          </button>
+          <button
+              type="button"
+            onClick={() => {
+              setAttachTaskError('');
+              setIsAttachTaskOpen(true);
+            }}
+              className="td-action-button"
+          >
+            <Hash size={14} />
+              <span>По ID</span>
+          </button>
+          </div>
+        </div>
+      </header>
 
       {isEditingHeader && (
         <div

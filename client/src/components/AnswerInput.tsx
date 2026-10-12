@@ -9,6 +9,7 @@ interface Props {
     disabled?: boolean;
     egeNumber?: number;
     isMath?: boolean;
+    examType?: 'ege' | 'oge';
     // Per-element correctness feedback (for tasks 26/27 after check)
     // pair (26): boolean[] of length 2
     // table (27): boolean[][] shape 2x2
@@ -75,7 +76,7 @@ const getArrayValue = (value: AnswerVal, size: number): (number | string)[] => {
     return Array.from({ length: size }, (_, index) => source[index] ?? "");
 };
 
-export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, feedback }: Props) {
+export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, examType, feedback }: Props) {
     const formatValue = (v: any) => (v === null || v === undefined ? "" : String(v));
 
     // Tailwind classes for per-cell feedback color
@@ -105,7 +106,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
         );
     }
 
-    if (isMath && (egeNumber === 13 || egeNumber === 19)) {
+    if (isMath && examType === 'ege' && (egeNumber === 13 || egeNumber === 19)) {
         const labels = egeNumber === 13 ? ["А", "Б"] : ["А", "Б", "В"];
         const val = getArrayValue(value, labels.length);
 
@@ -132,7 +133,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
         );
     }
 
-    if (isMath && (egeNumber === 14 || egeNumber === 17)) {
+    if (isMath && examType === 'ege' && (egeNumber === 14 || egeNumber === 17)) {
         const val = getArrayValue(value, 2);
 
         return (

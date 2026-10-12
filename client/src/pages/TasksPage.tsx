@@ -265,6 +265,10 @@ export default function TasksPage() {
 
     const openTaskId = !showVerticalList && currentTaskNav && !currentTaskNav.is_locked ? currentTaskNav.id : null;
     const { data: task, isLoading: taskLoading } = useTask(openTaskId);
+    const isMathTask = currentTopic?.subject === 'math' || currentTopic?.category === TopicCategory.math;
+    // Older attached tasks can still carry EGE while their topic is already OGE.
+    const taskExamType = task?.exam_type === 'oge' || currentTopic?.exam_type === 'oge' ? 'oge' : 'ege';
+    const isEgeMathTask = isMathTask && taskExamType === 'ege';
     useEffect(() => {
         if (!task?.id) return;
         let cancelled = false;
@@ -468,6 +472,28 @@ export default function TasksPage() {
         setAttachSolutionOpen(false);
     }, [taskIndex, id]);
 
+    // Restore the last checked answer from the server (other device / cleared storage).
+    // Declared after the reset effect above so it wins when both run in the same commit.
+    useEffect(() => {
+        if (!task?.id || isVariant || !task.last_answer) return;
+        const { val, answers } = task.last_answer;
+        const main = answers ? answers[0] : val;
+        if (main !== undefined && main !== null) {
+            setSavedAnswers(prev => prev[task.id] !== undefined ? prev : { ...prev, [task.id]: main });
+        }
+        if (answers && answers.length > 1) {
+            setSavedSubAnswers(prev => {
+                const next = { ...prev };
+                answers.slice(1).forEach((value, i) => {
+                    const key = `${task.id}:${i}`;
+                    if (next[key] === undefined && value !== null && value !== undefined) next[key] = value;
+                });
+                return next;
+            });
+        }
+        if (task.last_correct != null) setCheckResult(task.last_correct ? 'correct' : 'wrong');
+    }, [task?.id, task?.last_answer, task?.last_correct, isVariant]);
+
     useEffect(() => {
         if (!isVariant || !examInfo?.active_attempt) return;
 
@@ -580,7 +606,7 @@ export default function TasksPage() {
     const handleStartExam = async () => {
         if (!examInfo) return;
         try {
-            await startExam.mutateAsync();
+            await startExam.mutateAsync("practice");
             setExamAnswers({});
         } catch (error) {
             console.error("Failed to start exam:", error);
@@ -1109,7 +1135,8 @@ export default function TasksPage() {
                                                                             <AnswerInput
                                                                                 type={task.answer_type || 'single_number'}
                                                                                 egeNumber={task.ege_number}
-                                                                                isMath={currentTopic?.category === "math"}
+                                                                                isMath={isMathTask}
+                                                                                examType={taskExamType}
                                                                                 value={
                                                                                     isVariant && viewingFinishedExam
                                                                                         ? (reviewExamAnswers[task.id] ?? 0)
@@ -1180,7 +1207,8 @@ export default function TasksPage() {
                                                                     <AnswerInput
                                                                         type={task.answer_type || 'single_number'}
                                                                         egeNumber={task.ege_number}
-                                                                        isMath={currentTopic?.category === "math"}
+                                                                        isMath={isMathTask}
+                                                                        examType={taskExamType}
                                                                         value={
                                                                             isVariant && viewingFinishedExam
                                                                                 ? (reviewExamAnswers[task.id] ?? 0)
@@ -1203,7 +1231,7 @@ export default function TasksPage() {
                                                                     />
                                                                 </span>
                                                             </label>
-                                                                {currentTopic?.category === "math" && (task.ege_number === 14 || task.ege_number === 17) && !viewingFinishedExam && (
+                                                                {isEgeMathTask && (task.ege_number === 14 || task.ege_number === 17) && !viewingFinishedExam && (
                                                                     <div className="mt-3 flex flex-wrap gap-2">
                                                                         <button
                                                                             type="button"
@@ -1275,7 +1303,8 @@ export default function TasksPage() {
                                                                             <AnswerInput
                                                                                 type={sub.answer_type || 'single_number'}
                                                                                 egeNumber={sub.number ?? undefined}
-                                                                                isMath={currentTopic?.category === "math"}
+                                                                                isMath={isMathTask}
+                                                                                examType={taskExamType}
                                                                                 value={savedSubAnswers[key] ?? 0}
                                                                                 onChange={(val) => {
                                                                                     setSavedSubAnswers(prev => ({ ...prev, [key]: val }));

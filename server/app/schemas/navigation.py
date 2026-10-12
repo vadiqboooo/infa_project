@@ -23,6 +23,7 @@ class TopicNav(BaseModel):
     order_index: int
     category: str = "tutorial"
     subject: str = "informatics"
+    exam_type: str = "ege"
     course_type: str = "year"
     tasks: list[TaskNav] = []
     exam_id: int | None = None
@@ -40,6 +41,8 @@ class TopicNav(BaseModel):
     ege_number_end: int | None = None
     analysis_published: bool = False
     draft_count: int = 0
+    has_active_attempt: bool = False
+    active_exam_mode: str | None = None
     new_tasks_count: int = 0
     has_image: bool = False
     image_position: str | None = None

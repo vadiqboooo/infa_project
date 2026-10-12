@@ -10,6 +10,7 @@ from sqlalchemy.ext.compiler import compiles
 from app.database import Base
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.exam import Exam, exam_tasks
+from app.models.exam_attempt import ExamAttempt
 from app.models.progress import UserProgress, ProgressStatus
 from app.models.task import Task, AnswerType
 from app.models.topic import Topic
@@ -134,6 +135,51 @@ class LatexImportTests(unittest.IsolatedAsyncioTestCase):
         ]})
         self.assertEqual(submitted.status_code, 200, submitted.text)
         self.assertEqual(submitted.json()["correct_count"], 3)
+
+        exam_mode_started = await self.client.post(f"/exams/{exam_id}/start?mode=exam")
+        self.assertEqual(exam_mode_started.status_code, 200, exam_mode_started.text)
+        hidden_draft = await self.client.put(
+            f"/exams/attempt/{exam_mode_started.json()['attempt_id']}/save-answer",
+            json={"task_id": tasks[1].id, "answer": {"val": "-sqrt(8)/2"}},
+        )
+        self.assertEqual(hidden_draft.status_code, 200, hidden_draft.text)
+        self.assertNotIn("is_correct", hidden_draft.json())
+        self.assertNotIn("points", hidden_draft.json())
+        active_exam = await self.client.get(f"/exams/by-topic/{tasks[0].topic_id}")
+        self.assertEqual(active_exam.status_code, 200, active_exam.text)
+        self.assertEqual(active_exam.json()["active_attempt"]["mode"], "exam")
+        self.assertEqual(
+            active_exam.json()["active_attempt"]["draft_answers"][str(tasks[1].id)]["val"],
+            "-sqrt(8)/2",
+        )
+        self.assertEqual(active_exam.json()["active_attempt"]["scored_answers"], {})
+
+        exam_mode_result = await self.client.post(f"/exams/{exam_id}/submit", json={"answers": [
+            {"task_id": task.id, "answer": {"val": value}}
+            for task, value in zip(tasks, ["-cos(alpha)", "-sqrt(8)/2", "0"])
+        ]})
+        self.assertEqual(exam_mode_result.status_code, 200, exam_mode_result.text)
+        self.assertEqual(exam_mode_result.json()["correct_count"], 3)
+
+        # Legacy clients could leave an empty attempt without a selected mode.
+        # It must return to the mode picker instead of silently becoming practice.
+        async with self.sessions() as db:
+            legacy_attempt = ExamAttempt(user_id=self.user.id, exam_id=exam_id, results_json={})
+            db.add(legacy_attempt)
+            await db.commit()
+            await db.refresh(legacy_attempt)
+            legacy_attempt_id = legacy_attempt.id
+        legacy_info = await self.client.get(f"/exams/by-topic/{tasks[0].topic_id}")
+        self.assertIsNone(legacy_info.json()["active_attempt"]["mode"])
+        navigation = await self.client.get("/navigation")
+        legacy_topic = next(item for item in navigation.json() if item["id"] == tasks[0].topic_id)
+        self.assertTrue(legacy_topic["has_active_attempt"])
+        self.assertIsNone(legacy_topic["active_exam_mode"])
+        resumed = await self.client.post(f"/exams/{exam_id}/start?mode=exam")
+        self.assertEqual(resumed.json()["attempt_id"], legacy_attempt_id)
+        resumed_info = await self.client.get(f"/exams/by-topic/{tasks[0].topic_id}")
+        self.assertEqual(resumed_info.json()["active_attempt"]["mode"], "exam")
+
         invalid_edit = await self.client.put(f"/admin/tasks/{tasks[1].id}", json={"correct_answer": {"val": "1/0"}})
         self.assertEqual(invalid_edit.status_code, 400, invalid_edit.text)
         valid_edit = await self.client.put(f"/admin/tasks/{tasks[1].id}", json={"correct_answer": {"val": "-sqrt(8)/2"}})

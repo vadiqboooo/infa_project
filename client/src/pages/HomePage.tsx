@@ -22,6 +22,9 @@ import metricGift from '../assets/metric-gift.png';
 import metricTasks from '../assets/metric-tasks.png';
 import { useTheme } from '../context/ThemeContext';
 import { GroupPreparationPlan } from '../components/GroupPreparationPlan';
+import { LessonPlanHome } from '../components/LessonPlanHome';
+import { AdminHome } from '../components/admin/AdminHome';
+import { useAuth } from '../context/AuthContext';
 
 import {
   Area,
@@ -69,6 +72,7 @@ type PlanBlockTracker = {
 };
 
 export function HomePage() {
+  const { user } = useAuth();
   const { data: userStats } = useUserStats();
   const { data: weeklyData } = useWeeklyActivity();
   const { data: navigation } = useNavigation();
@@ -100,6 +104,15 @@ export function HomePage() {
   }, [navigation]);
   const completedExamScores = examScores.filter((item) => item.score != null && item.score > 0);
   const latestExamScore = completedExamScores.at(-1)?.score ?? 0;
+
+  // Admins get the group/student overview; students in a group get the lesson-plan home; others keep the stats dashboard below.
+  if (user?.role === 'admin') {
+    return <AdminHome />;
+  }
+
+  if (groupPlan.length > 0) {
+    return <LessonPlanHome lessons={groupPlan} name={user?.first_name} />;
+  }
 
   return (
     <div className="home-page -m-4 min-h-screen bg-[#151515] p-4 pt-8 text-slate-100 md:-m-8 md:p-8 md:pt-10">

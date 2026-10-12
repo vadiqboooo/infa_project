@@ -132,6 +132,9 @@ async def get_navigation(
     active_draft_counts: dict[int, int] = {}
     # Map topic_id -> {primary, score} from active attempt's scored answers
     active_scores: dict[int, dict] = {}
+    active_attempt_topics: set[int] = set()
+    active_attempt_modes: dict[int, str | None] = {}
+    topic_categories = {topic.id: topic.category for topic in topics}
     for attempt, exam in attempts_query.all():
         if attempt.finished_at is None:
             if exam.topic_id in active_scores:
@@ -139,8 +142,22 @@ async def get_navigation(
             # Active attempt — count draft answers and compute current score
             results = attempt.results_json or {}
             drafts = results.get("draft_answers", {})
+            codes = results.get("draft_codes", {})
             non_empty = sum(1 for v in drafts.values() if v and v.get("val") not in (None, "", []))
             active_draft_counts[exam.topic_id] = non_empty
+            active_attempt_topics.add(exam.topic_id)
+
+            stored_mode = results.get("mode")
+            category = topic_categories.get(exam.topic_id, "variants")
+            if stored_mode in {"practice", "exam"}:
+                active_attempt_modes[exam.topic_id] = stored_mode
+            elif category == "mock":
+                active_attempt_modes[exam.topic_id] = "exam"
+            elif category in {"variants", "math"} and not drafts and not codes and not results.get("scored_answers"):
+                # Old versions created an empty attempt before the student chose a mode.
+                active_attempt_modes[exam.topic_id] = None
+            else:
+                active_attempt_modes[exam.topic_id] = "practice"
 
             scored = results.get("scored_answers", {})
             current_primary = sum(int(s.get("points") or 0) for s in scored.values()) if scored else 0
@@ -228,6 +245,7 @@ async def get_navigation(
             order_index=topic.order_index,
             category=topic.category,
             subject=topic.subject,
+            exam_type=topic.exam_type,
             course_type=topic.course_type,
             tasks=tasks_nav,
             exam_id=exam.id if exam else None,
@@ -245,6 +263,8 @@ async def get_navigation(
             ege_number_end=topic.ege_number_end,
             analysis_published=attempt_id in published_ids if attempt_id else False,
             draft_count=active_draft_counts.get(topic.id, 0),
+            has_active_attempt=topic.id in active_attempt_topics,
+            active_exam_mode=active_attempt_modes.get(topic.id),
             new_tasks_count=new_tasks_count,
             has_image=topic.image_data is not None,
             image_position=topic.image_position,
@@ -338,13 +358,22 @@ async def get_task(
         )
         comments_count = int(comments_result.scalar_one() or 0)
 
+    progress_result = await db.execute(
+        select(UserProgress).where(UserProgress.user_id == user.id, UserProgress.task_id == task_id)
+    )
+    progress = progress_result.scalar_one_or_none()
+
     return TaskOut(
         id=task.id,
         topic_id=task.topic_id,
+        subject=task.subject,
+        exam_type=task.exam_type,
         external_id=task.external_id,
         ege_number=task.ege_number,
         title=task.title,
         description=task.description,
+        last_answer=progress.last_answer if progress else None,
+        last_correct=progress.last_correct if progress else None,
         content_html=task.content_html,
         media_resources=task.media_resources,
         answer_type=task.answer_type,

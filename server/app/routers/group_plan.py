@@ -17,6 +17,16 @@ from app.schemas.group_plan import (
     GroupLessonIn,
     GroupLessonItemOut,
     GroupLessonOut,
+    GroupLessonProgressOut,
+    LessonItemProgressOut,
+    LessonTaskResultsOut,
+    TaskResultCell,
+    TaskResultRow,
+    TaskResultStep,
+    TaskResultTask,
+    LessonItemStudentProgress,
+    LessonProgressLessonOut,
+    LessonStudentOut,
     GroupPlanResourcesOut,
     GroupPlanTaskOptionOut,
     GroupPlanTopicOptionOut,
@@ -268,6 +278,142 @@ async def list_group_lessons(
         .order_by(GroupLesson.lesson_at.desc(), GroupLesson.id.desc())
     )
     return [_lesson_out(lesson) for lesson in result.scalars().unique().all()]
+
+
+def _fmt_answer(value) -> str:
+    """Human-readable answer: scalars as-is, lists space-joined, matrices row by row."""
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        if value and all(isinstance(v, list) for v in value):
+            return "; ".join(_fmt_answer(v) for v in value)
+        return " ".join(_fmt_answer(v) for v in value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _payload_answer(payload: dict | None) -> str:
+    if not payload:
+        return ""
+    if payload.get("val") is not None:
+        return _fmt_answer(payload["val"])
+    return " | ".join(_fmt_answer(v) for v in (payload.get("answers") or []))
+
+
+@admin_router.get("/group-lessons/{lesson_id}/results", response_model=LessonTaskResultsOut)
+async def get_lesson_task_results(lesson_id: int, db: AsyncSession = Depends(get_db)):
+    """Per-task answers of every lesson participant, for the admin statistics matrix."""
+    lesson = await _get_lesson(lesson_id, db)
+    if lesson.student_id is not None:
+        member_ids = [lesson.student_id]
+    else:
+        rows = await db.execute(select(user_groups.c.user_id).where(user_groups.c.group_id == lesson.group_id))
+        member_ids = list(rows.scalars().all())
+
+    steps_src: list[tuple[GroupLessonItem, list[Task]]] = []
+    for item in lesson.items:
+        if item.task is not None:
+            tasks = [item.task]
+        elif item.topic is not None:
+            tasks = sorted(item.topic.tasks, key=lambda t: (t.order_index, t.id))
+        else:
+            continue
+        if tasks:
+            steps_src.append((item, tasks))
+
+    task_ids = {t.id for _, tasks in steps_src for t in tasks}
+    progress: dict[tuple[int, int], UserProgress] = {}
+    if task_ids and member_ids:
+        result = await db.execute(select(UserProgress).where(UserProgress.task_id.in_(task_ids), UserProgress.user_id.in_(member_ids)))
+        progress = {(row.user_id, row.task_id): row for row in result.scalars().all()}
+
+    steps: list[TaskResultStep] = []
+    for item, tasks in steps_src:
+        title = item.task.title if item.task is not None and item.task.title else (_topic_title(item.topic) if item.topic is not None else "Задание")
+        rows_out = []
+        for uid in member_ids:
+            cells = []
+            for task in tasks:
+                row = progress.get((uid, task.id))
+                if row is None or (row.last_answer is None and row.status != ProgressStatus.solved):
+                    cells.append(TaskResultCell())
+                    continue
+                correct = row.last_correct is True or (row.last_correct is None and row.status == ProgressStatus.solved)
+                answer = _payload_answer(row.last_answer) or _payload_answer(task.correct_answer if correct else None)
+                cells.append(TaskResultCell(state="ok" if correct else "bad", answer=answer))
+            rows_out.append(TaskResultRow(user_id=uid, cells=cells))
+        steps.append(TaskResultStep(
+            item_id=item.id,
+            title=title,
+            section=item.section,
+            tasks=[TaskResultTask(task_id=t.id, number=i, correct=_payload_answer(t.correct_answer)) for i, t in enumerate(tasks, start=1)],
+            rows=rows_out,
+        ))
+    return LessonTaskResultsOut(lesson_id=lesson.id, steps=steps)
+
+
+@admin_router.get("/groups/{group_id}/lesson-progress", response_model=GroupLessonProgressOut)
+async def get_group_lesson_progress(
+    group_id: int,
+    student_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-student completion of every item of the group's (or one individual student's) lessons."""
+    group = await db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    await _validate_program_student(group, student_id, db)
+
+    members_query = select(User).join(user_groups, user_groups.c.user_id == User.id).where(user_groups.c.group_id == group_id)
+    if student_id is not None:
+        members_query = members_query.where(User.id == student_id)
+    members = list((await db.execute(members_query.order_by(User.last_name_real, User.first_name_real, User.id))).scalars().all())
+    member_ids = [m.id for m in members]
+
+    lessons_result = await db.execute(
+        select(GroupLesson)
+        .options(*_lesson_options())
+        .where(GroupLesson.group_id == group_id, GroupLesson.student_id == student_id, GroupLesson.status.in_(["published", "completed"]))
+        .order_by(GroupLesson.lesson_at.asc(), GroupLesson.id.asc())
+    )
+    lessons = list(lessons_result.scalars().unique().all())
+
+    progress: dict[int, dict[int, ProgressStatus]] = {uid: {} for uid in member_ids}
+    articles: dict[int, dict[int, ArticleProgress]] = {uid: {} for uid in member_ids}
+    if member_ids:
+        for row in (await db.execute(select(UserProgress).where(UserProgress.user_id.in_(member_ids)))).scalars().all():
+            progress[row.user_id][row.task_id] = row.status
+        for row in (await db.execute(select(ArticleProgress).where(ArticleProgress.user_id.in_(member_ids)))).scalars().all():
+            articles[row.user_id][row.article_id] = row
+
+    lessons_out: list[LessonProgressLessonOut] = []
+    for lesson in lessons:
+        items = [item for item in lesson.items if item.article_id is None or (item.article is not None and item.article.published)]
+        items_out: list[LessonItemProgressOut] = []
+        for item in items:
+            base = _item_out(item, {}, {})
+            per_student = []
+            for uid in member_ids:
+                own = _item_out(item, progress[uid], articles[uid])
+                per_student.append(LessonItemStudentProgress(user_id=uid, solved=own.solved, total=own.total, completion_status=own.completion_status))
+            items_out.append(LessonItemProgressOut(**base.model_dump(exclude={"solved", "progress_percent", "completion_status"}), progress=per_student))
+        lessons_out.append(LessonProgressLessonOut(id=lesson.id, title=lesson.title, lesson_at=lesson.lesson_at, homework_deadline=lesson.homework_deadline, status=lesson.status, items=items_out))
+
+    return GroupLessonProgressOut(
+        group_id=group.id,
+        group_name=group.name,
+        group_color=group.color,
+        students=[
+            LessonStudentOut(
+                id=m.id,
+                name=f"{m.first_name_real or ''} {m.last_name_real or ''}".strip() or m.first_name or f"User {m.id}",
+                last_active_at=m.last_active_at,
+            )
+            for m in members
+        ],
+        lessons=lessons_out,
+    )
 
 
 @admin_router.post("/groups/{group_id}/lessons", response_model=GroupLessonOut, status_code=status.HTTP_201_CREATED)

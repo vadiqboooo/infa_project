@@ -45,6 +45,28 @@ async def _require_exam_course_access(exam: Exam, user: User, db: AsyncSession):
     if topic is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     await require_exam_topic_access(topic, user, db)
+    return topic
+
+
+def _attempt_mode(results: dict | None, topic_category: str) -> str:
+    stored_mode = (results or {}).get("mode")
+    if stored_mode in {"practice", "exam"}:
+        return stored_mode
+    return "exam" if topic_category == "mock" else "practice"
+
+
+def _visible_attempt_mode(results: dict | None, topic_category: str) -> str | None:
+    """Keep legacy work resumable, but let an old empty variant choose its mode."""
+    data = results or {}
+    stored_mode = data.get("mode")
+    if stored_mode in {"practice", "exam"}:
+        return stored_mode
+    if topic_category == "mock":
+        return "exam"
+    has_work = bool(data.get("draft_answers") or data.get("draft_codes") or data.get("scored_answers"))
+    if topic_category in {"variants", "math"} and not has_work:
+        return None
+    return "practice"
 
 
 async def _require_attempt_exam_access(attempt: ExamAttempt, user: User, db: AsyncSession) -> Exam:
@@ -127,11 +149,11 @@ async def get_exam_by_topic(
 
     # If variants are reopened without a timer, an empty active attempt can coexist with
     # the last finished attempt. Seed it once so previously solved tasks stay visible.
-    if attempt and finished:
+    if attempt and finished and topic.category not in {"variants", "math"}:
         active_results = attempt.results_json or {}
         active_drafts = active_results.get("draft_answers", {}) or {}
         active_scores = active_results.get("scored_answers", {}) or {}
-        if not active_drafts and not active_scores:
+        if "mode" not in active_results and not active_drafts and not active_scores:
             finished_results = finished.results_json or {}
             task_results = finished_results.get("task_results", []) or []
             seeded_drafts = {}
@@ -171,9 +193,14 @@ async def get_exam_by_topic(
         "active_attempt": {
             "id": attempt.id,
             "started_at": attempt.started_at,
+            "mode": _visible_attempt_mode(attempt.results_json, topic.category),
             "draft_answers": (attempt.results_json or {}).get("draft_answers", {}),
             "draft_codes": (attempt.results_json or {}).get("draft_codes", {}),
-            "scored_answers": (attempt.results_json or {}).get("scored_answers", {}),
+            "scored_answers": (
+                (attempt.results_json or {}).get("scored_answers", {})
+                if _visible_attempt_mode(attempt.results_json, topic.category) == "practice"
+                else {}
+            ),
         } if attempt else None,
         "finished_attempt": {
             "id": finished.id,
@@ -181,6 +208,7 @@ async def get_exam_by_topic(
             "finished_at": finished.finished_at,
             "primary_score": finished.primary_score,
             "score": finished.score,
+            "mode": _attempt_mode(finished.results_json, topic.category),
             "task_results": (finished.results_json or {}).get("task_results", []),
             "submitted_for_review": (finished.results_json or {}).get("submitted_for_review", False),
         } if finished else None,
@@ -230,6 +258,7 @@ async def get_exam(
 @router.post("/{exam_id}/start", response_model=ExamStartResponse)
 async def start_exam(
     exam_id: int,
+    mode: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -239,7 +268,14 @@ async def start_exam(
     exam = result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await _require_exam_course_access(exam, user, db)
+    topic = await _require_exam_course_access(exam, user, db)
+
+    if topic.category in {"variants", "math"}:
+        if mode is not None and mode not in {"practice", "exam"}:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Choose practice or exam mode")
+        resolved_mode = mode or "practice"
+    else:
+        resolved_mode = "exam" if topic.category == "mock" else "practice"
 
     # Return existing active attempt (idempotent)
     active = await db.execute(
@@ -254,13 +290,34 @@ async def start_exam(
     )
     existing = active.scalar_one_or_none()
     if existing is not None:
+        existing_results = dict(existing.results_json or {})
+        existing_has_work = bool(
+            existing_results.get("draft_answers")
+            or existing_results.get("draft_codes")
+            or existing_results.get("scored_answers")
+        )
+        if (
+            topic.category in {"variants", "math"}
+            and existing_results.get("mode") not in {"practice", "exam"}
+            and not existing_has_work
+        ):
+            existing_results["mode"] = resolved_mode
+            existing.results_json = existing_results
+            existing.started_at = datetime.now(timezone.utc)
+            flag_modified(existing, "results_json")
+            await db.commit()
+            await db.refresh(existing)
         return ExamStartResponse(
             attempt_id=existing.id,
             started_at=existing.started_at,
             time_limit_minutes=exam.time_limit_minutes,
         )
 
-    attempt = ExamAttempt(user_id=user.id, exam_id=exam_id)
+    attempt = ExamAttempt(
+        user_id=user.id,
+        exam_id=exam_id,
+        results_json={"mode": resolved_mode},
+    )
     db.add(attempt)
     await db.commit()
     await db.refresh(attempt)
@@ -294,7 +351,7 @@ async def save_draft_answer(
     exam = exam_result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await _require_exam_course_access(exam, user, db)
+    topic = await _require_exam_course_access(exam, user, db)
 
     task_id = str(body.get("task_id", ""))
     answer = body.get("answer")  # {val: ...}
@@ -303,7 +360,9 @@ async def save_draft_answer(
     results = dict(attempt.results_json or {})
     drafts = results.get("draft_answers", {})
     codes = results.get("draft_codes", {})
-    scored = results.get("scored_answers", {})
+    mode = _attempt_mode(results, topic.category)
+    results["mode"] = mode
+    scored = results.get("scored_answers", {}) if mode == "practice" else {}
 
     if answer is not None:
         drafts[task_id] = answer
@@ -313,7 +372,7 @@ async def save_draft_answer(
     # Check answer immediately if provided
     is_correct: bool | None = None
     points: int | None = None
-    if answer is not None:
+    if answer is not None and mode == "practice":
         val = answer.get("val") if isinstance(answer, dict) else None
         if val not in (None, "", [], [[]]):
             task_res = await db.execute(select(Task).where(Task.id == int(task_id)))
@@ -379,7 +438,7 @@ async def submit_exam(
     exam = exam_result.scalar_one_or_none()
     if exam is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-    await _require_exam_course_access(exam, user, db)
+    topic = await _require_exam_course_access(exam, user, db)
 
     # Build task lookup
     task_map: dict[int, Task] = {t.id: t for t in exam.tasks}
@@ -473,12 +532,17 @@ async def submit_exam(
     attempt.finished_at = now
     attempt.primary_score = primary_score
     attempt.score = score
-    attempt.results_json = {"task_results": task_results}
+    result_mode = _attempt_mode(attempt.results_json, topic.category)
+    attempt.results_json = {
+        "mode": result_mode,
+        "task_results": task_results,
+    }
     await db.commit()
     await db.refresh(attempt)
 
     return ExamResult(
         attempt_id=attempt.id,
+        mode=result_mode,
         total_tasks=total,
         correct_count=correct_count,
         primary_score=primary_score,

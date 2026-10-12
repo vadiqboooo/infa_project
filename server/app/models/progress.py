@@ -3,7 +3,8 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,6 +27,9 @@ class UserProgress(Base):
     )
     attempts_count: Mapped[int] = mapped_column(Integer, default=0)
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last submitted payload ({"val": ...} or {"answers": [...]}) so it survives reloads and devices.
+    last_answer: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    last_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # relationships
     user = relationship("User")

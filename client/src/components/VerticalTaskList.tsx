@@ -41,6 +41,9 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
     const result = check.data;
     const value = answers[nav.id] ?? '';
     const isMath = topic.subject === 'math' || topic.category === 'math';
+    // Treat either task or topic metadata as authoritative for OGE. This also
+    // handles older attached tasks whose copied metadata was not kept in sync.
+    const examType = task?.exam_type === 'oge' || topic.exam_type === 'oge' ? 'oge' : 'ege';
     const ready = hasAnswer(value) && (task?.sub_tasks ?? []).every((_, i) => hasAnswer(subAnswers[`${nav.id}:${i}`]));
 
     const submit = async () => {
@@ -81,6 +84,7 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
                                         disabled={check.isPending}
                                         egeNumber={task.ege_number ?? undefined}
                                         isMath={isMath}
+                                        examType={examType}
                                         feedback={result?.partial_correct}
                                     />
                                 </div>
@@ -100,6 +104,7 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
                                             disabled={check.isPending}
                                             egeNumber={sub.number ?? undefined}
                                             isMath={isMath}
+                                            examType={examType}
                                         />
                                     </div>
                                 </div>

@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubDark } from "@uiw/codemirror-theme-github";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Timer, Send, ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine } from "lucide-react";
+import { ArrowLeft, Send, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
@@ -13,9 +13,10 @@ import AnswerInput from "../components/AnswerInput";
 import Skeleton from "../components/Skeleton";
 import { TaskSolutionPanel } from "../components/TaskSolutionPanel";
 import RecognizedSolutionBlock from "../components/RecognizedSolutionBlock";
-import type { AnswerVal, TaskNav, TaskResult } from "../api/types";
+import type { AnswerVal, ExamMode, TaskNav, TaskResult } from "../api/types";
 import { api, authFetch } from "../api/client";
 import confetti from "canvas-confetti";
+import "./ExamPage.css";
 
 export default function ExamPage() {
     const { id } = useParams();
@@ -28,6 +29,18 @@ export default function ExamPage() {
     const currentTopic = useMemo(() => {
         return allTopics?.find(t => String(t.id) === id);
     }, [allTopics, id]);
+
+    const examsReturnPath = useMemo(() => {
+        if (!currentTopic) return '/exams';
+        const subject = String(currentTopic.category) === 'math'
+            ? 'math'
+            : currentTopic.subject || 'informatics';
+        const params = new URLSearchParams({
+            subject,
+            exam: currentTopic.exam_type === 'oge' ? 'oge' : 'ege',
+        });
+        return `/exams?${params.toString()}`;
+    }, [currentTopic]);
 
     const tasks: TaskNav[] = currentTopic?.tasks ?? [];
     const [taskIndex, setTaskIndex] = useState(0);
@@ -72,11 +85,12 @@ export default function ExamPage() {
     // Mock exam submit-for-review state
     const [submitLoading, setSubmitLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const [forceModeSelection, setForceModeSelection] = useState(false);
 
     const isMock = String(currentTopic?.category) === "mock";
     const isControl = String(currentTopic?.category) === "control";
+    const isSelectableVariant = ["variants", "math"].includes(String(currentTopic?.category));
     const canAnnotateExamTask = ["variants", "math", "mock", "control"].includes(String(currentTopic?.category));
-    const showTimer = isMock || isControl;
     const clearSolutionDeepLink = () => {
         const params = new URLSearchParams(location.search);
         if (!params.has("solution") && !params.has("task")) return;
@@ -97,8 +111,21 @@ export default function ExamPage() {
     }, [currentTaskNav?.id]);
 
     const { data: examInfo, isLoading: examLoading } = useExamByTopic(currentTopic?.id ?? null);
+    const attemptMode: ExamMode | null = isMock
+        ? "exam"
+        : isControl
+            ? "practice"
+            : examInfo?.active_attempt?.mode ?? null;
+    const isExamMode = attemptMode === "exam";
+    const showTimer = isMock || isControl || isExamMode;
+    const showImmediateFeedback = !isMock && attemptMode !== "exam";
+    const canFinishExam = isMock || isControl || isSelectableVariant;
     const { data: task, isLoading: taskLoading } = useTask(currentTaskNav?.id ?? null);
     const { data: reviewTask, isLoading: reviewTaskLoading } = useTask(reviewTaskId);
+    const isMathTask = currentTopic?.subject === 'math' || String(currentTopic?.category) === 'math';
+    // Older attached tasks can still carry EGE while their topic is already OGE.
+    const taskExamType = task?.exam_type === 'oge' || currentTopic?.exam_type === 'oge' ? 'oge' : 'ege';
+    const isEgeMathTask = isMathTask && taskExamType === 'ege';
 
     useEffect(() => {
         if (!task?.id) return;
@@ -310,15 +337,15 @@ export default function ExamPage() {
         }
     };
 
-    // Auto-start for non-mock variants: create/restore active attempt without pre-start screen
+    // Controls keep the existing quick start. Training variants now wait for a mode choice.
     useEffect(() => {
-        if (!examInfo || isMock) return;
+        if (!examInfo || isMock || isSelectableVariant || examInfo.finished_attempt) return;
         if (!examInfo.active_attempt && !startExamMutation.isPending) {
             startExamMutation.mutate(undefined, {
                 onSuccess: () => queryClient.invalidateQueries({ queryKey: ["navigation"] }),
             });
         }
-    }, [examInfo?.id, isMock]);
+    }, [examInfo?.id, examInfo?.finished_attempt?.id, isMock, isSelectableVariant]);
 
     const handleSaveAnswer = () => {
         if (task) {
@@ -450,20 +477,19 @@ export default function ExamPage() {
     }, [examInfo, examEndTime, showTimer]);
 
     // Interval ticker — re-runs when examEndTime becomes available
-    // Note: only mock auto-submits on timeout. Control shows the timer for awareness
-    // but never force-finishes (student submits manually).
+    // Probe mode auto-submits on timeout. Control keeps its current manual finish flow.
     useEffect(() => {
         if (!showTimer || examEndTime === null || examResult) return;
         const tick = () => {
             const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0 && isMock) autoSubmitRef.current();
+            if (remaining === 0 && (isMock || isExamMode)) autoSubmitRef.current();
         };
         const timer = setInterval(tick, 1000);
         const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-    }, [examEndTime, examResult, showTimer, isMock]);
+    }, [examEndTime, examResult, showTimer, isMock, isExamMode]);
 
     // Auto-scroll question bar
     useEffect(() => {
@@ -477,26 +503,37 @@ export default function ExamPage() {
         }
     }, [taskIndex]);
 
-    const handleStart = async () => {
+    const handleStart = async (mode?: ExamMode) => {
         if (!examInfo) return;
         try {
-            const resp = await startExamMutation.mutateAsync();
-            if (isMock) {
+            const requestedMode = mode ?? (isMock ? "exam" : "practice");
+            const resp = await startExamMutation.mutateAsync(mode);
+            if (isMock || isControl || requestedMode === "exam") {
                 const startedAt = new Date(resp.started_at).getTime();
                 const endTime = startedAt + resp.time_limit_minutes * 60 * 1000;
                 setExamEndTime(endTime);
                 setTimeLeft(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
             }
             setExamAnswers({});
+            setTaskScores({});
+            setExamResult(null);
+            draftsRestoredRef.current = false;
+            await queryClient.invalidateQueries({ queryKey: ["exam"] });
+            setForceModeSelection(false);
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (err) {
-            alert("Не удалось начать экзамен");
+            alert("Не удалось начать работу");
         }
     };
 
     const handleSubmit = async (skipConfirm = false) => {
         if (!examInfo || isSubmittingRef.current) return;
-        if (!skipConfirm && timeLeft !== 0 && !confirm("Вы уверены, что хотите завершить экзамен и отправить ответы?")) return;
+        const submitLabel = isControl
+            ? "Завершить контрольную и посмотреть результат?"
+            : isExamMode
+                ? "Завершить пробник? После сдачи ответы будут проверены."
+                : "Завершить тренировку и посмотреть итоговый результат?";
+        if (!skipConfirm && timeLeft !== 0 && !confirm(submitLabel)) return;
 
         isSubmittingRef.current = true;
         setIsSubmitting(true);
@@ -543,6 +580,7 @@ export default function ExamPage() {
 
             setExamResult(res);
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
+            queryClient.invalidateQueries({ queryKey: ["exam"] });
             if (res.score >= 80) {
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
             }
@@ -587,7 +625,7 @@ export default function ExamPage() {
                 </div>
                 <h1 className="text-xl font-bold text-gray-900 mb-2">Вариант не найден</h1>
                 <p className="text-gray-500 mb-6 text-sm max-w-xs">Данный вариант еще не настроен или был удален администратором.</p>
-                <button onClick={() => navigate('/exams')} className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
+                <button onClick={() => navigate(examsReturnPath)} className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
                     К списку вариантов
                 </button>
             </div>
@@ -626,8 +664,8 @@ export default function ExamPage() {
             <div className={clsx("exam-dark exam-result-page min-h-screen bg-[#F8F7F4]", !publishedAnalysis && "exam-review-pending-page")}>
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
-                        <button onClick={() => navigate('/exams')} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                    <div className="mx-auto flex max-w-[1240px] items-center gap-4 px-4 py-4 md:py-5">
+                        <button onClick={() => navigate(examsReturnPath)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                             <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
@@ -915,8 +953,17 @@ export default function ExamPage() {
         );
     }
 
-    // Result Screen — for mock: show after submit/on reload; for non-mock: only when just submitted
-    if (examResult || (isMock && examInfo.finished_attempt && !examInfo.active_attempt)) {
+    // Keep the latest result visible after reopening a completed variant/control.
+    // A deliberate retry temporarily bypasses it so the student can choose a new mode.
+    if (
+        examResult
+        || (
+            !forceModeSelection
+            && (isSelectableVariant || isControl)
+            && examInfo.finished_attempt
+            && !examInfo.active_attempt
+        )
+    ) {
         const result = examResult || examInfo.finished_attempt;
         const taskResults: TaskResult[] = result.task_results || result.results?.task_results || [];
 
@@ -934,71 +981,59 @@ export default function ExamPage() {
         };
 
         const sortedResults = [...taskResults].sort((a, b) => (a.ege_number || 0) - (b.ege_number || 0));
-        const isVariant = ["variants", "math"].includes(String(currentTopic?.category));
+        const isVariant = isSelectableVariant;
         const correctCount = result.correct_count ?? taskResults.filter(r => r.is_correct).length;
         const totalCount = result.total_tasks ?? taskResults.length;
+        const answeredCount = taskResults.filter((item) => formatAnswer(item.user_answer) !== "—").length;
+        const wrongCount = Math.max(0, answeredCount - correctCount);
+        const unansweredCount = Math.max(0, totalCount - answeredCount);
         const pctScore = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+        const resultMode: ExamMode = result.mode ?? examInfo.finished_attempt?.mode ?? attemptMode ?? "practice";
+        const primaryMax = isVariant ? 29 : totalCount;
+        const primaryValue = isVariant ? Number(result.primary_score ?? 0) : correctCount;
+        const resultTitle = isControl
+            ? "Контрольная завершена"
+            : resultMode === "exam"
+                ? "Вариант завершён"
+                : "Тренировка завершена";
 
 
         const ResultRow = ({ tr, idx }: { tr: TaskResult; idx: number }) => {
             const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
             const notAutoChecked = tr.auto_checked === false;
-            const hasAttachment = tr.code_solution || tr.file_solution_url || reviewSavedCodes[tr.task_id];
+            const hasAnswer = formatAnswer(tr.user_answer) !== "—";
+            const isPartial = hasAnswer && !tr.is_correct && tr.points > 0;
             return (
                 <tr
                     key={tr.task_id}
-                    className={clsx(
-                        "exam-result-row transition-colors cursor-pointer",
-                        tr.is_correct ? "bg-emerald-50/40 hover:bg-emerald-50/70"
-                            : tr.points > 0 ? "bg-amber-50/40 hover:bg-amber-50/70"
-                            : "hover:bg-gray-50/80"
-                    )}
+                    className="cursor-pointer border-t border-gray-200 transition-colors hover:bg-gray-100/50"
                     onClick={() => setReviewTaskId(tr.task_id)}
                 >
-                    <td className="py-2 px-2 font-bold text-gray-700 text-sm w-8 border-b border-gray-200">
+                    <td className="w-[46px] px-4 py-2.5 text-sm font-black text-gray-900">
                         {tr.ege_number || idx + 1}
                     </td>
-                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate border-b border-gray-200">
+                    <td className="max-w-[120px] truncate px-2 py-2.5 font-mono text-xs font-semibold text-gray-600">
                         {formatAnswer(tr.user_answer)}
                     </td>
-                    <td className="py-2 px-2 text-gray-500 font-mono text-xs max-w-[80px] truncate border-b border-gray-200">
+                    <td className="max-w-[140px] truncate px-2 py-2.5 font-mono text-xs font-semibold text-gray-900">
                         {notAutoChecked
-                            ? <span className="text-[10px] text-gray-400 italic">по решению</span>
+                            ? <span className="text-[10px] italic text-gray-400">по решению</span>
                             : formatAnswer(tr.correct_answer)
                         }
                     </td>
-                    <td className="py-2 px-2 text-center border-b border-gray-200">
-                        <div className="flex items-center justify-center gap-1">
-                            {notAutoChecked ? (
-                                <span className="inline-flex items-center justify-center px-1.5 h-6 rounded-md text-[10px] font-bold bg-gray-100 text-gray-400">
-                                    —
-                                </span>
-                            ) : (
-                                <span className={clsx(
-                                    "inline-flex items-center justify-center min-w-[26px] h-6 px-1 rounded-md text-xs font-bold",
-                                    tr.points === max
-                                        ? "bg-[#3F8C62] text-white"
-                                        : tr.points > 0
-                                            ? "bg-amber-100 text-amber-700"
-                                            : "bg-gray-100 text-gray-400"
-                                )}>
-                                    {tr.points}/{max}
-                                </span>
-                            )}
-                            {hasAttachment && (
-                                <span title="Есть решение" className="text-purple-400">
-                                    <Code size={13} />
-                                </span>
-                            )}
-                            {tr.file_solution_url && (
-                                <span title="Прикреплён файл" className="text-blue-400">
-                                    <Paperclip size={13} />
-                                </span>
-                            )}
-                            <span className="text-gray-300 hover:text-gray-500 transition-colors ml-0.5">
-                                <Eye size={12} />
-                            </span>
-                        </div>
+                    <td className="w-[92px] px-4 py-2.5">
+                        <span className={clsx(
+                            "inline-flex min-w-[54px] items-center justify-center rounded-full border px-2.5 py-1 text-xs font-black",
+                            notAutoChecked || !hasAnswer
+                                ? "border-gray-200 bg-gray-100 text-gray-400"
+                                : tr.is_correct
+                                    ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                                    : isPartial
+                                        ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                                        : "border-red-400/30 bg-red-500/10 text-red-300"
+                        )}>
+                            {notAutoChecked ? "—" : `${tr.points} / ${max}`}
+                        </span>
                     </td>
                 </tr>
             );
@@ -1006,11 +1041,11 @@ export default function ExamPage() {
 
         const TableHead = () => (
             <thead>
-                <tr className="bg-gray-50">
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider w-8 border-b-2 border-gray-200">№</th>
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Ваш</th>
-                    <th className="text-left py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Верный</th>
-                    <th className="text-center py-2 px-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider border-b-2 border-gray-200">Балл</th>
+                <tr className="text-left text-[10px] font-bold text-gray-400">
+                    <th className="w-[46px] px-4 py-3 font-bold">№</th>
+                    <th className="px-2 py-3 font-bold">Ваш ответ</th>
+                    <th className="px-2 py-3 font-bold">Правильный</th>
+                    <th className="w-[92px] px-4 py-3 font-bold">Баллы</th>
                 </tr>
             </thead>
         );
@@ -1020,7 +1055,7 @@ export default function ExamPage() {
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
-                        <button onClick={() => navigate('/exams')} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                        <button onClick={() => navigate(examsReturnPath)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                             <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
@@ -1030,113 +1065,169 @@ export default function ExamPage() {
 
                         {isVariant && (
                             <button
-                                onClick={() => { setExamResult(null); startExamMutation.mutate(undefined); }}
+                                onClick={() => {
+                                    setExamResult(null);
+                                    setForceModeSelection(true);
+                                }}
                                 className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                             >
-                                Продолжить решение
+                                Пройти ещё раз
                             </button>
                         )}
 
-                        <div className="hidden sm:flex items-center gap-5 shrink-0">
-                            <div className="text-center">
-                                <div className="text-xl font-black text-[#3F8C62] leading-none">{isVariant ? result.score.toFixed(0) : `${pctScore}%`}</div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">{isVariant ? "тест. балл" : "результат"}</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-xl font-black text-gray-800 leading-none">{result.primary_score}<span className="text-gray-300 font-normal text-sm">/{isVariant ? 29 : totalCount}</span></div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">{isVariant ? "первичных" : "баллов"}</div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-xl font-black text-gray-800 leading-none">
-                                    {correctCount}<span className="text-gray-300 font-normal text-sm">/{totalCount}</span>
-                                </div>
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">верных</div>
-                            </div>
-                        </div>
+                        {isControl && (
+                            <button
+                                onClick={() => handleStart("practice")}
+                                disabled={startExamMutation.isPending}
+                                className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                            >
+                                Пройти ещё раз
+                            </button>
+                        )}
+
                     </div>
                 </div>
 
                 {/* Results cards + comment */}
-                <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4">
-                    <div className={clsx("flex flex-col gap-4", publishedAnalysis?.comment && "lg:flex-row lg:items-start")}>
-                        {taskResults.length > 0 && (
-                            <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {sortedResults.map((tr, idx) => {
-                                    const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
-                                    const isCorrect = tr.is_correct;
-                                    const isPartial = !isCorrect && tr.points > 0;
-                                    const isWrong = !isCorrect && !isPartial;
-                                    const hasCode = !!(tr.code_solution || reviewSavedCodes[tr.task_id]);
-                                    const hasFile = !!tr.file_solution_url;
-                                    const hasAction = hasCode || hasFile || !isCorrect;
-
-                                    return (
-                                        <div
-                                            key={tr.task_id}
-                                            className="exam-result-card exam-result-card--checked flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm"
-                                            style={{
-                                                backgroundColor: isCorrect ? '#d4edd4' : isWrong ? '#f5b5a8' : '#fde68a',
-                                                borderColor: isCorrect ? '#b6ddb6' : isWrong ? '#e8998a' : '#f5d06b',
-                                            }}
-                                            onClick={() => setReviewTaskId(tr.task_id)}
-                                        >
-                                            <span className="text-lg font-black shrink-0 w-8 text-center text-gray-800">
-                                                {tr.ege_number || idx + 1}
-                                            </span>
-
-                                            <div className="flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
-                                                <div className="min-w-0 max-w-[140px]">
-                                                    <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Ваш ответ</div>
-                                                    <div className={clsx("text-sm font-bold font-mono truncate", isWrong ? "text-red-600" : "text-gray-800")}>
-                                                        {formatAnswer(tr.user_answer)}
-                                                    </div>
-                                                </div>
-                                                {!isCorrect && (
-                                                    <div className="min-w-0 max-w-[140px]">
-                                                        <div className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Верный ответ</div>
-                                                        <div className="text-sm font-bold font-mono text-gray-800 truncate">
-                                                            {tr.auto_checked !== false ? formatAnswer(tr.correct_answer) : "вручную"}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <span className={clsx(
-                                                "text-xs font-bold px-2 py-1 rounded-lg shrink-0",
-                                                isCorrect ? "text-emerald-700 bg-emerald-100/60" : isPartial ? "text-amber-700 bg-amber-100/60" : "text-red-600 bg-red-100/60"
-                                            )}>
-                                                {tr.points}/{max}
-                                            </span>
-
-                                            {hasAction && (
-                                                <span className={clsx(
-                                                    "text-xs font-bold shrink-0 flex items-center gap-1",
-                                                    hasCode || hasFile ? "text-[#3F8C62]" : "text-violet-500"
-                                                )}>
-                                                    {hasCode || hasFile ? "Решение" : "Разбор"}
-                                                    <ChevronRight size={12} />
-                                                </span>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                <div className="mx-auto max-w-[1240px] space-y-4 px-4 py-6 md:py-6">
+                    <section className="flex flex-col gap-5 rounded-[22px] border border-gray-200 bg-white p-5 shadow-xl sm:flex-row sm:items-center md:p-6">
+                        <div className="flex h-[92px] w-[92px] shrink-0 items-center justify-center rounded-full border-[6px] border-[#00AD50]">
+                            <div className="flex h-full w-full flex-col items-center justify-center rounded-full">
+                                <strong className="text-2xl font-black leading-none text-gray-950">{primaryValue}</strong>
+                                <span className="mt-1 text-[10px] font-bold text-gray-400">из {primaryMax}</span>
                             </div>
-                        )}
+                        </div>
 
-                        {publishedAnalysis?.comment && (
-                            <div className="lg:w-72 xl:w-80 shrink-0">
-                                <div className="bg-violet-50 border border-violet-200 rounded-2xl overflow-hidden lg:sticky lg:top-4">
-                                    <div className="px-5 py-3 border-b border-violet-100 flex items-center gap-2">
-                                        <MessageSquare size={14} className="text-violet-500" />
-                                        <h2 className="text-sm font-bold text-violet-800">Комментарий учителя</h2>
-                                    </div>
-                                    <div className="p-5">
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">"{publishedAnalysis.comment}"</p>
-                                    </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400">
+                                {isVariant ? "Первичный балл" : "Результаты"}
+                            </p>
+                            <h2 className="mt-1 text-xl font-black text-gray-950 md:text-2xl">{resultTitle}</h2>
+                            <p className="mt-2 text-sm text-gray-400">
+                                Верных ответов: {correctCount} из {totalCount}
+                                {isVariant ? ". Тестовый балл рассчитан по шкале ЕГЭ" : ` · результат ${pctScore}%`}
+                            </p>
+                        </div>
+
+                        {isVariant ? (
+                            <div className="shrink-0 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-4">
+                                <div className="text-xs font-bold text-emerald-500">Тестовый балл</div>
+                                <div className="mt-1 text-3xl font-black text-gray-950">
+                                    {Number(result.score ?? 0).toFixed(0)}<span className="ml-1 text-sm text-gray-400">/100</span>
                                 </div>
                             </div>
+                        ) : (
+                            <div className="flex shrink-0 flex-wrap gap-2 sm:max-w-[250px] sm:justify-end">
+                                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-500">Верно: {correctCount}</span>
+                                <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-black text-red-500">Неверно: {wrongCount}</span>
+                                <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-black text-gray-400">Без ответа: {unansweredCount}</span>
+                            </div>
                         )}
-                    </div>
+                    </section>
+
+                    {publishedAnalysis?.comment && (
+                        <section className="rounded-2xl border border-sky-400/25 bg-sky-500/10 px-5 py-4">
+                            <div className="mb-1 flex items-center gap-2 text-xs font-bold text-sky-300">
+                                <MessageSquare size={14} />
+                                <span>Комментарий преподавателя</span>
+                            </div>
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{publishedAnalysis.comment}</p>
+                        </section>
+                    )}
+
+                    {taskResults.length > 0 && (
+                        <>
+                            <section className="hidden overflow-hidden rounded-[18px] border border-gray-200 bg-white md:block">
+                                <div className={clsx("grid", sortedResults.length > 14 ? "grid-cols-2" : "grid-cols-1")}>
+                                    {[sortedResults.slice(0, 14), sortedResults.slice(14)]
+                                        .filter(column => column.length > 0)
+                                        .map((column, columnIndex) => (
+                                            <table
+                                                key={columnIndex}
+                                                className={clsx("w-full table-fixed", columnIndex > 0 && "border-l border-gray-200")}
+                                            >
+                                                <TableHead />
+                                                <tbody>
+                                                    {column.map((tr, idx) => (
+                                                        <ResultRow key={tr.task_id} tr={tr} idx={columnIndex * 14 + idx} />
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ))}
+                                </div>
+                                <div className="flex items-center justify-between border-t border-gray-200 bg-gray-100 px-5 py-3.5 text-sm font-black text-gray-900">
+                                    <span>Итого</span>
+                                    <span>
+                                        {primaryValue} / {primaryMax}
+                                        {isVariant && ` · тестовых ${Number(result.score ?? 0).toFixed(0)}`}
+                                    </span>
+                                </div>
+                            </section>
+
+                            <section className="space-y-2 md:hidden">
+                                {sortedResults.map((tr, idx) => {
+                                    const max = tr.max_points ?? ((tr.ege_number && tr.ege_number >= 26) ? 2 : 1);
+                                    const notAutoChecked = tr.auto_checked === false;
+                                    const hasAnswer = formatAnswer(tr.user_answer) !== "—";
+                                    const isPartial = hasAnswer && !tr.is_correct && tr.points > 0;
+                                    const pointsTone = notAutoChecked || !hasAnswer
+                                        ? "border-gray-200 bg-gray-100 text-gray-400"
+                                        : tr.is_correct
+                                            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                                            : isPartial
+                                                ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                                                : "border-red-400/30 bg-red-500/10 text-red-300";
+
+                                    return (
+                                        <button
+                                            key={tr.task_id}
+                                            type="button"
+                                            onClick={() => setReviewTaskId(tr.task_id)}
+                                            className="flex w-full items-center gap-3 rounded-[14px] border border-gray-200 bg-white p-3.5 text-left transition hover:bg-gray-100/50"
+                                        >
+                                            <span className="w-7 shrink-0 text-base font-black text-gray-900">
+                                                {tr.ege_number || idx + 1}
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-[10px] font-bold text-gray-400">Ваш ответ</span>
+                                                <span className="block truncate font-mono text-xs font-semibold text-gray-700">
+                                                    {formatAnswer(tr.user_answer)}
+                                                </span>
+                                                <span className="mt-1 block text-[10px] font-bold text-gray-400">Правильный</span>
+                                                <span className="block truncate font-mono text-xs font-semibold text-gray-900">
+                                                    {notAutoChecked ? "по решению" : formatAnswer(tr.correct_answer)}
+                                                </span>
+                                            </span>
+                                            <span className={clsx("shrink-0 rounded-full border px-2.5 py-1 text-xs font-black", pointsTone)}>
+                                                {notAutoChecked ? "—" : `${tr.points} / ${max}`}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                                <div className="flex items-center justify-between rounded-[14px] border border-gray-200 bg-gray-100 px-4 py-3.5 text-sm font-black text-gray-900">
+                                    <span>Итого</span>
+                                    <span>{primaryValue} / {primaryMax}</span>
+                                </div>
+                            </section>
+
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <button
+                                    type="button"
+                                    onClick={() => sortedResults[0] && setReviewTaskId(sortedResults[0].task_id)}
+                                    className="min-h-12 flex-1 rounded-[14px] border border-gray-200 bg-transparent px-5 text-sm font-bold text-gray-700 transition hover:bg-gray-100/50"
+                                >
+                                    Просмотреть задания
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(examsReturnPath)}
+                                    className="min-h-12 flex-1 rounded-[14px] bg-[#00AD50] px-5 text-sm font-bold text-white transition hover:bg-[#009F49]"
+                                >
+                                    К вариантам
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
 
             {/* Review Panel — slide-out for viewing task after exam */}
@@ -1335,8 +1426,140 @@ export default function ExamPage() {
         );
     }
 
-    // Pre-start Screen — only for mock exams; regular variants auto-start
-    if (!examInfo.active_attempt) {
+    // Pre-start Screen
+    if (!examInfo.active_attempt || (isSelectableVariant && (!examInfo.active_attempt.mode || forceModeSelection))) {
+        if (isSelectableVariant) {
+            const hours = Math.floor(examInfo.time_limit_minutes / 60);
+            const minutes = examInfo.time_limit_minutes % 60;
+            const limitText = hours > 0
+                ? `${hours} ч${minutes ? ` ${minutes} мин` : ""}`
+                : `${minutes} мин`;
+
+            const modeOptions: Array<{
+                mode: ExamMode;
+                title: string;
+                badge: string;
+                description: string;
+                accent: "green" | "blue";
+                metric: string;
+                metricCaption: string;
+                benefits: string[];
+                action: string;
+            }> = [
+                {
+                    mode: "practice",
+                    title: "Тренировка",
+                    badge: "Без времени",
+                    description: "Решайте в своём темпе и сразу узнавайте, верно ли ответили.",
+                    accent: "green",
+                    metric: "Без лимита",
+                    metricCaption: "по времени",
+                    benefits: [
+                        "Ограничения по времени нет",
+                        "После ответа сразу виден результат",
+                        "Можно исправлять ответы и разбирать ошибки",
+                    ],
+                    action: "Начать тренировку",
+                },
+                {
+                    mode: "exam",
+                    title: "Пробник",
+                    badge: "На время",
+                    description: "Как на экзамене: идёт время, а ответы проверяются только после завершения.",
+                    accent: "blue",
+                    metric: limitText,
+                    metricCaption: "на весь вариант",
+                    benefits: [
+                        "Ответы можно менять, пока идёт время",
+                        "Правильные ответы скрыты до завершения",
+                        "После сдачи видны первичный и тестовый баллы",
+                    ],
+                    action: "Начать пробник",
+                },
+            ];
+
+            return (
+                <div className="exam-dark min-h-screen bg-[#F8F7F4]">
+                    <header className="border-b border-gray-200 bg-white">
+                        <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 md:px-6">
+                            <button
+                                onClick={() => navigate(examsReturnPath)}
+                                className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
+                            >
+                                <ArrowLeft size={17} />
+                                Назад
+                            </button>
+                            <div className="h-6 w-px bg-gray-200" />
+                            <h1 className="truncate text-sm font-black text-gray-900">{currentTopic.title}</h1>
+                        </div>
+                    </header>
+
+                    <main className="mx-auto max-w-6xl px-4 py-10 md:px-6 md:py-14">
+                        <div className="mb-8 text-center">
+                            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
+                                {currentTopic.title} · {examInfo.task_count} заданий
+                            </p>
+                            <h2 className="text-3xl font-black text-gray-950 md:text-4xl">Выберите режим</h2>
+                            <p className="mt-3 text-sm text-gray-400">Режим фиксируется для этой попытки и после запуска не меняется</p>
+                        </div>
+
+                        <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
+                            {modeOptions.map((option) => {
+                                const isPractice = option.accent === "green";
+                                return (
+                                    <section
+                                        key={option.mode}
+                                        className={clsx(
+                                            "flex min-h-[470px] flex-col rounded-[28px] border bg-white p-6 shadow-xl md:p-8",
+                                            isPractice ? "border-emerald-500/25" : "border-sky-500/25",
+                                        )}
+                                    >
+                                        <span className={clsx(
+                                            "mb-7 w-fit rounded-full border px-3 py-1.5 text-xs font-black",
+                                            isPractice
+                                                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-500"
+                                                : "border-sky-500/35 bg-sky-500/10 text-sky-500",
+                                        )}>
+                                            {option.badge}
+                                        </span>
+                                        <h3 className="text-3xl font-black text-gray-950">{option.title}</h3>
+                                        <p className="mt-3 min-h-[52px] text-sm leading-6 text-gray-400">{option.description}</p>
+
+                                        <div className="my-7 border-y border-gray-200 py-6">
+                                            <strong className="text-3xl font-black text-gray-950 md:text-4xl">{option.metric}</strong>
+                                            <span className="ml-3 text-xs text-gray-400">{option.metricCaption}</span>
+                                        </div>
+
+                                        <ul className="mb-8 space-y-4">
+                                            {option.benefits.map((benefit) => (
+                                                <li key={benefit} className="flex items-start gap-3 text-sm font-medium leading-5 text-gray-700">
+                                                    <CheckCircle2 size={19} className={clsx("mt-0.5 shrink-0", isPractice ? "text-emerald-500" : "text-sky-500")} />
+                                                    {benefit}
+                                                </li>
+                                            ))}
+                                        </ul>
+
+                                        <button
+                                            onClick={() => handleStart(option.mode)}
+                                            disabled={startExamMutation.isPending}
+                                            className={clsx(
+                                                "mt-auto w-full rounded-2xl py-4 text-sm font-black text-white shadow-lg transition disabled:cursor-wait disabled:opacity-60",
+                                                isPractice
+                                                    ? "bg-emerald-500 shadow-emerald-500/20 hover:bg-emerald-600"
+                                                    : "bg-sky-500 shadow-sky-500/20 hover:bg-sky-600",
+                                            )}
+                                        >
+                                            {startExamMutation.isPending ? "Подготовка..." : option.action}
+                                        </button>
+                                    </section>
+                                );
+                            })}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
         if (!isMock) {
             // Auto-starting via useEffect — show spinner
             return (
@@ -1382,14 +1605,14 @@ export default function ExamPage() {
 
                     <div className="flex flex-col gap-3">
                         <button
-                            onClick={handleStart}
+                            onClick={() => handleStart("exam")}
                             disabled={startExamMutation.isPending}
                             className="w-full py-3.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50"
                         >
                             {startExamMutation.isPending ? "Подготовка..." : "Начать вариант"}
                         </button>
                         <button
-                            onClick={() => navigate('/exams')}
+                            onClick={() => navigate(examsReturnPath)}
                             className="w-full py-3.5 text-gray-500 hover:text-gray-700 font-bold transition-all"
                         >
                             Отмена
@@ -1407,7 +1630,7 @@ export default function ExamPage() {
             <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
                 <div className="flex h-full items-center gap-3 md:gap-4 min-w-0">
                     <button
-                        onClick={() => navigate('/exams')}
+                        onClick={() => navigate(examsReturnPath)}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
                         title="К выбору варианта"
                     >
@@ -1435,9 +1658,17 @@ export default function ExamPage() {
                     <h1 className="truncate text-base font-black leading-none text-gray-950">
                         {currentTopic.title}
                     </h1>
+                    <span className={clsx(
+                        "hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide sm:inline-flex",
+                        isExamMode
+                            ? "border-sky-500/30 bg-sky-500/10 text-sky-500"
+                            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
+                    )}>
+                        {isControl ? "Контрольная" : isExamMode ? "Пробник" : "Тренировка"}
+                    </span>
                 </div>
 
-                {isMock && (
+                {canFinishExam && (
                     <button
                         onClick={handleSubmit}
                         disabled={isSubmitting}
@@ -1614,25 +1845,33 @@ export default function ExamPage() {
                     >
                         {tasks.map((t, idx) => {
                             const score = taskScores[t.id];
-                            const hasAnswer = examAnswers[t.id] !== undefined && examAnswers[t.id] !== "";
+                            const savedAnswer = examAnswers[t.id];
+                            const hasAnswer = savedAnswer !== undefined
+                                && savedAnswer !== ""
+                                && JSON.stringify(savedAnswer) !== JSON.stringify([]);
                             const isActive = idx === taskIndex;
                             let btnClass = 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:text-gray-600';
-                            if (isActive) {
-                                btnClass = 'bg-[#3F8C62] border-[#3F8C62] text-white shadow-md';
-                            } else if (score) {
+                            if (score) {
                                 btnClass = score.is_correct
                                     ? 'bg-emerald-50 border-emerald-300 text-[#3F8C62]'
                                     : score.points > 0
                                         ? 'bg-amber-50 border-amber-300 text-amber-700'
                                         : 'bg-red-50 border-red-200 text-red-500';
                             } else if (hasAnswer) {
-                                btnClass = 'bg-gray-100 border-gray-200 text-gray-600';
+                                btnClass = 'bg-sky-50 border-sky-300 text-sky-700';
                             }
+                            const activeClass = isActive
+                                ? 'ring-2 ring-[#3F8C62] ring-offset-2 ring-offset-[#F8F7F4] shadow-sm'
+                                : '';
                             return (
                                 <button
                                     key={t.id}
                                     onClick={() => selectExamTask(idx)}
-                                    className={clsx('w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border-2', btnClass)}
+                                    className={clsx(
+                                        'w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border',
+                                        btnClass,
+                                        activeClass
+                                    )}
                                 >
                                     {idx + 1}
                                 </button>
@@ -1717,9 +1956,10 @@ export default function ExamPage() {
                                         onChange={setCurrentAnswer}
                                         disabled={isSubmitting}
                                         egeNumber={task?.ege_number}
-                                        isMath={String(currentTopic?.category) === "math"}
+                                        isMath={isMathTask}
+                                        examType={taskExamType}
                                     />
-                                    {task && String(currentTopic?.category) === "math" && (task.ege_number === 14 || task.ege_number === 17) && (
+                                    {task && isEgeMathTask && (task.ege_number === 14 || task.ege_number === 17) && (
                                         <div className="grid grid-cols-1 gap-2">
                                             <button
                                                 type="button"
@@ -1831,8 +2071,8 @@ export default function ExamPage() {
                                         </button>
                                     )}
 
-                                    {/* Live answer feedback for non-mock */}
-                                    {!isMock && task && taskScores[task.id] !== undefined && !isAnswerChanged && (
+                                    {/* Immediate feedback is available in training and control modes only. */}
+                                    {showImmediateFeedback && task && taskScores[task.id] !== undefined && !isAnswerChanged && (
                                         <div className={clsx(
                                             "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold",
                                             taskScores[task.id].is_correct

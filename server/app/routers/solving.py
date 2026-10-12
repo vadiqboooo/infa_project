@@ -667,11 +667,12 @@ async def get_own_task_solution(task_id: int, user: User = Depends(get_current_u
             recognized_text=None,
             comments=[],
         )
-    if solution is not None:
-        if not solution.code and exam_solution.get("code"):
-            solution.code = exam_solution["code"]
-        if not solution.file_url and exam_solution.get("file_url"):
-            solution.file_url = exam_solution["file_url"]
+    if solution is not None and exam_solution:
+        # Fill only the response; mutating the ORM row would persist exam drafts as the student's solution.
+        out = _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)
+        out.code = solution.code or exam_solution.get("code")
+        out.file_url = solution.file_url or exam_solution.get("file_url")
+        return out
     return _solution_out(task_id, solution, comments, reactions_by_comment_id, versions)
 
 
@@ -1327,6 +1328,8 @@ async def check_answer(
         progress.last_attempt_at = datetime.now(timezone.utc)
         if correct:
             progress.status = ProgressStatus.solved
+    progress.last_answer = body.model_dump(exclude_none=True)
+    progress.last_correct = correct
 
     await db.commit()
     await db.refresh(progress)

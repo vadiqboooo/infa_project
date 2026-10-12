@@ -22,7 +22,14 @@
       "PowerShell(Get-Command *)",
       "PowerShell(cmd /c 'claude mcp add magic --scope user --env API_KEY=\"19932e5b9dd0755bb6603ffb3d389ab72c025228569fa502c7db3b27485a71b6\" -- npx -y @21st-dev/magic@latest')",
       "PowerShell(cmd /c \"claude mcp list\")",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(npx tsc *)",
+      "Bash(python -)",
+      "Bash(python -c \"import ast,sys;[ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in ['app/routers/group_plan.py','app/schemas/group_plan.py']];print\\('syntax ok'\\)\")",
+      "Bash(python -c \"from app.routers import group_plan; print\\([r.path for r in group_plan.admin_router.routes if 'progress' in r.path]\\)\")",
+      "Bash(grep -n \"to=\\\\\"/\\\\|to=\\\\\"/dashboard\\\\|Главная\" src/components/Sidebar.tsx)",
+      "Bash(python -c \"from app.routers import group_plan; print\\([r.path for r in group_plan.admin_router.routes if 'results' in r.path]\\)\")",
+      "Bash(python \"C:/Users/vadiq/AppData/Local/Temp/claude/c--Users-vadiq-OneDrive-Desktop-DEV-MODE-infa-project/b8476f40-659f-4bf6-869f-55865ca72c58/scratchpad/apply_stats.py\")"
     ]
   }
 }

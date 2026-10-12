@@ -53,6 +53,7 @@ class TaskResult(BaseModel):
 
 class ExamResult(BaseModel):
     attempt_id: int
+    mode: str
     total_tasks: int
     correct_count: int
     primary_score: int

@@ -89,3 +89,67 @@ class GroupPlanArticleOptionOut(BaseModel):
 class GroupPlanResourcesOut(BaseModel):
     topics: list[GroupPlanTopicOptionOut] = Field(default_factory=list)
     articles: list[GroupPlanArticleOptionOut] = Field(default_factory=list)
+
+
+class LessonStudentOut(BaseModel):
+    id: int
+    name: str
+    last_active_at: datetime
+
+
+class LessonItemStudentProgress(BaseModel):
+    user_id: int
+    solved: int = 0
+    total: int = 0
+    completion_status: str = "not_started"
+
+
+class LessonItemProgressOut(GroupLessonItemOut):
+    progress: list[LessonItemStudentProgress] = Field(default_factory=list)
+
+
+class LessonProgressLessonOut(BaseModel):
+    id: int
+    title: str
+    lesson_at: datetime
+    homework_deadline: datetime | None = None
+    status: str
+    items: list[LessonItemProgressOut] = Field(default_factory=list)
+
+
+class GroupLessonProgressOut(BaseModel):
+    group_id: int
+    group_name: str
+    group_color: str
+    students: list[LessonStudentOut] = Field(default_factory=list)
+    lessons: list[LessonProgressLessonOut] = Field(default_factory=list)
+
+
+class TaskResultCell(BaseModel):
+    state: Literal["none", "ok", "bad"] = "none"
+    answer: str = ""
+
+
+class TaskResultTask(BaseModel):
+    task_id: int
+    number: int
+    correct: str = ""
+
+
+class TaskResultRow(BaseModel):
+    user_id: int
+    cells: list[TaskResultCell] = Field(default_factory=list)
+
+
+class TaskResultStep(BaseModel):
+    item_id: int
+    title: str
+    section: str
+    tasks: list[TaskResultTask] = Field(default_factory=list)
+    rows: list[TaskResultRow] = Field(default_factory=list)
+
+
+class LessonTaskResultsOut(BaseModel):
+    lesson_id: int
+    steps: list[TaskResultStep] = Field(default_factory=list)
+

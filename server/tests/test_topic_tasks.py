@@ -113,6 +113,23 @@ class TopicTaskTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await db.get(Task, 10)).topic_id, 1)
             self.assertEqual((await db.get(Task, 20)).topic_id, 2)
 
+    async def test_topic_exam_type_is_synced_to_tasks_and_public_task(self):
+        response = await self.client.put(
+            "/topics/1",
+            json={"title": "Source", "subject": "math", "exam_type": "oge"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        public_task = await self.client.get("/tasks/10")
+        self.assertEqual(public_task.status_code, 200, public_task.text)
+        self.assertEqual(public_task.json()["subject"], "math")
+        self.assertEqual(public_task.json()["exam_type"], "oge")
+
+        async with self.sessions() as db:
+            stored = await db.get(Task, 10)
+            self.assertEqual(stored.subject, "math")
+            self.assertEqual(stored.exam_type, "oge")
+
     async def test_detach_requires_admin_credentials(self):
         del self.app.dependency_overrides[verify_parser_api_key]
         response = await self.client.delete("/topics/1/tasks/10")

@@ -45,7 +45,7 @@ import { StudentsTable } from "../components/admin/StudentsTable";
 import { StudentDetail } from "../components/admin/StudentDetail";
 import { TopicStats } from "../components/admin/TopicStats";
 import { StudentTaskSolutionReviewModal } from "../components/admin/StudentTaskSolutionReviewModal";
-import { ImportTopicModal } from "../components/admin/ImportTopicModal";
+import { TopicsPanel, type KompegeImportParams, type NewTopicParams } from "../components/admin/TopicsPanel";
 import AdminImportPdfPage from "./AdminImportPdfPage";
 import { GroupPlanEditor } from "../components/admin/GroupPlanEditor";
 import { SubjectSettingsPanel } from "../components/admin/SubjectSettingsPanel";
@@ -59,7 +59,7 @@ const API_BASE = "/api";
 const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
 
 type AdminDashboardState = {
-    activeTab?: 'topics' | 'articles' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
+    activeTab?: 'home' | 'topics' | 'articles' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
     search?: string;
     filter?: FilterCategory;
     egeNumberFilter?: string;
@@ -111,6 +111,8 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
         return res.json();
     });
 }
+
+type AdminSection = 'topics' | 'articles' | 'students' | 'subscriptions' | 'metrics' | 'settings';
 
 type FilterCategory = 'все' | 'learning' | 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
@@ -251,7 +253,7 @@ export default function AdminPage() {
 
 function AdminDashboard({ apiKey }: { apiKey: string }) {
     const savedState = readAdminDashboardState();
-    const [activeTab, setActiveTab] = useState<'topics' | 'articles' | 'students' | 'subscriptions' | 'metrics' | 'settings'>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab ?? 'topics');
+    const [activeTab, setActiveTab] = useState<AdminSection>(savedState.activeTab === 'plans' ? 'subscriptions' : savedState.activeTab && savedState.activeTab !== 'home' ? savedState.activeTab : 'topics');
     const [topics, setTopics] = useState<TopicAdmin[]>([]);
     const [students, setStudents] = useState<StudentOut[]>([]);
     const [groups, setGroups] = useState<GroupOut[]>([]);
@@ -260,13 +262,6 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     const [search, setSearch] = useState(savedState.search ?? "");
     const [filter, setFilter] = useState<FilterCategory>(normalizeTopicFilter(savedState.filter));
     const [egeNumberFilter, setEgeNumberFilter] = useState(savedState.egeNumberFilter ?? 'all');
-    const [showImport, setShowImport] = useState(false);
-    const [showCreateTopic, setShowCreateTopic] = useState(false);
-    const [newTopicTitle, setNewTopicTitle] = useState("");
-    const [newTopicSubject, setNewTopicSubject] = useState<'informatics' | 'math'>('informatics');
-    const [newTopicExamType, setNewTopicExamType] = useState<'ege' | 'oge'>('ege');
-    const [createTopicError, setCreateTopicError] = useState("");
-    const [creatingTopic, setCreatingTopic] = useState(false);
     const topicsScrollRef = useRef<HTMLDivElement | null>(null);
     const studentsScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -294,6 +289,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
 
     useEffect(() => {
         saveAdminDashboardState({ activeTab, search, filter, egeNumberFilter });
@@ -336,46 +332,43 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
         });
     }, [activeTab, loading, students.length, filteredTopics.length]);
 
-    const handleCreateTopic = async (event: React.FormEvent) => {
-        event.preventDefault();
-        const title = newTopicTitle.trim();
-        if (!title) {
-            setCreateTopicError("Введите название топика");
-            return;
-        }
+    const EXAM_MINUTES = { ege: 235, oge: 150 } as const;
 
-        try {
-            setCreatingTopic(true);
-            setCreateTopicError("");
-            const body: TopicIn = {
-                title,
-                order_index: topics.length,
-                category: 'tutorial' as TopicCategory,
-                subject: newTopicSubject,
-                exam_type: newTopicExamType,
-                course_type: 'year',
-                time_limit_minutes: 60,
-                is_mock: false,
-                open_to_groups: false,
-                show_in_tasks: true,
-            };
-            const createdTopic = await adminFetch<TopicAdmin>("/admin/topics", apiKey, {
-                method: "POST",
-                body: JSON.stringify(body),
-            });
-            setShowCreateTopic(false);
-            setNewTopicTitle("");
-            queryClient.invalidateQueries({ queryKey: ["navigation"] });
-            navigate(`/admin/topics/${createdTopic.id}`);
-        } catch (error) {
-            setCreateTopicError(error instanceof Error ? error.message : "Не удалось создать топик");
-        } finally {
-            setCreatingTopic(false);
-        }
+    const topicCategoryOf = (p: NewTopicParams) => (p.cat === "variants" && p.trial ? "mock" : p.cat) as TopicCategory;
+
+    const handleCreateTopic = async (p: NewTopicParams) => {
+        const isVariant = p.cat === "variants";
+        const body: TopicIn = {
+            title: p.title,
+            order_index: topics.length,
+            category: topicCategoryOf(p),
+            subject: p.subject,
+            exam_type: p.exam,
+            course_type: isVariant ? "common" : "year",
+            time_limit_minutes: isVariant ? EXAM_MINUTES[p.exam] : 60,
+            is_mock: isVariant && p.trial,
+            open_to_groups: false,
+            show_in_tasks: false,
+            ege_number: p.egeNumber,
+            ege_number_end: null,
+        };
+        const createdTopic = await adminFetch<TopicAdmin>("/admin/topics", apiKey, {
+            method: "POST",
+            body: JSON.stringify(body),
+        });
+        queryClient.invalidateQueries({ queryKey: ["navigation"] });
+        navigate(`/admin/topics/${createdTopic.id}`);
     };
 
+    const handleImportKompege = (p: KompegeImportParams) =>
+        handleImportVariant(p.title, p.variantId, {
+            category: topicCategoryOf(p) as "tutorial" | "homework" | "control" | "variants" | "math" | "mock",
+            course_type: p.cat === "variants" ? "common" : "year",
+            ege_number: p.egeNumber,
+            ege_number_end: null,
+        });
+
     const handleDeleteTopic = async (id: number) => {
-        if (!confirm("Удалить топик? Это удалит все задачи внутри.")) return;
         await adminFetch(`/admin/topics/${id}`, apiKey, { method: "DELETE" });
         queryClient.invalidateQueries({ queryKey: ["navigation"] });
         await loadData();
@@ -449,7 +442,6 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 method: "POST",
                 body: JSON.stringify({ variant_id, topic_title }),
             });
-            setShowImport(false);
             // Navigate to the import editor pre-populated with kompege data
             navigate('import-pdf', {
                 state: {
@@ -576,330 +568,23 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
 
             {activeTab === "topics" ? (
                 <div className="flex-1 flex flex-col min-h-0">
-                    {/* Filters Row */}
-                    <div className="mb-6 flex flex-wrap items-center gap-3">
-                        <div className="relative flex-1 max-w-sm">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Поиск по топику или № задания..."
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#3F8C62]/20 focus:border-[#3F8C62] bg-white transition-all shadow-sm"
-                            />
-                        </div>
-
-                        <div className="flex w-full gap-2 lg:hidden">
-                            <label className="relative min-w-0 flex-1">
-                                <select value={egeNumberFilter} onChange={(event) => setEgeNumberFilter(event.target.value)} className="admin-table-filter h-10 w-full px-3 pr-8 text-xs">
-                                    <option value="all">Все номера</option>
-                                    {egeNumberOptions.map((number) => <option key={number} value={number}>№ {number}</option>)}
-                                </select>
-                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            </label>
-                            <label className="relative min-w-0 flex-1">
-                                <select value={filter} onChange={(event) => setFilter(event.target.value as FilterCategory)} className="admin-table-filter h-10 w-full px-3 pr-8 text-xs">
-                                    {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.key === 'все' ? 'Все категории' : option.label}</option>)}
-                                </select>
-                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            </label>
-                        </div>
-
-                        <div className="ml-auto flex items-center gap-2">
-                            <button
-                                onClick={() => setShowImport(true)}
-                                className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-bold transition-all"
-                            >
-                                <Download size={16} />
-                                Kompege
-                            </button>
-                            <button
-                                onClick={() => navigate('import-pdf')}
-                                className="flex items-center gap-2 px-4 py-2.5 border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-sm font-bold transition-all"
-                            >
-                                <FileText size={16} />
-                                PDF / LaTeX
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setCreateTopicError("");
-                                    setShowCreateTopic(true);
-                                }}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#3F8C62] hover:bg-[#357A54] text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20"
-                            >
-                                <Plus size={16} />
-                                Новый топик
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Topics Table */}
                     <div
                         ref={topicsScrollRef}
                         onScroll={(e) => saveAdminDashboardState({ topicsScrollTop: e.currentTarget.scrollTop })}
                         className="flex-1 overflow-y-auto"
                     >
-                        <div className="rounded-2xl bg-gradient-to-br from-violet-100 via-sky-100 to-emerald-50 p-3 shadow-sm">
-                            <div className="hidden lg:grid grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_140px] gap-4 px-4 pb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                                <label className="relative block">
-                                    <span className="sr-only">Фильтр по номеру задания</span>
-                                    <select
-                                        value={egeNumberFilter}
-                                        onChange={(event) => setEgeNumberFilter(event.target.value)}
-                                        className="admin-table-filter h-8 w-full px-2 pr-7 text-center text-[11px]"
-                                    >
-                                        <option value="all">Все номера</option>
-                                        {egeNumberOptions.map((number) => <option key={number} value={number}>№ {number}</option>)}
-                                    </select>
-                                    <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                                </label>
-                                <span>Топик</span>
-                                <label className="relative block">
-                                    <span className="sr-only">Фильтр по категории</span>
-                                    <select
-                                        value={filter}
-                                        onChange={(event) => setFilter(event.target.value as FilterCategory)}
-                                        className="admin-table-filter h-8 w-full px-2 pr-7 text-[11px]"
-                                    >
-                                        {FILTER_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.key === 'все' ? 'Все категории' : option.label}</option>)}
-                                    </select>
-                                    <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                                </label>
-                                <span className="text-center">Задач</span>
-                                <span className="text-right">Управление</span>
-                            </div>
-
-                            <div className="space-y-2">
-                                {loading ? (
-                                    [1, 2, 3].map((i) => (
-                                        <div key={i} className="h-[76px] rounded-xl bg-white/70 border border-white/80 animate-pulse" />
-                                    ))
-                                ) : filteredTopics.map((topic) => (
-                                    <div
-                                        key={topic.id}
-                                        onClick={() => navigate(`topics/${topic.id}`)}
-                                        className="grid grid-cols-1 lg:grid-cols-[120px_minmax(280px,1.5fr)_minmax(140px,0.8fr)_110px_140px] gap-4 items-center rounded-xl bg-white/90 border border-white/80 px-4 py-3 shadow-sm cursor-pointer hover:bg-white transition-colors group"
-                                    >
-                                        <div className="lg:text-center">
-                                            <span className={clsx(
-                                                "inline-flex min-w-12 items-center justify-center rounded-xl px-3 py-1.5 text-xs font-black",
-                                                topic.ege_number == null
-                                                    ? "bg-gray-100 text-gray-400"
-                                                    : "bg-[#3F8C62]/10 text-[#3F8C62]"
-                                            )}>
-                                                {topicEgeLabel(topic)}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="w-11 h-11 rounded-xl bg-[#3F8C62]/10 flex items-center justify-center shrink-0">
-                                                <FolderOpen size={19} className="text-[#3F8C62]" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <div className="text-sm font-bold text-gray-900 truncate group-hover:text-[#3F8C62] transition-colors">{topic.title}</div>
-                                                <div className="mt-1 text-[11px] text-gray-500">ЕГЭ {topicEgeLabel(topic)}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                            <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', subjectColor(topic.subject, topic.category))}>
-                                                {subjectLabel(topic.subject, topic.category)}
-                                            </span>
-                                            <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
-                                                {categoryLabel(topic.category)}
-                                            </span>
-                                            <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                {courseTypeLabel(topic.course_type)}
-                                            </span>
-                                            {topic.is_mock && (
-                                                <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                    Пробник
-                                                </span>
-                                            )}
-                                            {topic.open_to_groups && (
-                                                <span className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                    Для групп
-                                                </span>
-                                            )}
-                                            {topic.show_in_tasks === false && (
-                                                <span className="px-2.5 py-1 bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                    Скрыт из заданий
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="lg:text-center">
-                                            <span className="inline-flex items-center justify-center rounded-xl bg-gray-100 px-3 py-1.5 text-xs font-black text-gray-700">
-                                                {topic.task_count}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center justify-start lg:justify-end gap-1.5">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleToggleTopicTasksVisibility(topic);
-                                                }}
-                                                title={topic.show_in_tasks === false ? "Показать во вкладке «Задания»" : "Скрыть из вкладки «Задания»"}
-                                                className={clsx(
-                                                    "p-2 rounded-lg transition-all",
-                                                    topic.show_in_tasks === false
-                                                        ? "text-gray-600 bg-gray-100 hover:bg-gray-200"
-                                                        : "text-[#3F8C62] bg-emerald-50 hover:bg-emerald-100"
-                                                )}
-                                            >
-                                                {topic.show_in_tasks === false ? <EyeOff size={16} /> : <Eye size={16} />}
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleToggleTopicGroupAccess(topic);
-                                                }}
-                                                title={topic.open_to_groups ? "Закрыть для групп" : "Открыть для групп"}
-                                                className={clsx(
-                                                    "p-2 rounded-lg transition-all",
-                                                    topic.open_to_groups
-                                                        ? "text-teal-700 bg-teal-50 hover:bg-teal-100"
-                                                        : "text-gray-400 hover:text-teal-700 hover:bg-teal-50"
-                                                )}
-                                            >
-                                                <Users size={16} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigate(`topics/${topic.id}/stats`);
-                                                }}
-                                                title="Статистика"
-                                                className="p-2 rounded-lg text-gray-500 hover:text-[#3F8C62] hover:bg-emerald-50 transition-all"
-                                            >
-                                                <Download size={16} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDeleteTopic(topic.id);
-                                                }}
-                                                title="Удалить"
-                                                className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {!loading && filteredTopics.length === 0 && (
-                                <div className="text-center py-20 text-gray-400 bg-white/80 rounded-xl">
-                                    <FolderOpen size={42} className="mx-auto mb-3 opacity-25" />
-                                    <p className="text-sm font-bold text-gray-900">Топики не найдены</p>
-                                    <p className="text-sm">Попробуйте изменить параметры фильтрации</p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="hidden">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase font-bold tracking-wider border-b border-gray-100">
-                                        <th className="px-6 py-4 w-28 text-center">№ задания</th>
-                                        <th className="px-6 py-4">Топик</th>
-                                        <th className="px-6 py-4 w-40">Категория</th>
-                                        <th className="px-6 py-4 w-28 text-center">Задач</th>
-                                        <th className="px-6 py-4 w-20"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {loading ? (
-                                        [1,2,3].map(i => (
-                                            <tr key={i} className="animate-pulse">
-                                                <td colSpan={5} className="px-6 py-4 h-16 bg-white" />
-                                            </tr>
-                                        ))
-                                    ) : filteredTopics.map((topic) => (
-                                        <tr
-                                            key={topic.id}
-                                            onClick={() => navigate(`topics/${topic.id}`)}
-                                            className="hover:bg-gray-50/80 transition-all cursor-pointer group"
-                                        >
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={clsx(
-                                                    "inline-flex min-w-9 items-center justify-center rounded-xl px-2.5 py-1 text-xs font-black",
-                                                    topic.ege_number == null
-                                                        ? "bg-gray-100 text-gray-400"
-                                                        : "bg-[#3F8C62]/10 text-[#3F8C62]"
-                                                )}>
-                                                    {topicEgeLabel(topic)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-xl bg-[#3F8C62]/10 flex items-center justify-center shrink-0">
-                                                        <FolderOpen size={18} className="text-[#3F8C62]" />
-                                                    </div>
-                                                    <p className="text-sm font-bold text-gray-900 group-hover:text-[#3F8C62] transition-colors">{topic.title}</p>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={clsx('px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide', categoryColor(topic.category))}>
-                                                        {categoryLabel(topic.category)}
-                                                    </span>
-                                                    <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                        {courseTypeLabel(topic.course_type)}
-                                                    </span>
-                                                    {topic.is_mock && (
-                                                        <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                            Пробник
-                                                        </span>
-                                                    )}
-                                                    {topic.open_to_groups && (
-                                                        <span className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-lg text-[10px] font-bold uppercase tracking-wide">
-                                                            Для групп
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="text-xs font-bold text-gray-500">{topic.task_count}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            navigate(`topics/${topic.id}/stats`);
-                                                        }}
-                                                        title="Статистика"
-                                                        className="p-2 rounded-lg text-gray-300 hover:text-[#3F8C62] hover:bg-emerald-50 transition-all"
-                                                    >
-                                                        <Download size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteTopic(topic.id);
-                                                        }}
-                                                        className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-
-                            {!loading && false && filteredTopics.length === 0 && (
-                                <div className="text-center py-24 text-gray-400">
-                                    <FolderOpen size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p className="text-lg font-bold text-gray-900">Топики не найдены</p>
-                                    <p className="text-sm">Попробуйте изменить параметры фильтрации</p>
-                                </div>
-                            )}
-                        </div>
+                        <TopicsPanel
+                            topics={topics}
+                            loading={loading}
+                            onOpen={(id) => navigate(`topics/${id}`)}
+                            onStats={(id) => navigate(`topics/${id}/stats`)}
+                            onToggleTasks={handleToggleTopicTasksVisibility}
+                            onToggleGroups={handleToggleTopicGroupAccess}
+                            onDelete={handleDeleteTopic}
+                            onCreate={handleCreateTopic}
+                            onImportKompege={handleImportKompege}
+                            onImportFile={() => navigate("import-pdf")}
+                        />
                     </div>
                 </div>
             ) : activeTab === "articles" ? (
@@ -928,151 +613,6 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                 <MetricsPanel metrics={metrics} loading={loading && !metrics} />
             )}
 
-            {showImport && (
-                <ImportTopicModal
-                    onClose={() => setShowImport(false)}
-                    onImportVariant={handleImportVariant}
-                />
-            )}
-
-            {showCreateTopic && (
-                <CreateTopicDialog
-                    title={newTopicTitle}
-                    subject={newTopicSubject}
-                    examType={newTopicExamType}
-                    error={createTopicError}
-                    submitting={creatingTopic}
-                    onTitleChange={setNewTopicTitle}
-                    onSubjectChange={setNewTopicSubject}
-                    onExamTypeChange={setNewTopicExamType}
-                    onClose={() => setShowCreateTopic(false)}
-                    onSubmit={handleCreateTopic}
-                />
-            )}
-
-        </div>
-    );
-}
-
-function CreateTopicDialog({
-    title,
-    subject,
-    examType,
-    error,
-    submitting,
-    onTitleChange,
-    onSubjectChange,
-    onExamTypeChange,
-    onClose,
-    onSubmit,
-}: {
-    title: string;
-    subject: 'informatics' | 'math';
-    examType: 'ege' | 'oge';
-    error: string;
-    submitting: boolean;
-    onTitleChange: (value: string) => void;
-    onSubjectChange: (value: 'informatics' | 'math') => void;
-    onExamTypeChange: (value: 'ege' | 'oge') => void;
-    onClose: () => void;
-    onSubmit: (event: React.FormEvent) => void;
-}) {
-    return (
-        <div
-            className="admin-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-            role="presentation"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget && !submitting) onClose();
-            }}
-        >
-            <form
-                onSubmit={onSubmit}
-                className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="create-topic-title"
-            >
-                <div className="mb-5 flex items-start justify-between gap-4">
-                    <div>
-                        <h2 id="create-topic-title" className="text-xl font-bold text-gray-900">Новый топик</h2>
-                        <p className="mt-1 text-sm text-gray-500">Укажите основные параметры. Задания можно добавить на следующем шаге.</p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={submitting}
-                        className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
-                        aria-label="Закрыть"
-                    >
-                        <X size={18} />
-                    </button>
-                </div>
-
-                <div className="space-y-4">
-                    <label className="block">
-                        <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Название топика</span>
-                        <input
-                            value={title}
-                            onChange={(event) => onTitleChange(event.target.value)}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
-                            placeholder="Например, Задание 14 — Системы счисления"
-                            autoFocus
-                            disabled={submitting}
-                        />
-                    </label>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label className="block">
-                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Предмет</span>
-                            <select
-                                value={subject}
-                                onChange={(event) => onSubjectChange(event.target.value as 'informatics' | 'math')}
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
-                                disabled={submitting}
-                            >
-                                <option value="informatics">Информатика</option>
-                                <option value="math">Математика</option>
-                            </select>
-                        </label>
-                        <label className="block">
-                            <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-gray-500">Тип экзамена</span>
-                            <select
-                                value={examType}
-                                onChange={(event) => onExamTypeChange(event.target.value as 'ege' | 'oge')}
-                                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#3F8C62] focus:ring-2 focus:ring-[#3F8C62]/15"
-                                disabled={submitting}
-                            >
-                                <option value="ege">ЕГЭ</option>
-                                <option value="oge">ОГЭ</option>
-                            </select>
-                        </label>
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-                        {error}
-                    </div>
-                )}
-
-                <div className="mt-6 flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={submitting}
-                        className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
-                    >
-                        Отмена
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={submitting}
-                        className="rounded-xl bg-[#3F8C62] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#3F8C62]/20 transition hover:bg-[#357A54] disabled:opacity-50"
-                    >
-                        {submitting ? "Создание..." : "Создать топик"}
-                    </button>
-                </div>
-            </form>
         </div>
     );
 }
@@ -1974,6 +1514,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
         // Explicitly include all fields to be sure
         const body = {
             topic_id: topic.id,
+            subject: taskData.subject ?? topic.subject,
+            exam_type: taskData.exam_type ?? topic.exam_type ?? 'ege',
             external_id: taskData.external_id,
             ege_number: taskData.ege_number,
             title: taskData.title,
@@ -2024,6 +1566,8 @@ function AdminTopicEdit({ apiKey }: { apiKey: string }) {
                     method: "PUT",
                     body: JSON.stringify({
                         topic_id: topic.id,
+                        subject: task.subject ?? topic.subject,
+                        exam_type: task.exam_type ?? topic.exam_type ?? 'ege',
                         external_id: task.external_id,
                         ege_number: task.ege_number,
                         title: task.title,

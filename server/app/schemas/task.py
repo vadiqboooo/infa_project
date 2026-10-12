@@ -19,6 +19,8 @@ class SubTaskOut(BaseModel):
 class TaskOut(BaseModel):
     id: int
     topic_id: int
+    subject: str = "informatics"
+    exam_type: str = "ege"
     external_id: str | None = None
     ege_number: int | None = None
     title: str | None = None
@@ -33,6 +35,8 @@ class TaskOut(BaseModel):
     has_own_solution: bool = False
     solution_comments_count: int = 0
     is_trial: bool = False
+    last_answer: dict | None = None
+    last_correct: bool | None = None
 
     model_config = {"from_attributes": True}
 

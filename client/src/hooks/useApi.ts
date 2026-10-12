@@ -8,6 +8,7 @@ import type {
     AIAssistResponse,
     AIMode,
     ExamInfo,
+    ExamMode,
     ExamStartResponse,
     ExamResult,
     UserStats,
@@ -58,6 +59,8 @@ export function useCheckAnswer(taskId: number) {
             }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["navigation"] });
+            // Task payload carries last_answer/last_correct, keep the cache in sync.
+            qc.invalidateQueries({ queryKey: ["task", taskId] });
         },
     });
 }
@@ -84,9 +87,9 @@ export function useExamByTopic(topicId: number | null) {
 
 export function useStartExam(examId: number) {
     const qc = useQueryClient();
-    return useMutation<ExamStartResponse, Error, void>({
-        mutationFn: () =>
-            api<ExamStartResponse>(`/exams/${examId}/start`, { method: "POST" }),
+    return useMutation<ExamStartResponse, Error, ExamMode | undefined>({
+        mutationFn: (mode) =>
+            api<ExamStartResponse>(`/exams/${examId}/start${mode ? `?mode=${mode}` : ""}`, { method: "POST" }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ["exam"] });
         },

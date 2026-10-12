@@ -1,79 +1,97 @@
 <claude-mem-context>
 # Memory Context
 
-# [infa_project] recent context, 2026-09-16 12:43am GMT+8
+# [infa_project] recent context, 2026-10-12 12:34am GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 43 obs (14 813t read) | 1 096 244t work | 99% savings
+Stats: 50 obs (19 116t read) | 1 311 294t work | 99% savings
 
-### Apr 30, 2026
-1 9:06p 🔵 TasksListPage.tsx — existing task card grid implementation
-2 9:08p 🔵 TasksListPage Structure Discovered Before Card Redesign
-3 9:09p 🔵 TopicCard Component Current Implementation Mapped
-4 9:10p 🟣 TopicCard Redesigned to Unified White Card with Per-Task Color Accents
-5 " 🔵 TasksListPage Serves Both /tasks and /homework Routes
-6 9:36p 🔵 Topic Image System Spans 11 Files Across Client and Server
-7 9:37p 🔵 Admin TopicDetail Image Management System Mapped
-S3 Simplify topic image management UI in admin panel — replaced position/size controls with live card preview (Apr 30, 9:37 PM)
-8 9:39p 🔄 Image Position and Size Handler Functions Removed from TopicDetail
-9 " 🟣 Admin Image Section Replaced with Live Card Preview
-10 9:40p 🔴 ArrowRight Import Added to TopicDetail to Fix Missing Icon
-S4 Investigate and fix delayed image refresh when topic images are updated in admin panel; images were not appearing immediately on task cards (Apr 30, 9:40 PM)
-### May 1, 2026
-S5 Add space-themed character animations to topic cards: floating astronauts on each card and a randomly flying shuttle across the card grid (May 1, 9:10 AM)
-S6 Make shuttle fly inside individual card image areas; implemented per-card shuttle orchestration with shuttleKey prop system (May 1, 9:47 AM)
-S7 Redesign EGE task number badge on TopicCard to match reference image — large number, accent color, corner tab style (May 1, 9:53 AM)
-28 9:54a 🟣 EGE Badge Leading Zero Formatting for Single-Digit IDs
-29 2:31p 🔵 TopicCard Has Single Consumer: TasksListPage
-30 2:32p 🟣 TopicCard EGE Badge Redesigned — Large Corner Number with Accent Color
-S8 Remove background from EGE task number on TopicCard — number floats over image with no background (May 1, 2:32 PM)
-31 2:36p ✅ TopicCard EGE Number Badge — Background Removed, Number Floats Over Image
-S9 Move topic title into image area with gradient scrim — card body now only has progress bar and button (May 1, 2:37 PM)
-32 2:37p 🟣 TopicCard Title Moved Into Image Area with Gradient Scrim
-33 " 🔵 CSS Animation Keyframes Live in client/src/styles/theme.css
-S10 Redesign Разбор/Домашка tab switching on topic task page — replace compact header pills with rich body-area CategoryTab components showing progress counts (May 1, 2:38 PM)
-34 2:43p 🟣 Three New CSS Keyframes for Bouncing Astronaut: drift-x, drift-y, drift-rotate
-35 " 🟣 TopicCard Astronaut Type Split: Float vs Bounce Mode Based on ASTRONAUTS Index
-36 2:44p 🟣 TopicCard Astronaut JSX Wired for Dual Animation Modes — Float vs Bouncing
-37 6:23p 🔵 Files Containing Tutorial/Homework Tab Logic for Topic Task Page
-38 " 🔵 TaskSidebar Already Has Tutorial/Practice Mode Toggle — Separate from Requested Tab UI
-39 6:24p 🔵 TasksPage Already Has Разбор/Домашка Tab Switching — Hidden on Mobile, Navigation-Based
-40 8:02p 🔵 TasksPage Serves Both /tasks/:id and /homework/:id Routes
-41 " ✅ TasksPage Imports ClipboardList Icon — Prep for New Tab UI
-42 " 🟣 CategoryTab Component Added to TasksPage — Rich Tab with Icon, Progress, and Remaining Count
-43 8:03p 🟣 tutCounts and hwCounts Memos Added to Feed CategoryTab Progress Data
-44 " ✅ Old Header Pill Tabs Removed from TasksPage — Replaced by CategoryTab System
-45 " 🟣 CategoryTab Components Rendered in TasksPage Body — Tab Switching Fully Shipped
-S11 Final tab placement iteration: CategoryTabs moved to header-only, topic title replaced with document.title (May 1, 8:04 PM)
-46 8:05p 🟣 TasksPage Sets Browser Tab Title to Current Topic Name
-47 " ✅ CategoryTabs Moved to Header Bar — Topic Title h1 Removed from Header
-48 8:06p ✅ CategoryTabs Removed from Body — Final Placement: Header Only
-### May 3, 2026
-49 5:49p 🔵 infa_project: Educational Platform for Russian EGE Informatics Exam
-50 5:56p 🔵 Design Disharmony Between LandingPage and Platform TopicCard
-51 " 🟣 TopicCard Redesigned to Match Landing Page Green Brand Identity
-52 " 🟣 TasksListPage Page Background Updated with Green Radial Glow
-53 " 🔵 Windows Build Blocked by PowerShell Execution Policy and esbuild EPERM
-54 " 🟣 TopicCard + TasksListPage Design Harmony — Build Verified Successfully
-55 5:57p 🔵 TasksPage and TaskView Use Legacy CSS Variable Design System
-56 5:58p 🟣 TasksPage Task Solving UI Redesigned to Match Green Brand Identity
-### May 8, 2026
-57 9:30p 🔵 Navigation Lock Bug When Opening Topic/Variant from Notification
-58 9:31p 🔵 TasksPage Deep-Link State Machine Analysis for Navigation Lock Bug
-59 9:37p 🔵 Task switching and deep link management code paths identified
-60 " 🔴 Fix task switching broken after closing solution panel
-S12 Fix bug preventing task switching after closing solution panel in TasksPage component (May 8, 9:38 PM)
-**Investigated**: Located and examined the `clearSolutionDeepLink()`, `selectTask()`, and `appliedTaskDeepLinkRef` functions in client/src/pages/TasksPage.tsx that manage task navigation and deep linking when opening solutions from notifications
+### Oct 10, 2026
+194 9:23p 🔵 LessonPlan Design Artboard: New Student Homepage Layout Details
+196 9:24p 🔵 Bug Root Cause: Student Answers Stored Only in localStorage, Not Loaded From Server
+197 " 🔵 Student Attachment Visibility: GET /tasks/{id}/solution Returns File/Image URLs Correctly
+198 9:43p 🟣 New task: redesign Topics page UI
+199 " 🔵 Topics page component structure mapped
+S94 infa_project: new task — redesign Topics (Топики) page UI, following completion of student homepage + bug fixes (Oct 10, 9:43 PM)
+S95 infa_project: Topics (Топики) redesign — blocked on missing Figma/design files, awaiting screenshots or design files from user (Oct 10, 9:59 PM)
+S96 infa_project: Topics redesign — still blocked, Artifact tool disabled, cannot read Figma artboards directly from session (Oct 10, 10:03 PM)
+S97 User shared design canvas artifact for "Главная ученика — редизайн" (Student Home Redesign) and asked if agent could see the designs, with intent to update the topics (Топики) section design (Oct 10, 10:05 PM)
+200 10:06p 🔵 Claude Design Canvas Artifact Identified for Student UI Redesign
+S98 Refactor admin panel topics tab: replace old table/modal UI with new TopicsPanel component in AdminPage.tsx (infa_project) (Oct 10, 10:06 PM)
+201 " 🔵 Design Canvas AdminTopics Artboard Read + Codebase Structure Mapped
+202 10:07p 🔵 AdminTopics Design Artboard Full Structure Documented
+203 " 🔵 AdminPage.tsx Implementation Structure Fully Mapped
+204 10:08p 🔵 TopicAdmin TypeScript Interface and Data Contract Documented
+205 " 🔵 AdminPage.tsx Topics UI — Current Implementation vs Design Gap
+206 " 🔵 Admin Topics UI Has No Dedicated Component File — All Embedded in AdminPage.tsx
+207 " 🟣 TopicsPanel.css Created — Design Tokens from AdminTopics Artboard Extracted into CSS
+S100 Admin panel home page migration review — user noticed misconfiguration after moving admin home, no specific issue identified yet (Oct 10, 10:11 PM)
+### Oct 11, 2026
+208 9:04a 🔵 Claude Artifact URLs Not Accessible via Web Tool
+209 " 🔵 Claude Artifact Content Served via Sandboxed iframe from claudeusercontent.com
+210 9:05a 🔵 Claude Artifact Frame API Requires Authentication (Returns 403)
+211 " 🔵 pterm (Pinokio CLI) Not Found in Environment
+213 " 🔵 Admin TopicDetail Header Structure Mapped — Badge Chip Pattern Identified
+214 " 🔵 TopicsPanel Uses tp-* Design Token CSS System; TopicDetail Header Uses Raw Tailwind
+212 " 🔵 Pinokio Control Plane Not Running on This Machine
+215 10:44a 🟣 New Topic Wizard: "No specific EGE number" option requested
+216 12:28p 🔵 CreateWizard: WizardState.egeNumber is currently always a number, never null
+217 " 🟣 Topic wizard: "Без номера" option added to EGE number chip selector
+218 " 🟣 "Без номера" wizard option builds and ships to production bundle
+219 " 🔵 TaskBankPage loads ALL tasks in a single unbounded request — root cause of slowness
+220 1:57p 🟣 Admin Home Page — New Design Request
+221 2:02p 🔵 Design File Structure — "Главная ученика — редизайн.html"
+222 " 🔵 AdminDashboard Inner Tabs Use Old Tailwind Classes (Not admin-tab System)
+223 2:03p 🔵 Chrome Headless Screenshot — Design File Visual Extraction
+244 2:05p 🔵 New Feature Requests: Exam Variants Mode Selection and Control Work Results Screen
+224 10:25p 🔵 AdminPage.tsx — orphaned 'plans' tab type and hidden header
+225 " 🟣 AdminHomePanel extracted as standalone dashboard home component
+227 " 🔵 TypeScript compilation reveals two pre-existing errors, none in migrated admin files
+S99 Admin panel home page migration review — user noticed something misconfigured after moving the admin home page (Oct 11, 10:25 PM)
+226 10:26p 🔵 AdminHomePanel type field dependencies confirmed present in types.ts
+228 10:27p 🔵 Design mockup artifact found with detailed AdminHome screen specs — reference for the migration
+S101 Admin home dashboard refactor — move lesson overview to "/" for admins, remove "Главная" tab from AdminPage (Oct 11, 10:28 PM)
+229 10:31p ⚖️ Admin Home vs Student Home: Separate Pages Confirmed
+231 10:36p ⚖️ User clarified: admin home belongs inside admin panel on the "Главная" tab
+230 10:44p 🟣 AdminHomePanel completely rewritten as teaching dashboard
+232 " 🔵 HomePage.tsx already branches on groupPlan: students with lessons get LessonPlanHome
+S102 Fix strange scroll on admin home groups list — entire block was scrolling instead of just groups (Oct 11, 10:45 PM)
+233 10:50p 🔴 Admin home groups list — wrong scroll target
+234 11:04p 🔵 MainLayout scroll container — `main` owns overflow-y-auto
+235 11:06p 🔴 Admin home scroll fix — removed nested overflow-y-auto from panel container
+236 11:09p 🔵 UserProgress model — last_answer and last_correct fields
+237 " 🔵 Answer submission flow — last_answer payload shape and correctness tracking
+239 " 🟣 New endpoint GET /admin/group-lessons/{lesson_id}/results — per-task answer matrix
+238 11:10p 🔵 Task correct_answer JSONB format — `{"val": ...}` with scalar or list values
+240 11:11p 🟣 AdminHomePanel — loadResults prop wired; LessonTaskResults types added to frontend
+241 " ✅ Stats patch script staged — apply_stats.py written to scratchpad
+243 " 🟣 Stats task matrix applied and TypeScript-clean — per-task answer view live in AdminHomePanel
+242 11:12p 🟣 Stats tasks tab UI — tasks_section.tsx and stats_extra.css staged
+S103 Admin home stats "Задания урока" tab upgraded to per-task answer matrix matching design spec (Oct 11, 11:13 PM)
+**Investigated**: - UserProgress model: `last_answer` (JSONB, raw submitted payload), `last_correct` (bool), `status` (not_started/solved/failed)
+    - `_answers_equal` logic: `correct_answer` JSONB format is `{"val": ...}`; supports scalars, lists, math expressions
+    - Task model: `correct_answer: JSONB`, `sub_tasks: JSONB`, `title: str | None`
+    - AdminHomeStats.dc.html design file loaded from artifact (70KB, the statistics tab design spec)
+    - MainLayout.tsx: `main` has `overflow-y-auto` — sole scroll container
 
-**Learned**: The bug was caused by `selectTask()` calling `clearSolutionDeepLink()` which deleted BOTH the "solution" AND "task" URL parameters. This created an intermediate navigation state without task context, breaking synchronization with the `appliedTaskDeepLinkRef` React ref and the deep link effect hook that tracks which task should be active
+**Learned**: - `last_answer` stores the raw `AnswerIn` payload (`{val:...}` or `{answers:[...]}`); `last_correct` is the evaluated boolean result
+    - Status `solved` can exist without `last_answer` (pre-migration data) — treated as correct with no displayed answer text
+    - `apply_stats.py` ran twice (idempotency guard via `assert "resultsLessonId" not in s` prevents double-apply on second run if already applied)
 
-**Completed**: Two code modifications applied to TasksPage.tsx: (1) Modified `clearSolutionDeepLink()` to only delete the "solution" parameter while preserving the "task" parameter in the URL; (2) Removed the `clearSolutionDeepLink()` call from `selectTask()` to avoid the intermediate state. The solution now allows navigation to set a single new URL with the next task ID, which naturally clears solution context while maintaining task context
+**Completed**: - Backend: `GET /admin/group-lessons/{lesson_id}/results` → `LessonTaskResultsOut` added to `group_plan.py`; new schemas (`TaskResultCell`, `TaskResultStep`, `TaskResultRow`, `TaskResultTask`, `LessonTaskResultsOut`) in `schemas/group_plan.py`; `_fmt_answer` and `_payload_answer` helpers
+    - Frontend types: `TaskResultCell`, `TaskResultStep`, `LessonTaskResults` added to `src/api/types.ts`
+    - AdminHome.tsx: `loadResults` callback added, passed to `AdminHomePanel`
+    - AdminHomePanel.tsx: `results`/`stepId` state, `useEffect` fetching on stats/tasks tab, derived helpers (`resultSteps`, `activeStep`, `cellGood`, `cellAnswered`, `scoreTone`), entire tasks section JSX replaced with task-level matrix
+    - AdminHomePanel.css: `.ah-cell[data-s='ok'|'bad']`, `.ah-tcell`, `.ah-tcells`, `.ah-score`, `.ah-step-student` styles added
+    - TypeScript: zero errors in admin files; `apply_stats.py` applied and verified with `tsc --noEmit`
+    - Scroll fix: removed `overflow-y: auto` from panel root, simplified AdminHome wrapper to `p-4 md:p-6`
 
-**Next Steps**: Testing the fix to verify task switching works after closing solution panels. May need to verify behavior across tutorial, homework, and exam variant categories
+**Next Steps**: - Waiting for user to verify the stats matrix in browser — session appears to be at a natural pause point after full feature delivery
+    - "Домашние работы" tab and right-side tiles were not touched; user may request those next if they don't match the design
 
 
-Access 1096k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1311k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

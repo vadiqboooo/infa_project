@@ -372,6 +372,13 @@ async def update_topic(topic_id: int, body: TopicIn, db: AsyncSession = Depends(
     topic.category = body.category
     topic.subject = _normalize_topic_subject(body.subject, body.category)
     topic.exam_type = _normalize_exam_type(body.exam_type)
+    # Attached tasks belong to this topic's exam/subject. Keep their metadata in
+    # sync so student answer controls and task-bank filters use the new values.
+    await db.execute(
+        update(Task)
+        .where(Task.topic_id == topic_id)
+        .values(subject=topic.subject, exam_type=topic.exam_type)
+    )
     topic.course_type = _normalize_topic_course_type(body.category, body.course_type)
     topic.is_mock = body.is_mock
     topic.open_to_groups = body.open_to_groups
