@@ -74,6 +74,14 @@ def _topic_title(topic: Topic) -> str:
     return f"№{number} · {topic.title}"
 
 
+def _topic_student_path(topic: Topic) -> str:
+    if topic.category in {"control", "variants", "math", "mock"}:
+        return "/exams"
+    if topic.category == "homework":
+        return "/homework"
+    return "/tasks"
+
+
 def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus], article_progress: dict[int, ArticleProgress] | None = None) -> GroupLessonItemOut:
     if item.article_id is not None and item.article is not None:
         article = item.article
@@ -98,11 +106,12 @@ def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus], articl
         topic = task.topic
         solved = 1 if progress.get(task.id) == ProgressStatus.solved else 0
         completion = "completed" if solved else ("in_progress" if task.id in progress else "not_started")
-        base = "/homework" if topic.category == "homework" else "/tasks"
+        base = _topic_student_path(topic)
         return GroupLessonItemOut(
             id=item.id,
             section=item.section,
             resource_type="task",
+            topic_category=topic.category,
             topic_id=topic.id,
             task_id=task.id,
             title=_task_title(task),
@@ -122,11 +131,12 @@ def _item_out(item: GroupLessonItem, progress: dict[int, ProgressStatus], articl
     attempted = any(task_id in progress for task_id in task_ids)
     total = len(task_ids)
     completion = "completed" if total > 0 and solved == total else ("in_progress" if attempted else "not_started")
-    base = "/homework" if topic.category == "homework" else "/tasks"
+    base = _topic_student_path(topic)
     return GroupLessonItemOut(
         id=item.id,
         section=item.section,
         resource_type="topic",
+        topic_category=topic.category,
         topic_id=topic.id,
         title=_topic_title(topic),
         subtitle=f"{solved} из {total} заданий",
@@ -347,6 +357,7 @@ async def get_lesson_task_results(lesson_id: int, db: AsyncSession = Depends(get
             item_id=item.id,
             title=title,
             section=item.section,
+            topic_category=(item.task.topic.category if item.task is not None and item.task.topic is not None else item.topic.category if item.topic is not None else None),
             tasks=[TaskResultTask(task_id=t.id, number=i, correct=_payload_answer(t.correct_answer)) for i, t in enumerate(tasks, start=1)],
             rows=rows_out,
         ))

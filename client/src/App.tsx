@@ -133,6 +133,7 @@ export default function App() {
                 <Route index element={<HomePage />} />
                 <Route path="dashboard" element={<HomePage />} />
                 <Route path="exams" element={<ExamsListPage />} />
+                <Route path="exams/:id" element={<ExamPage />} />
                 <Route path="tasks" element={<TasksListPage />} />
                 <Route path="tasks/:id" element={<TasksPage />} />
                 <Route path="articles/:id" element={<ArticlePage />} />
@@ -150,16 +151,7 @@ export default function App() {
                 />
               </Route>
 
-              {/* Routes without MainLayout (keep old ones if needed or remove) */}
-              <Route
-                path="/exams/:id"
-                element={
-                  <ProtectedRoute>
-                    <ExamPage />
-                  </ProtectedRoute>
-                }
-              />
-
+              {/* Routes without MainLayout */}
               <Route
                 path="/worksheet/:id"
                 element={

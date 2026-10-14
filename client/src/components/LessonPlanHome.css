@@ -76,14 +76,15 @@
 .lesson-home__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .lesson-home__bar h2 { font-size: 14px; font-weight: 600; }
 
-.lesson-home__months { display: flex; flex-wrap: wrap; padding: 3px; border: 1px solid var(--lh-border); border-radius: 8px; }
+.lesson-home__months { display: flex; max-width: 100%; overflow-x: auto; padding: 3px; border: 1px solid var(--lh-border); border-radius: 8px; }
 .lesson-home__months button {
   min-height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent;
-  color: var(--lh-muted); font: inherit; font-size: 13px; cursor: pointer;
+  flex: 0 0 auto; color: var(--lh-muted); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
 }
 .lesson-home__months button[aria-pressed="true"] { background: var(--lh-calm-soft); color: var(--lh-calm-text); font-weight: 600; }
 
 .lesson-home__chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.lesson-home__empty-month { grid-column: 1 / -1; padding: 24px; border: 1px dashed var(--lh-border); border-radius: 10px; color: var(--lh-muted); text-align: center; }
 .lesson-home__chip {
   box-sizing: border-box; min-height: 120px; padding: 16px; border: 1px solid var(--lh-border); border-radius: 10px;
   background: var(--lh-inset); color: var(--lh-text); font: inherit; text-align: left;

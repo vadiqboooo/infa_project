@@ -15,8 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from jose import JWTError, jwt
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer, noload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import settings
@@ -267,7 +268,13 @@ async def mark_help_notification_read(
 
 @router.get("/topics", response_model=list[TopicOut])
 async def list_topics(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Topic).order_by(Topic.order_index))
+    # Topic.tasks / Topic.exams are lazy="selectin" and image_data is a blob —
+    # none of them are needed for the list, so skip them.
+    result = await db.execute(
+        select(Topic)
+        .options(defer(Topic.image_data), noload(Topic.tasks), noload(Topic.exams))
+        .order_by(Topic.order_index)
+    )
     topics = result.scalars().all()
 
     # Count tasks per topic
@@ -275,10 +282,13 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
         select(Task.topic_id, func.count(Task.id)).group_by(Task.topic_id)
     )
     counts = {row[0]: row[1] for row in counts_result.all()}
-    
-    # Get exam time limits
-    exams_result = await db.execute(select(Exam))
-    exams = {e.topic_id: e.time_limit_minutes for e in exams_result.scalars().all()}
+
+    # Get exam time limits (columns only: Exam.tasks is selectin-loaded)
+    exams_result = await db.execute(select(Exam.topic_id, Exam.time_limit_minutes))
+    exams = {row[0]: row[1] for row in exams_result.all()}
+
+    image_result = await db.execute(select(Topic.id).where(Topic.image_data.is_not(None)))
+    topics_with_image = {row[0] for row in image_result.all()}
 
     return [
         TopicOut(
@@ -297,7 +307,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
             show_in_tasks=t.show_in_tasks,
             ege_number=t.ege_number,
             ege_number_end=t.ege_number_end,
-            has_image=t.image_data is not None,
+            has_image=t.id in topics_with_image,
             image_position=t.image_position,
             image_size=t.image_size,
             character_url=t.character_url,
@@ -691,11 +701,112 @@ async def list_students(db: AsyncSession = Depends(get_db)):
     """List all users with their statistics."""
     users_result = await db.execute(select(User).order_by(User.last_active_at.desc()))
     users = users_result.scalars().all()
+    if not users:
+        return []
+
+    # Everything below is fetched once for all users (was ~9 queries per user).
+    total_tasks = (await db.execute(select(func.count(Task.id)))).scalar() or 0
+
+    topic_totals_rows = (await db.execute(
+        select(Topic.id, Topic.title, func.count(Task.id))
+        .join(Task, Task.topic_id == Topic.id)
+        .group_by(Topic.id, Topic.title)
+    )).all()
+
+    solved_rows = (await db.execute(
+        select(UserProgress.user_id, Task.topic_id, func.count(UserProgress.id))
+        .join(Task, Task.id == UserProgress.task_id)
+        .where(UserProgress.status == ProgressStatus.solved)
+        .group_by(UserProgress.user_id, Task.topic_id)
+    )).all()
+    solved_by_user: dict[int, dict[int | None, int]] = {}
+    for user_id, topic_id, count in solved_rows:
+        solved_by_user.setdefault(user_id, {})[topic_id] = count
+
+    exam_task_counts = (
+        select(exam_tasks.c.exam_id, func.count().label("cnt"))
+        .group_by(exam_tasks.c.exam_id)
+        .subquery()
+    )
+    exam_rows = (await db.execute(
+        select(ExamAttempt.user_id, Topic.title, ExamAttempt.score, func.coalesce(exam_task_counts.c.cnt, 0))
+        .join(Exam, Exam.id == ExamAttempt.exam_id)
+        .join(Topic, Topic.id == Exam.topic_id)
+        .outerjoin(exam_task_counts, exam_task_counts.c.exam_id == Exam.id)
+        .where(ExamAttempt.score.is_not(None))
+        .order_by(ExamAttempt.finished_at.desc())
+    )).all()
+    exams_by_user: dict[int, list[StudentExamScore]] = {}
+    for user_id, title, score, max_score in exam_rows:
+        exams_by_user.setdefault(user_id, []).append(
+            StudentExamScore(variant_name=title, score=score, max_score=max_score)
+        )
+
+    groups_by_user: dict[int, list[int]] = {}
+    for user_id, group_id in (await db.execute(select(user_groups.c.user_id, user_groups.c.group_id))).all():
+        groups_by_user.setdefault(user_id, []).append(group_id)
+
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    weekly_rows = (await db.execute(
+        select(UserProgress.user_id, UserProgress.status, Task.ege_number)
+        .join(Task, Task.id == UserProgress.task_id)
+        .where(
+            UserProgress.last_attempt_at >= week_ago,
+            UserProgress.status.in_([ProgressStatus.solved, ProgressStatus.failed]),
+        )
+    )).all()
+    weekly_buckets: dict[int, dict[int | None, dict[str, int]]] = {}
+    for user_id, progress_status, ege_number in weekly_rows:
+        bucket = weekly_buckets.setdefault(user_id, {}).setdefault(
+            ege_number, {"total": 0, "correct": 0, "incorrect": 0}
+        )
+        bucket["total"] += 1
+        bucket["correct" if progress_status == ProgressStatus.solved else "incorrect"] += 1
+
+    def weekly_stats_for(user_id: int) -> StudentWeeklyStats:
+        by_ege = weekly_buckets.get(user_id, {})
+        ege_stats = [
+            StudentWeeklyEgeStat(
+                ege_number=ege_number,
+                total=values["total"],
+                correct=values["correct"],
+                incorrect=values["incorrect"],
+                accuracy=round(values["correct"] / values["total"] * 100) if values["total"] else 0,
+            )
+            for ege_number, values in by_ege.items()
+        ]
+        ege_stats.sort(key=lambda item: (item.ege_number is None, item.ege_number or 999))
+        return StudentWeeklyStats(
+            total=sum(v["total"] for v in by_ege.values()),
+            correct=sum(v["correct"] for v in by_ege.values()),
+            incorrect=sum(v["incorrect"] for v in by_ege.values()),
+            ege_numbers=ege_stats,
+        )
 
     students = []
     for user in users:
-        student = await get_student_detail(user.id, db)
-        students.append(student)
+        user_solved = solved_by_user.get(user.id, {})
+        name = f"{user.first_name_real or ''} {user.last_name_real or ''}".strip() or user.first_name or f"User {user.id}"
+        students.append(StudentOut(
+            id=user.id,
+            name=name,
+            username=user.username,
+            photo_url=user.photo_url,
+            role=user.role,
+            login=user.login,
+            subscription_plan=user.subscription_plan,
+            subscription_expires_at=user.subscription_expires_at,
+            last_active_at=user.last_active_at,
+            total_solved=sum(user_solved.values()),
+            total_tasks=total_tasks,
+            weekly_stats=weekly_stats_for(user.id),
+            exam_scores=exams_by_user.get(user.id, []),
+            topic_progress=[
+                StudentTopicProgress(topic_name=title, solved=user_solved.get(topic_id, 0), total=total)
+                for topic_id, title, total in topic_totals_rows
+            ],
+            group_ids=groups_by_user.get(user.id, []),
+        ))
 
     return students
 
@@ -2271,15 +2382,42 @@ async def update_exam_subject_settings(
     )
 
 
+@router.get("/task-bank/summary")
+async def task_bank_summary(db: AsyncSession = Depends(get_db)):
+    """Task counts per (exam_type, subject, ege_number) — lets the UI offer filters without loading tasks."""
+    task_exam_type = func.coalesce(Topic.exam_type, Task.exam_type)
+    task_subject = func.coalesce(Topic.subject, Task.subject)
+    rows = (await db.execute(
+        select(task_exam_type, task_subject, Task.ege_number, func.count(Task.id))
+        .outerjoin(Topic, Topic.id == Task.topic_id)
+        .group_by(task_exam_type, task_subject, Task.ege_number)
+    )).all()
+    return [
+        {"exam_type": exam_type, "subject": subject, "ege_number": ege_number, "count": count}
+        for exam_type, subject, ege_number, count in rows
+    ]
+
+
 @router.get("/task-bank", response_model=list[TaskBankItemOut])
 async def list_task_bank(
     exam_type: str | None = Query(default=None),
     subject: str | None = Query(default=None),
     ege_number: int | None = Query(default=None, ge=1),
+    q: str | None = Query(default=None, max_length=255),
+    latest: int | None = Query(default=None, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return every task with topic metadata for the admin-only task bank."""
-    query = select(Task, Topic).outerjoin(Topic, Topic.id == Task.topic_id)
+    """Return tasks with topic metadata for the admin-only task bank.
+
+    `q` matches the internal id or external id exactly; `latest=N` returns the N most
+    recently added tasks (newest first) instead of the full ordered list.
+    """
+    # Select only the Topic columns we need: loading the Topic entity would drag in
+    # its image blob and (via lazy="selectin") every task/exam of every topic again.
+    query = (
+        select(Task, Topic.title, Topic.subject, Topic.exam_type)
+        .outerjoin(Topic, Topic.id == Task.topic_id)
+    )
     task_exam_type = func.coalesce(Topic.exam_type, Task.exam_type)
     task_subject = func.coalesce(Topic.subject, Task.subject)
     if exam_type in KNOWN_EXAM_TYPES:
@@ -2289,18 +2427,28 @@ async def list_task_bank(
     if ege_number is not None:
         query = query.where(Task.ege_number == ege_number)
 
-    query = query.order_by(task_exam_type, task_subject, Task.ege_number, Task.id)
+    term = (q or "").strip().lstrip("#№").strip()
+    if term:
+        conditions = [func.lower(Task.external_id) == term.lower()]
+        if term.isdigit():
+            conditions.append(Task.id == int(term))
+        query = query.where(or_(*conditions))
+
+    if latest is not None:
+        query = query.order_by(Task.id.desc()).limit(latest)
+    else:
+        query = query.order_by(task_exam_type, task_subject, Task.ege_number, Task.id)
     rows = (await db.execute(query)).all()
     return [
         TaskBankItemOut(**(
             TaskAdminOut.model_validate(task).model_dump()
             | {
-                "topic_title": topic.title if topic else "Без топика",
-                "subject": topic.subject if topic else task.subject,
-                "exam_type": topic.exam_type if topic else task.exam_type,
+                "topic_title": topic_title if task.topic_id is not None and topic_title is not None else "Без топика",
+                "subject": topic_subject if topic_subject is not None else task.subject,
+                "exam_type": topic_exam_type if topic_exam_type is not None else task.exam_type,
             }
         ))
-        for task, topic in rows
+        for task, topic_title, topic_subject, topic_exam_type in rows
     ]
 
 

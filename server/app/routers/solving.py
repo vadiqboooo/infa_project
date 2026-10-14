@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.access import require_task_access
+from app.access import require_task_access, task_answer_feedback_locked
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.dependencies import get_current_user, get_db
@@ -1274,6 +1274,11 @@ async def check_answer(
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     await require_task_access(task_id, user, db)
+    if await task_answer_feedback_locked(task_id, user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Answer checking is unavailable until the control work is completed",
+        )
 
     sub_results: list[bool] | None = None
     has_subs = bool(task.sub_tasks)

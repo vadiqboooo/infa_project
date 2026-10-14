@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.preparation_plan import PreparationPlan, UserPreparationPlan
+from app.models.exam import Exam
+from app.models.exam_attempt import ExamAttempt
 from app.models.task import Task
 from app.models.topic import Topic
 from app.models.user import User
@@ -29,6 +31,38 @@ class ContentAccess:
 
 
 COMMON_TOPIC_COURSE_TYPES = {"common", "all"}
+
+
+async def task_answer_feedback_locked(task_id: int, user_id: int, db: AsyncSession) -> bool:
+    """Hide answer checks/solutions until a control is completed and during locked attempts."""
+    context_result = await db.execute(
+        select(Topic.category, Exam.id)
+        .join(Task, Task.topic_id == Topic.id)
+        .outerjoin(Exam, Exam.topic_id == Topic.id)
+        .where(Task.id == task_id)
+    )
+    contexts = context_result.all()
+    if not contexts:
+        return False
+
+    category = contexts[0][0]
+    exam_ids = {exam_id for _, exam_id in contexts if exam_id is not None}
+    if not exam_ids:
+        return category == "control"
+
+    attempt_result = await db.execute(
+        select(ExamAttempt)
+        .where(ExamAttempt.user_id == user_id, ExamAttempt.exam_id.in_(exam_ids))
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+    )
+    attempts = list(attempt_result.scalars().all())
+    active = [attempt for attempt in attempts if attempt.finished_at is None]
+
+    if category == "control":
+        return bool(active) or not any(attempt.finished_at is not None for attempt in attempts)
+    if category == "mock":
+        return bool(active)
+    return any((attempt.results_json or {}).get("mode") == "exam" for attempt in active)
 
 
 def active_subscription_plan(user: User) -> str:

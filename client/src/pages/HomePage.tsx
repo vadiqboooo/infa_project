@@ -244,7 +244,11 @@ function buildPlanBlockTrackers(
 function buildTaskHref(taskId: number, topics: TopicNav[]): string | undefined {
   const topic = topics.find((item) => item.tasks.some((task) => task.id === taskId));
   if (!topic) return undefined;
-  const basePath = topic.category === TopicCategory.homework ? '/homework' : '/tasks';
+  const basePath = [TopicCategory.control, TopicCategory.variants, TopicCategory.math, TopicCategory.mock].includes(topic.category)
+    ? '/exams'
+    : topic.category === TopicCategory.homework
+      ? '/homework'
+      : '/tasks';
   return `${basePath}/${topic.id}?task=${taskId}&from=home`;
 }
 

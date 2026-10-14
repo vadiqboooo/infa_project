@@ -195,6 +195,94 @@ class LatexImportTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await db.scalar(select(func.count(Topic.id))), 0)
             self.assertEqual(await db.scalar(select(func.count(Task.id))), 0)
 
+    async def test_control_hides_feedback_and_answers_until_submission(self):
+        async with self.sessions() as db:
+            topic = Topic(title="Control", category="control", subject="informatics")
+            db.add(topic)
+            await db.flush()
+            task = Task(
+                topic_id=topic.id,
+                ege_number=1,
+                content_html="<p>2 + 2</p>",
+                correct_answer={"val": 4},
+                solution_steps=[{"title": "Solution", "explanation": "2 + 2 = 4"}],
+                full_solution_code="print(4)",
+            )
+            exam = Exam(topic_id=topic.id, time_limit_minutes=45)
+            db.add_all([task, exam])
+            await db.flush()
+            await db.execute(exam_tasks.insert(), [{"exam_id": exam.id, "task_id": task.id}])
+            await db.commit()
+            topic_id, task_id, exam_id = topic.id, task.id, exam.id
+
+        locked_task = await self.client.get(f"/tasks/{task_id}")
+        self.assertIsNone(locked_task.json()["solution_steps"])
+        self.assertIsNone(locked_task.json()["full_solution_code"])
+        locked_check = await self.client.post(f"/tasks/{task_id}/check", json={"val": 4})
+        self.assertEqual(locked_check.status_code, 403, locked_check.text)
+
+        started = await self.client.post(f"/exams/{exam_id}/start")
+        self.assertEqual(started.status_code, 200, started.text)
+        attempt_id = started.json()["attempt_id"]
+
+        draft = await self.client.put(
+            f"/exams/attempt/{attempt_id}/save-answer",
+            json={"task_id": task_id, "answer": {"val": 4}},
+        )
+        self.assertEqual(draft.status_code, 200, draft.text)
+        self.assertNotIn("is_correct", draft.json())
+        self.assertNotIn("points", draft.json())
+
+        active = (await self.client.get(f"/exams/by-topic/{topic_id}")).json()
+        self.assertEqual(active["active_attempt"]["mode"], "exam")
+        self.assertEqual(active["active_attempt"]["draft_answers"][str(task_id)], {"val": 4})
+        self.assertEqual(active["active_attempt"]["scored_answers"], {})
+
+        submitted = await self.client.post(
+            f"/exams/{exam_id}/submit",
+            json={"answers": [{"task_id": task_id, "answer": {"val": 4}}]},
+        )
+        self.assertEqual(submitted.status_code, 200, submitted.text)
+        self.assertEqual(submitted.json()["task_results"][0]["correct_answer"], {"val": 4})
+        self.assertTrue(submitted.json()["task_results"][0]["has_solution"])
+
+        completed = (await self.client.get(f"/exams/by-topic/{topic_id}")).json()
+        self.assertIsNone(completed["active_attempt"])
+        self.assertEqual(completed["finished_attempt"]["task_results"][0]["correct_answer"], {"val": 4})
+        self.assertTrue(completed["finished_attempt"]["task_results"][0]["has_solution"])
+        unlocked_task = await self.client.get(f"/tasks/{task_id}")
+        self.assertEqual(unlocked_task.json()["full_solution_code"], "print(4)")
+        unlocked_check = await self.client.post(f"/tasks/{task_id}/check", json={"val": 4})
+        self.assertEqual(unlocked_check.status_code, 200, unlocked_check.text)
+
+        retry = await self.client.post(f"/exams/{exam_id}/start?mode=practice")
+        retry_attempt_id = retry.json()["attempt_id"]
+        async with self.sessions() as db:
+            legacy = await db.get(ExamAttempt, retry_attempt_id)
+            legacy.results_json = {
+                "mode": "practice",
+                "scored_answers": {str(task_id): {"is_correct": True, "points": 1}},
+            }
+            await db.commit()
+
+        locked = (await self.client.get(f"/exams/by-topic/{topic_id}")).json()
+        self.assertEqual(locked["active_attempt"]["mode"], "exam")
+        self.assertEqual(locked["active_attempt"]["scored_answers"], {})
+        self.assertEqual(locked["finished_attempt"]["task_results"], [])
+        retry_check = await self.client.post(f"/tasks/{task_id}/check", json={"val": 4})
+        self.assertEqual(retry_check.status_code, 403, retry_check.text)
+        legacy_draft = await self.client.put(
+            f"/exams/attempt/{retry_attempt_id}/save-answer",
+            json={"task_id": task_id, "answer": {"val": 4}},
+        )
+        self.assertNotIn("is_correct", legacy_draft.json())
+        self.assertNotIn("points", legacy_draft.json())
+
+        navigation = (await self.client.get("/navigation")).json()
+        control = next(item for item in navigation if item["id"] == topic_id)
+        self.assertEqual(control["active_exam_mode"], "exam")
+        self.assertEqual(control["current_primary_score"], 0)
+
     async def test_upload_validation_and_auth(self):
         for filename, data, expected in [("a.pdf", b"test", 400), ("a.txt", b"\xff", 400), ("a.tex", b"x" * (1024 * 1024 + 1), 413)]:
             response = await self.client.post("/admin/import-latex/parse", files={"file": (filename, data)})

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.access import can_access_task, can_access_topic, can_access_topic_course, get_content_access, require_task_access
+from app.access import can_access_task, can_access_topic, can_access_topic_course, get_content_access, require_task_access, task_answer_feedback_locked
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.task import Task
 from app.models.topic import Topic
@@ -149,17 +149,17 @@ async def get_navigation(
 
             stored_mode = results.get("mode")
             category = topic_categories.get(exam.topic_id, "variants")
-            if stored_mode in {"practice", "exam"}:
-                active_attempt_modes[exam.topic_id] = stored_mode
-            elif category == "mock":
+            if category in {"mock", "control"}:
                 active_attempt_modes[exam.topic_id] = "exam"
+            elif stored_mode in {"practice", "exam"}:
+                active_attempt_modes[exam.topic_id] = stored_mode
             elif category in {"variants", "math"} and not drafts and not codes and not results.get("scored_answers"):
                 # Old versions created an empty attempt before the student chose a mode.
                 active_attempt_modes[exam.topic_id] = None
             else:
                 active_attempt_modes[exam.topic_id] = "practice"
 
-            scored = results.get("scored_answers", {})
+            scored = results.get("scored_answers", {}) if active_attempt_modes[exam.topic_id] == "practice" else {}
             current_primary = sum(int(s.get("points") or 0) for s in scored.values()) if scored else 0
             active_scores[exam.topic_id] = {
                 "primary": current_primary,
@@ -341,6 +341,7 @@ async def get_task(
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
     access = await require_task_access(task_id, user, db)
+    answer_feedback_locked = await task_answer_feedback_locked(task_id, user.id, db)
 
     solution_result = await db.execute(
         select(UserTaskSolution).where(
@@ -372,14 +373,14 @@ async def get_task(
         ege_number=task.ege_number,
         title=task.title,
         description=task.description,
-        last_answer=progress.last_answer if progress else None,
-        last_correct=progress.last_correct if progress else None,
+        last_answer=progress.last_answer if progress and not answer_feedback_locked else None,
+        last_correct=progress.last_correct if progress and not answer_feedback_locked else None,
         content_html=task.content_html,
         media_resources=task.media_resources,
         answer_type=task.answer_type,
         difficulty=task.difficulty,
-        solution_steps=task.solution_steps,
-        full_solution_code=task.full_solution_code,
+        solution_steps=None if answer_feedback_locked else task.solution_steps,
+        full_solution_code=None if answer_feedback_locked else task.full_solution_code,
         sub_tasks=task.sub_tasks,
         has_own_solution=bool(solution and (solution.code or solution.file_url or solution.image_url or solution.board_data)),
         solution_comments_count=comments_count,

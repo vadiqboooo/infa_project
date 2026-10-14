@@ -49,20 +49,22 @@ async def _require_exam_course_access(exam: Exam, user: User, db: AsyncSession):
 
 
 def _attempt_mode(results: dict | None, topic_category: str) -> str:
+    if topic_category in {"mock", "control"}:
+        return "exam"
     stored_mode = (results or {}).get("mode")
     if stored_mode in {"practice", "exam"}:
         return stored_mode
-    return "exam" if topic_category == "mock" else "practice"
+    return "practice"
 
 
 def _visible_attempt_mode(results: dict | None, topic_category: str) -> str | None:
     """Keep legacy work resumable, but let an old empty variant choose its mode."""
     data = results or {}
+    if topic_category in {"mock", "control"}:
+        return "exam"
     stored_mode = data.get("mode")
     if stored_mode in {"practice", "exam"}:
         return stored_mode
-    if topic_category == "mock":
-        return "exam"
     has_work = bool(data.get("draft_answers") or data.get("draft_codes") or data.get("scored_answers"))
     if topic_category in {"variants", "math"} and not has_work:
         return None
@@ -149,7 +151,7 @@ async def get_exam_by_topic(
 
     # If variants are reopened without a timer, an empty active attempt can coexist with
     # the last finished attempt. Seed it once so previously solved tasks stay visible.
-    if attempt and finished and topic.category not in {"variants", "math"}:
+    if attempt and finished and topic.category not in {"variants", "math", "mock", "control"}:
         active_results = attempt.results_json or {}
         active_drafts = active_results.get("draft_answers", {}) or {}
         active_scores = active_results.get("scored_answers", {}) or {}
@@ -209,7 +211,12 @@ async def get_exam_by_topic(
             "primary_score": finished.primary_score,
             "score": finished.score,
             "mode": _attempt_mode(finished.results_json, topic.category),
-            "task_results": (finished.results_json or {}).get("task_results", []),
+            # Never expose answers from an earlier run while a locked attempt is active.
+            "task_results": (
+                []
+                if attempt and _visible_attempt_mode(attempt.results_json, topic.category) == "exam"
+                else (finished.results_json or {}).get("task_results", [])
+            ),
             "submitted_for_review": (finished.results_json or {}).get("submitted_for_review", False),
         } if finished else None,
     }
@@ -275,7 +282,7 @@ async def start_exam(
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Choose practice or exam mode")
         resolved_mode = mode or "practice"
     else:
-        resolved_mode = "exam" if topic.category == "mock" else "practice"
+        resolved_mode = "exam" if topic.category in {"mock", "control"} else "practice"
 
     # Return existing active attempt (idempotent)
     active = await db.execute(
@@ -490,6 +497,7 @@ async def submit_exam(
             "points": task_points,
             "max_points": max_points,
             "auto_checked": has_correct_answer,
+            "has_solution": bool(task.solution_steps or task.full_solution_code),
             "code_solution": code_solutions_map.get(task.id),
             "file_solution_url": None,
             "opened_at_ms": timing.opened_at_ms if timing else None,

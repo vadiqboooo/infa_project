@@ -38,6 +38,7 @@ class GroupLessonItemOut(BaseModel):
     id: int
     section: str
     resource_type: str
+    topic_category: str | None = None
     topic_id: int | None = None
     task_id: int | None = None
     article_id: int | None = None
@@ -145,6 +146,7 @@ class TaskResultStep(BaseModel):
     item_id: int
     title: str
     section: str
+    topic_category: str | None = None
     tasks: list[TaskResultTask] = Field(default_factory=list)
     rows: list[TaskResultRow] = Field(default_factory=list)
 

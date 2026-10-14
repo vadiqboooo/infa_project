@@ -14,7 +14,10 @@ export function AdminHome() {
     return api<GroupLessonProgress>(`/admin/groups/${groupId}/lesson-progress${query}`);
   }, []);
 
-  const loadResults = useCallback((lessonId: number) => api<LessonTaskResults>(`/admin/group-lessons/${lessonId}/results`), []);
+  const loadResults = useCallback(
+    (lessonId: number) => api<LessonTaskResults>(`/admin/group-lessons/${lessonId}/results`, { cache: 'no-store' }),
+    [],
+  );
 
   return (
     <div className="p-4 md:p-6">

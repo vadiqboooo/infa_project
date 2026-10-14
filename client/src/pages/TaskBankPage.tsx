@@ -11,6 +11,15 @@ type ExamFilter = 'all' | 'ege' | 'oge';
 type SubjectFilter = 'all' | 'informatics' | 'math';
 
 const TASK_BANK_STATE_KEY = 'admin-task-bank-state';
+const TASK_BANK_PAGE_SIZE = 30;
+const LATEST_TASKS_COUNT = 30;
+
+interface TaskBankSummaryRow {
+  exam_type: string;
+  subject: string;
+  ege_number: number | null;
+  count: number;
+}
 
 function readTaskBankState(): {
   exam: ExamFilter;
@@ -79,6 +88,7 @@ export default function TaskBankPage() {
   const [savedState] = useState(readTaskBankState);
   const pageRef = useRef<HTMLElement | null>(null);
   const [tasks, setTasks] = useState<TaskBankItem[]>([]);
+  const [summary, setSummary] = useState<TaskBankSummaryRow[]>([]);
   const [subjectSettings, setSubjectSettings] = useState<ExamSubjectSettings[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -87,30 +97,60 @@ export default function TaskBankPage() {
   const [numberQuery, setNumberQuery] = useState(savedState.numberQuery);
   const [idQuery, setIdQuery] = useState(savedState.idQuery);
   const [visibleAnswers, setVisibleAnswers] = useState<Set<number>>(new Set());
+  // Rendering every task (KaTeX + HTML) at once freezes the page — show them in batches.
+  const [visibleCount, setVisibleCount] = useState(TASK_BANK_PAGE_SIZE);
   const [editingStandaloneTask, setEditingStandaloneTask] = useState<Partial<TaskAdmin> | null>(null);
 
   useEffect(() => {
     let active = true;
     Promise.all([
-      api<TaskBankItem[]>('/admin/task-bank'),
+      api<TaskBankSummaryRow[]>('/admin/task-bank/summary'),
       api<ExamSubjectSettings[]>('/admin/subject-settings'),
     ])
-      .then(([taskData, settingsData]) => {
+      .then(([summaryData, settingsData]) => {
         if (active) {
-          setTasks(taskData);
+          setSummary(summaryData);
           setSubjectSettings(settingsData);
         }
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задания');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+        if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить фильтры');
       });
     return () => {
       active = false;
     };
   }, []);
+
+  // Tasks are fetched only for the chosen filters; with none chosen — the latest added.
+  const hasFilters = exam !== 'all' || subject !== 'all' || numberQuery !== '' || idQuery.trim() !== '';
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (exam !== 'all') params.set('exam_type', exam);
+      if (subject !== 'all') params.set('subject', subject);
+      if (numberQuery) params.set('ege_number', numberQuery);
+      if (idQuery.trim()) params.set('q', idQuery.trim());
+      if (!hasFilters) params.set('latest', String(LATEST_TASKS_COUNT));
+      setLoading(true);
+      api<TaskBankItem[]>(`/admin/task-bank?${params.toString()}`)
+        .then((data) => {
+          if (!active) return;
+          setTasks(data);
+          setError('');
+        })
+        .catch((reason: unknown) => {
+          if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить задания');
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, idQuery ? 300 : 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [exam, subject, numberQuery, idQuery, hasFilters]);
 
   useEffect(() => {
     sessionStorage.setItem(TASK_BANK_STATE_KEY, JSON.stringify({ exam, subject, numberQuery, idQuery, scrollTop: savedState.scrollTop }));
@@ -124,19 +164,13 @@ export default function TaskBankPage() {
     });
   }, [loading, savedState.scrollTop]);
 
-  const scopedTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      if (exam !== 'all' && task.exam_type !== exam) return false;
-      if (subject !== 'all' && task.subject !== subject) return false;
-      return true;
-    });
-  }, [tasks, exam, subject]);
-
   const availableNumbers = useMemo(() => {
     const counts = new Map<number, number>();
-    scopedTasks.forEach((task) => {
-      if (task.ege_number != null) {
-        counts.set(task.ege_number, (counts.get(task.ege_number) ?? 0) + 1);
+    summary.forEach((row) => {
+      if (exam !== 'all' && row.exam_type !== exam) return;
+      if (subject !== 'all' && row.subject !== subject) return;
+      if (row.ege_number != null) {
+        counts.set(row.ege_number, (counts.get(row.ege_number) ?? 0) + row.count);
       }
     });
     const configured = exam !== 'all' && subject !== 'all'
@@ -149,7 +183,7 @@ export default function TaskBankPage() {
       });
     }
     return [...counts.entries()].sort(([left], [right]) => left - right);
-  }, [scopedTasks, exam, subject, subjectSettings]);
+  }, [summary, exam, subject, subjectSettings]);
 
   const selectedSettings = useMemo(() => (
     exam !== 'all' && subject !== 'all'
@@ -158,14 +192,12 @@ export default function TaskBankPage() {
   ), [exam, subject, subjectSettings]);
 
   const selectedNumber = numberQuery ? Number(numberQuery) : null;
-  const filteredTasks = useMemo(() => {
-    const normalizedId = idQuery.trim().toLowerCase().replace(/^[#№]\s*/, '');
-    return scopedTasks.filter((task) => {
-      if (selectedNumber != null && task.ege_number !== selectedNumber) return false;
-      if (!normalizedId) return true;
-      return String(task.id) === normalizedId || task.external_id?.toLowerCase() === normalizedId;
-    });
-  }, [scopedTasks, selectedNumber, idQuery]);
+  // Filtering is done by the server.
+  const filteredTasks = tasks;
+
+  useEffect(() => {
+    setVisibleCount(TASK_BANK_PAGE_SIZE);
+  }, [exam, subject, numberQuery, idQuery]);
 
   const selectedNumberName = selectedNumber == null
     ? ''
@@ -319,7 +351,7 @@ export default function TaskBankPage() {
               {idQuery.trim()
                 ? `Результаты поиска по ID «${idQuery.trim()}»`
                 : selectedNumber == null
-                  ? 'Все задания'
+                  ? (hasFilters ? 'Все задания' : `Последние добавленные задания (${LATEST_TASKS_COUNT})`)
                   : `Задание №${selectedNumber}${selectedNumberName ? ` — ${selectedNumberName}` : ''}`}
             </h2>
             <p>{filteredTasks.length === 1 ? 'Найдена 1 задача' : `Найдено задач: ${filteredTasks.length}`}</p>
@@ -333,7 +365,7 @@ export default function TaskBankPage() {
           <div className="task-bank-state">По выбранным фильтрам заданий нет</div>
         ) : (
           <div className="task-bank-list">
-            {filteredTasks.map((task) => {
+            {filteredTasks.slice(0, visibleCount).map((task) => {
               const answerVisible = visibleAnswers.has(task.id);
               const taskNumberName = task.ege_number == null
                 ? ''
@@ -385,6 +417,15 @@ export default function TaskBankPage() {
                 </article>
               );
             })}
+            {filteredTasks.length > visibleCount && (
+              <button
+                type="button"
+                className="task-bank-create-button"
+                onClick={() => setVisibleCount((count) => count + TASK_BANK_PAGE_SIZE)}
+              >
+                Показать ещё (осталось {filteredTasks.length - visibleCount})
+              </button>
+            )}
           </div>
         )}
       </section>

@@ -196,6 +196,7 @@ export interface TaskResult {
     points: number;
     max_points?: number;
     auto_checked?: boolean;
+    has_solution?: boolean;
     code_solution?: string | null;
     file_solution_url?: string | null;
 }
@@ -604,6 +605,7 @@ export interface GroupLessonItem {
     id: number;
     section: GroupLessonSection;
     resource_type: "topic" | "task" | "article" | "quiz";
+    topic_category?: TopicCategory | null;
     article_id?: number | null;
     topic_id: number | null;
     task_id: number | null;
@@ -672,7 +674,8 @@ export interface TaskResultCell {
 export interface TaskResultStep {
     item_id: number;
     title: string;
-    section: string;
+    section: GroupLessonSection;
+    topic_category?: TopicCategory | null;
     tasks: { task_id: number; number: number; correct: string }[];
     rows: { user_id: number; cells: TaskResultCell[] }[];
 }

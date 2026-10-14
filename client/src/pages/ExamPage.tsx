@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { githubDark } from "@uiw/codemirror-theme-github";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine } from "lucide-react";
+import { ArrowLeft, Send, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine, LockKeyhole, List } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
@@ -114,7 +114,7 @@ export default function ExamPage() {
     const attemptMode: ExamMode | null = isMock
         ? "exam"
         : isControl
-            ? "practice"
+            ? "exam"
             : examInfo?.active_attempt?.mode ?? null;
     const isExamMode = attemptMode === "exam";
     const showTimer = isMock || isControl || isExamMode;
@@ -265,6 +265,10 @@ export default function ExamPage() {
     }, [currentPrimaryScore]);
 
     const selectExamTask = (index: number) => {
+        // Do not lose a typed answer when the student switches tasks in a control.
+        if (isControl && task && isAnswerChanged) {
+            handleSaveAnswer();
+        }
         const currentTaskParam = new URLSearchParams(location.search).get("task");
         if (currentTaskParam) {
             appliedTaskDeepLinkRef.current = currentTaskParam;
@@ -483,13 +487,13 @@ export default function ExamPage() {
         const tick = () => {
             const remaining = Math.max(0, Math.floor((examEndTime - Date.now()) / 1000));
             setTimeLeft(remaining);
-            if (remaining === 0 && (isMock || isExamMode)) autoSubmitRef.current();
+            if (remaining === 0 && (isMock || (isExamMode && !isControl))) autoSubmitRef.current();
         };
         const timer = setInterval(tick, 1000);
         const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-    }, [examEndTime, examResult, showTimer, isMock, isExamMode]);
+    }, [examEndTime, examResult, showTimer, isMock, isExamMode, isControl]);
 
     // Auto-scroll question bar
     useEffect(() => {
@@ -538,10 +542,15 @@ export default function ExamPage() {
         isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
+            // Include the answer currently visible in the input even if the student
+            // presses "Завершить" before the separate save button.
+            const answersForSubmit = task && isAnswerChanged
+                ? { ...examAnswers, [task.id]: currentAnswer }
+                : examAnswers;
             const payload = {
                 answers: tasks.map(t => ({
                     task_id: t.id,
-                    answer: { val: examAnswers[t.id] ?? "" }
+                    answer: { val: answersForSubmit[t.id] ?? "" }
                 })),
                 code_solutions: Object.entries(codeSolutions)
                     .filter(([_, code]) => code.trim())
@@ -610,7 +619,7 @@ export default function ExamPage() {
 
     if (navLoading || examLoading) {
         return (
-            <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
+            <div className="exam-dark flex min-h-full flex-col items-center justify-center bg-[#F8F7F4] gap-4">
                 <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-gray-500 font-medium">Загрузка варианта...</p>
             </div>
@@ -619,7 +628,7 @@ export default function ExamPage() {
 
     if (!currentTopic || !examInfo) {
         return (
-            <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] p-6 text-center">
+            <div className="exam-dark flex min-h-full flex-col items-center justify-center bg-[#F8F7F4] p-6 text-center">
                 <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
                     <AlertCircle size={32} />
                 </div>
@@ -661,7 +670,7 @@ export default function ExamPage() {
         };
 
         return (
-            <div className={clsx("exam-dark exam-result-page min-h-screen bg-[#F8F7F4]", !publishedAnalysis && "exam-review-pending-page")}>
+            <div className={clsx("exam-dark exam-result-page min-h-full bg-[#F8F7F4]", !publishedAnalysis && "exam-review-pending-page")}>
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="mx-auto flex max-w-[1240px] items-center gap-4 px-4 py-4 md:py-5">
@@ -992,7 +1001,7 @@ export default function ExamPage() {
         const primaryMax = isVariant ? 29 : totalCount;
         const primaryValue = isVariant ? Number(result.primary_score ?? 0) : correctCount;
         const resultTitle = isControl
-            ? "Контрольная завершена"
+            ? currentTopic.title
             : resultMode === "exam"
                 ? "Вариант завершён"
                 : "Тренировка завершена";
@@ -1051,17 +1060,54 @@ export default function ExamPage() {
         );
 
         return (
-            <div className="exam-dark exam-result-page min-h-screen bg-[#F8F7F4]">
+            <div className="exam-dark exam-result-page min-h-full bg-[#F8F7F4]">
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
-                    <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex items-center gap-4">
+                    <div className={clsx("mx-auto flex items-center gap-3 px-4 py-3 md:px-6", isControl ? "max-w-[1240px] overflow-x-auto" : "max-w-6xl md:py-5")}>
                         <button onClick={() => navigate(examsReturnPath)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                             <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
-                        <div className="min-w-0 flex-1 flex items-center gap-3">
-                            <span className="text-base font-bold text-gray-900 truncate">{currentTopic.title}</span>
-                        </div>
+                        {isControl ? (
+                            <>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    {sortedResults.map((tr, idx) => {
+                                        const hasAnswer = formatAnswer(tr.user_answer) !== "—";
+                                        return (
+                                            <button
+                                                key={tr.task_id}
+                                                type="button"
+                                                onClick={() => setReviewTaskId(tr.task_id)}
+                                                className={clsx(
+                                                    "flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-black transition",
+                                                    tr.is_correct
+                                                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                                                        : hasAnswer
+                                                            ? "border-red-400/35 bg-red-500/10 text-red-300"
+                                                            : "border-gray-200 bg-gray-100 text-gray-400",
+                                                )}
+                                            >
+                                                {tr.ege_number || idx + 1}
+                                            </button>
+                                        );
+                                    })}
+                                    <span className="ml-1 inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 text-sm font-black text-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.14)]">
+                                        <List size={15} /> Итог
+                                    </span>
+                                </div>
+                                <div className="flex-1" />
+                                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sky-400/35 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300">
+                                    <LockKeyhole size={13} /> Проверка после сдачи
+                                </span>
+                                <span className="shrink-0 rounded-full border border-gray-200 bg-gray-100 px-4 py-2 text-xs font-black text-gray-400">
+                                    Работа завершена
+                                </span>
+                            </>
+                        ) : (
+                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                                <span className="text-base font-bold text-gray-900 truncate">{currentTopic.title}</span>
+                            </div>
+                        )}
 
                         {isVariant && (
                             <button
@@ -1075,22 +1121,20 @@ export default function ExamPage() {
                             </button>
                         )}
 
-                        {isControl && (
-                            <button
-                                onClick={() => handleStart("practice")}
-                                disabled={startExamMutation.isPending}
-                                className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
-                            >
-                                Пройти ещё раз
-                            </button>
-                        )}
-
                     </div>
                 </div>
 
                 {/* Results cards + comment */}
-                <div className="mx-auto max-w-[1240px] space-y-4 px-4 py-6 md:py-6">
-                    <section className="flex flex-col gap-5 rounded-[22px] border border-gray-200 bg-white p-5 shadow-xl sm:flex-row sm:items-center md:p-6">
+                <div className={clsx(
+                    "mx-auto max-w-[1240px]",
+                    isControl
+                        ? "space-y-4 rounded-[22px] border border-gray-200 border-t-[3px] border-t-emerald-500 bg-white p-4 shadow-xl md:p-6"
+                        : "space-y-4 px-4 py-6 md:py-6",
+                )}>
+                    <section className={clsx(
+                        "flex flex-col gap-5 sm:flex-row sm:items-center",
+                        isControl ? "p-0" : "rounded-[22px] border border-gray-200 bg-white p-5 shadow-xl md:p-6",
+                    )}>
                         <div className="flex h-[92px] w-[92px] shrink-0 items-center justify-center rounded-full border-[6px] border-[#00AD50]">
                             <div className="flex h-full w-full flex-col items-center justify-center rounded-full">
                                 <strong className="text-2xl font-black leading-none text-gray-950">{primaryValue}</strong>
@@ -1104,8 +1148,13 @@ export default function ExamPage() {
                             </p>
                             <h2 className="mt-1 text-xl font-black text-gray-950 md:text-2xl">{resultTitle}</h2>
                             <p className="mt-2 text-sm text-gray-400">
-                                Верных ответов: {correctCount} из {totalCount}
-                                {isVariant ? ". Тестовый балл рассчитан по шкале ЕГЭ" : ` · результат ${pctScore}%`}
+                                {isControl
+                                    ? "Выберите задание, чтобы посмотреть условие, свой ответ и решение"
+                                    : <>
+                                        Верных ответов: {correctCount} из {totalCount}
+                                        {isVariant ? ". Тестовый балл рассчитан по шкале ЕГЭ" : ` · результат ${pctScore}%`}
+                                    </>
+                                }
                             </p>
                         </div>
 
@@ -1135,7 +1184,52 @@ export default function ExamPage() {
                         </section>
                     )}
 
-                    {taskResults.length > 0 && (
+                    {isControl && taskResults.length > 0 && (
+                        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                            {sortedResults.map((tr, idx) => {
+                                const hasAnswer = formatAnswer(tr.user_answer) !== "—";
+                                const state = !hasAnswer ? "empty" : tr.is_correct ? "correct" : "wrong";
+                                const verdict = state === "correct" ? "Верно" : state === "wrong" ? "Неверно" : "Нет ответа";
+                                return (
+                                    <button
+                                        key={tr.task_id}
+                                        type="button"
+                                        onClick={() => setReviewTaskId(tr.task_id)}
+                                        className={clsx(
+                                            "flex min-h-[104px] flex-col justify-between rounded-[18px] border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lg",
+                                            state === "correct" && "border-emerald-500/40 bg-emerald-500/10",
+                                            state === "wrong" && "border-red-400/35 bg-red-500/10",
+                                            state === "empty" && "border-gray-200 bg-gray-100",
+                                        )}
+                                    >
+                                        <span className="flex w-full items-start justify-between gap-3">
+                                            <strong className="text-2xl font-black text-gray-950">{tr.ege_number || idx + 1}</strong>
+                                            <span className={clsx(
+                                                "rounded-full border px-2.5 py-1 text-[11px] font-black",
+                                                state === "correct" && "border-emerald-500/40 text-emerald-400",
+                                                state === "wrong" && "border-red-400/40 text-red-300",
+                                                state === "empty" && "border-gray-200 text-gray-400",
+                                            )}>
+                                                {verdict}
+                                            </span>
+                                        </span>
+                                        <span className="flex w-full items-center justify-between gap-3 text-xs">
+                                            <span className="text-gray-400">
+                                                {tr.has_solution === true
+                                                    ? "Есть решение"
+                                                    : tr.has_solution === false
+                                                        ? "Без решения"
+                                                        : "Открыть задание"}
+                                            </span>
+                                            <span className="font-black text-gray-100">Открыть ›</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </section>
+                    )}
+
+                    {!isControl && taskResults.length > 0 && (
                         <>
                             <section className="hidden overflow-hidden rounded-[18px] border border-gray-200 bg-white md:block">
                                 <div className={clsx("grid", sortedResults.length > 14 ? "grid-cols-2" : "grid-cols-1")}>
@@ -1479,7 +1573,7 @@ export default function ExamPage() {
             ];
 
             return (
-                <div className="exam-dark min-h-screen bg-[#F8F7F4]">
+                <div className="exam-dark min-h-full bg-[#F8F7F4]">
                     <header className="border-b border-gray-200 bg-white">
                         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 md:px-6">
                             <button
@@ -1563,14 +1657,14 @@ export default function ExamPage() {
         if (!isMock) {
             // Auto-starting via useEffect — show spinner
             return (
-                <div className="exam-dark flex flex-col items-center justify-center h-screen bg-[#F8F7F4] gap-4">
+                <div className="exam-dark flex min-h-full flex-col items-center justify-center bg-[#F8F7F4] gap-4">
                     <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin" />
                     <p className="text-gray-500 font-medium">Загрузка варианта...</p>
                 </div>
             );
         }
         return (
-            <div className="exam-dark min-h-screen bg-[#F8F7F4] flex items-center justify-center p-6">
+            <div className="exam-dark min-h-full bg-[#F8F7F4] flex items-center justify-center p-6">
                 <div className="bg-white border border-gray-200 rounded-[32px] p-10 max-w-lg w-full text-center shadow-xl shadow-gray-200/50">
                     <div className="w-16 h-16 bg-[#3F8C62]/10 text-[#3F8C62] rounded-2xl flex items-center justify-center mx-auto mb-6">
                         <Clock size={32} />
@@ -1625,10 +1719,10 @@ export default function ExamPage() {
 
     // Active Exam Workspace
     return (
-        <div className="exam-dark h-screen flex flex-col overflow-hidden bg-[#F8F7F4]">
+        <div className={clsx("exam-dark flex h-full min-h-0 flex-col overflow-hidden bg-[#F8F7F4]", isControl && "control-exam-page")}>
             {/* Header */}
-            <div className="h-14 flex items-center justify-between px-4 md:px-6 bg-white shrink-0 border-b border-gray-100">
-                <div className="flex h-full items-center gap-3 md:gap-4 min-w-0">
+            <div className={clsx("flex items-center justify-between gap-3 bg-white px-3 md:px-6 shrink-0 border-b border-gray-100", isControl ? "min-h-16 overflow-hidden py-2" : "h-14")}>
+                <div className={clsx("flex h-full items-center gap-3 md:gap-4 min-w-0", isControl ? "flex-1" : "shrink-0")}>
                     <button
                         onClick={() => navigate(examsReturnPath)}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
@@ -1636,7 +1730,32 @@ export default function ExamPage() {
                     >
                         <ArrowLeft size={18} />
                     </button>
-                    {showTimer ? (
+                    {isControl ? (
+                        <div ref={questionsScrollRef} className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1 py-2 no-scrollbar" style={{ scrollbarWidth: "none" }}>
+                            {tasks.map((t, idx) => {
+                                const savedAnswer = examAnswers[t.id];
+                                const hasAnswer = savedAnswer !== undefined
+                                    && savedAnswer !== ""
+                                    && JSON.stringify(savedAnswer) !== JSON.stringify([]);
+                                const isActive = idx === taskIndex;
+                                return (
+                                    <button
+                                        key={t.id}
+                                        onClick={() => selectExamTask(idx)}
+                                        className={clsx(
+                                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black transition",
+                                            hasAnswer
+                                                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                                                : "border-gray-200 bg-gray-100 text-gray-400",
+                                            isActive && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-[#202020] shadow-[0_0_18px_rgba(16,185,129,0.18)]",
+                                        )}
+                                    >
+                                        {idx + 1}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : showTimer ? (
                         <div className="flex items-center gap-1.5 md:gap-2 text-[#3F8C62] shrink-0">
                             <Clock size={16} />
                             <span className="font-mono text-base md:text-lg font-bold">
@@ -1654,30 +1773,51 @@ export default function ExamPage() {
                             </span>
                         </div>
                     )}
-                    <div className="h-6 w-px shrink-0 bg-gray-200" />
-                    <h1 className="truncate text-base font-black leading-none text-gray-950">
-                        {currentTopic.title}
-                    </h1>
-                    <span className={clsx(
-                        "hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide sm:inline-flex",
-                        isExamMode
-                            ? "border-sky-500/30 bg-sky-500/10 text-sky-500"
-                            : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
-                    )}>
-                        {isControl ? "Контрольная" : isExamMode ? "Пробник" : "Тренировка"}
-                    </span>
+                    {!isControl && (
+                        <>
+                            <div className="h-6 w-px shrink-0 bg-gray-200" />
+                            <h1 className="truncate text-base font-black leading-none text-gray-950">
+                                {currentTopic.title}
+                            </h1>
+                            <span className={clsx(
+                                "hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide sm:inline-flex",
+                                isExamMode
+                                    ? "border-sky-500/30 bg-sky-500/10 text-sky-500"
+                                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
+                            )}>
+                                {isExamMode ? "Пробник" : "Тренировка"}
+                            </span>
+                        </>
+                    )}
                 </div>
 
-                {canFinishExam && (
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting}
-                        className="bg-[#3F8C62] hover:bg-[#357A54] text-white px-4 md:px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-[#3F8C62]/20 disabled:opacity-50 flex items-center gap-2 shrink-0"
-                    >
-                        <Send size={14} />
-                        {isSubmitting ? "..." : "Завершить"}
-                    </button>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                    {isControl && (
+                        <>
+                            <span className="hidden items-center gap-1.5 rounded-full border border-sky-400/35 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 md:inline-flex">
+                                <LockKeyhole size={13} /> Проверка после сдачи
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs font-black text-gray-100">
+                                <Clock size={14} /> {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
+                            </span>
+                        </>
+                    )}
+                    {canFinishExam && (
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                            className={clsx(
+                                "flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all disabled:opacity-50",
+                                isControl
+                                    ? "border border-gray-200 bg-transparent text-gray-100 hover:bg-gray-100"
+                                    : "bg-[#3F8C62] text-white shadow-lg shadow-[#3F8C62]/20 hover:bg-[#357A54] md:px-5",
+                            )}
+                        >
+                            {!isControl && <Send size={14} />}
+                            {isSubmitting ? "..." : "Завершить"}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Solution drawer panel */}
@@ -1836,11 +1976,11 @@ export default function ExamPage() {
 
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-4 pt-4 md:p-8 md:pt-6">
+                <div className={clsx("flex-1 overflow-y-auto", isControl ? "p-0" : "p-4 pt-4 md:p-8 md:pt-6")}>
                     {/* Navigation bar */}
                     <div
-                        ref={questionsScrollRef}
-                        className="flex gap-1.5 md:gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar"
+                        ref={isControl ? undefined : questionsScrollRef}
+                        className={clsx("gap-1.5 md:gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar", isControl ? "hidden" : "flex")}
                         style={{ scrollbarWidth: 'none' }}
                     >
                         {tasks.map((t, idx) => {
@@ -1851,14 +1991,14 @@ export default function ExamPage() {
                                 && JSON.stringify(savedAnswer) !== JSON.stringify([]);
                             const isActive = idx === taskIndex;
                             let btnClass = 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:text-gray-600';
-                            if (score) {
+                            if (showImmediateFeedback && score) {
                                 btnClass = score.is_correct
                                     ? 'bg-emerald-50 border-emerald-300 text-[#3F8C62]'
                                     : score.points > 0
                                         ? 'bg-amber-50 border-amber-300 text-amber-700'
                                         : 'bg-red-50 border-red-200 text-red-500';
                             } else if (hasAnswer) {
-                                btnClass = 'bg-sky-50 border-sky-300 text-sky-700';
+                                btnClass = 'bg-emerald-50 border-emerald-300 text-[#3F8C62]';
                             }
                             const activeClass = isActive
                                 ? 'ring-2 ring-[#3F8C62] ring-offset-2 ring-offset-[#F8F7F4] shadow-sm'
@@ -1880,23 +2020,27 @@ export default function ExamPage() {
                     </div>
 
                     {/* Task Content Area */}
-                    <div className="flex flex-col lg:flex-row gap-6 items-start">
-                        <div className="flex-1 w-full bg-white border border-gray-200 rounded-[24px] p-4 md:p-8 min-h-[300px] md:min-h-[400px] shadow-sm relative">
+                    <div className={clsx("flex gap-6 items-start", isControl ? "w-full flex-col rounded-[22px] border border-gray-200 border-t-[3px] border-t-emerald-500 bg-white p-3 shadow-2xl md:p-6" : "flex-col lg:flex-row")}>
+                        <div className={clsx("flex-1 w-full relative", isControl ? "min-h-0 rounded-[16px] border border-gray-200 p-4 shadow-none md:p-5" : "min-h-[300px] md:min-h-[400px] rounded-[24px] border border-gray-200 bg-white p-4 shadow-sm md:p-8")}>
                             {taskLoading ? (
                                 <Skeleton />
                             ) : task ? (
                                 <>
                                     <div className="flex items-center flex-wrap gap-2 mb-4 md:mb-6">
-                                        <span className="bg-gray-100 text-gray-500 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
-                                            Задание {taskIndex + 1}
+                                        <span className={clsx("text-[10px] font-bold uppercase tracking-wider", isControl ? "text-sky-300" : "rounded-lg bg-gray-100 px-2.5 py-1 text-gray-500")}>
+                                            Задание {taskIndex + 1}{isControl ? ` из ${tasks.length}` : ""}
                                         </span>
-                                        <span className="bg-emerald-50 text-[#3F8C62] px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
-                                            {(taskIndex + 1) >= 26 ? "2 балла" : "1 балл"}
-                                        </span>
-                                        <span className="hidden sm:inline text-gray-300 mx-1">•</span>
-                                        <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-tight">
-                                            {task.title || "Вариант ЕГЭ"}
-                                        </span>
+                                        {!isControl && (
+                                            <>
+                                                <span className="bg-emerald-50 text-[#3F8C62] px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider">
+                                                    {(taskIndex + 1) >= 26 ? "2 балла" : "1 балл"}
+                                                </span>
+                                                <span className="hidden sm:inline text-gray-300 mx-1">•</span>
+                                                <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-tight">
+                                                    {task.title || "Вариант ЕГЭ"}
+                                                </span>
+                                            </>
+                                        )}
                                         {canAnnotateExamTask && (
                                             drawingPanelOpen ? (
                                                 <div
@@ -1913,6 +2057,27 @@ export default function ExamPage() {
                                                     Черновик
                                                 </button>
                                             )
+                                        )}
+                                        {isControl && task && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSolutionPanelInitialTab("code");
+                                                    setSolutionPanelPrefillCode("");
+                                                    setSolutionPanelTextMode(false);
+                                                    setSolutionPanelTaskId(task.id);
+                                                }}
+                                                disabled={isSubmitting}
+                                                className={clsx(
+                                                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all disabled:opacity-50",
+                                                    task.has_own_solution
+                                                        ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                                                        : "border-sky-400/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/15",
+                                                )}
+                                            >
+                                                <Paperclip size={13} />
+                                                {task.has_own_solution ? "Решение ✓" : "Решение"}
+                                            </button>
                                         )}
                                     </div>
                                     <div className="prose prose-slate max-w-none text-gray-800 leading-relaxed text-base md:text-lg">
@@ -1944,12 +2109,12 @@ export default function ExamPage() {
                         </div>
 
                         {/* Right Panel: Answer */}
-                        <div className="w-full lg:w-[320px] shrink-0">
-                            <div className="bg-white border border-gray-200 rounded-[24px] p-4 md:p-6 shadow-sm">
+                        <div className={clsx("w-full shrink-0", isControl ? "max-w-[560px] pl-0 md:pl-5" : "lg:w-[320px]")}>
+                            <div className={clsx("border border-gray-200 p-4 md:p-6", isControl ? "rounded-[18px] border-emerald-500/45 bg-transparent shadow-none" : "rounded-[24px] bg-white shadow-sm")}>
                                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 ml-1">
                                     Ваш ответ
                                 </label>
-                                <div className="space-y-4">
+                                <div className={clsx(isControl ? "grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" : "space-y-4")}>
                                     <AnswerInput
                                         type={task?.answer_type || 'single_number'}
                                         value={currentAnswer}
@@ -1986,7 +2151,8 @@ export default function ExamPage() {
                                         onClick={handleSaveAnswer}
                                         disabled={isSubmitting || !isAnswerChanged}
                                         className={clsx(
-                                            "w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg",
+                                            "flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all shadow-lg",
+                                            isControl ? "min-w-[164px] px-5" : "w-full",
                                             isAnswerChanged 
                                                 ? "bg-[#3F8C62] hover:bg-[#357A54] text-white shadow-[#3F8C62]/20" 
                                                 : isAnswerSaved
@@ -1997,12 +2163,12 @@ export default function ExamPage() {
                                         {isAnswerChanged ? (
                                             <>
                                                 <Save size={16} />
-                                                Сохранить ответ
+                                                {isAnswerSaved ? "Обновить ответ" : "Сохранить ответ"}
                                             </>
                                         ) : isAnswerSaved ? (
                                             <>
                                                 <Check size={16} />
-                                                Ответ сохранен
+                                                Ответ сохранён
                                             </>
                                         ) : (
                                             <>
@@ -2011,9 +2177,15 @@ export default function ExamPage() {
                                             </>
                                         )}
                                     </button>
+                                    {isControl && isAnswerSaved && !isAnswerChanged && (
+                                        <div className="flex items-center gap-2 rounded-xl border border-sky-400/35 bg-sky-500/10 px-3 py-2.5 text-xs font-bold text-sky-300 md:col-span-2">
+                                            <Check size={15} />
+                                            Ответ сохранён
+                                        </div>
+                                    )}
                                     
                                     {/* Solution attachment button */}
-                                    {task && (
+                                    {task && !isControl && (
                                         <button
                                             onClick={() => {
                                                 setSolutionPanelInitialTab("code");
@@ -2071,7 +2243,7 @@ export default function ExamPage() {
                                         </button>
                                     )}
 
-                                    {/* Immediate feedback is available in training and control modes only. */}
+                                    {/* Immediate feedback is available only in training mode. */}
                                     {showImmediateFeedback && task && taskScores[task.id] !== undefined && !isAnswerChanged && (
                                         <div className={clsx(
                                             "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold",
@@ -2091,37 +2263,41 @@ export default function ExamPage() {
                                         </div>
                                     )}
 
-                                    <div className="flex gap-2 pt-2">
-                                        <button
-                                            onClick={() => selectExamTask(taskIndex - 1)}
-                                            disabled={taskIndex === 0}
-                                            className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
-                                        >
-                                            Назад
-                                        </button>
-                                        <button
-                                            onClick={() => selectExamTask(taskIndex + 1)}
-                                            disabled={taskIndex === tasks.length - 1}
-                                            className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
-                                        >
-                                            Вперед
-                                        </button>
-                                    </div>
+                                    {!isControl && (
+                                        <>
+                                            <div className="flex gap-2 pt-2">
+                                                <button
+                                                    onClick={() => selectExamTask(taskIndex - 1)}
+                                                    disabled={taskIndex === 0}
+                                                    className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
+                                                >
+                                                    Назад
+                                                </button>
+                                                <button
+                                                    onClick={() => selectExamTask(taskIndex + 1)}
+                                                    disabled={taskIndex === tasks.length - 1}
+                                                    className="flex-1 py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 disabled:opacity-30 transition-all"
+                                                >
+                                                    Вперед
+                                                </button>
+                                            </div>
 
-                                    <div className="mt-6 pt-6 border-t border-gray-100">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase">Заполнено</span>
-                                            <span className="text-xs font-bold text-gray-900">
-                                                {Object.keys(examAnswers).filter(k => examAnswers[Number(k)] !== "").length} / {tasks.length}
-                                            </span>
-                                        </div>
-                                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                            <div 
-                                                className="h-full bg-[#3F8C62] transition-all duration-500"
-                                                style={{ width: `${(Object.keys(examAnswers).filter(k => examAnswers[Number(k)] !== "").length / tasks.length) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
+                                            <div className="mt-6 pt-6 border-t border-gray-100">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Заполнено</span>
+                                                    <span className="text-xs font-bold text-gray-900">
+                                                        {Object.keys(examAnswers).filter(k => examAnswers[Number(k)] !== "").length} / {tasks.length}
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-[#3F8C62] transition-all duration-500"
+                                                        style={{ width: `${(Object.keys(examAnswers).filter(k => examAnswers[Number(k)] !== "").length / tasks.length) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>

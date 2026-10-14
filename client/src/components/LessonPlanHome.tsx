@@ -8,6 +8,7 @@ import './LessonPlanHome.css';
 type StepState = 'done' | 'overdue' | 'progress' | 'todo';
 
 const SECTION_ORDER = { theory: 0, testing: 1, lesson: 2, homework: 3 } as const;
+const STUDENT_HOME_MONTH_KEY = 'infa.student-home.month';
 const monthKey = (iso: string) => {
   const date = new Date(iso);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -31,9 +32,24 @@ function orderedItems(lesson: GroupLesson) {
   return [...lesson.items].sort((a, b) => SECTION_ORDER[a.section] - SECTION_ORDER[b.section]);
 }
 
+function savedMonth(storageKey: string, available: Set<string>, fallback: string) {
+  try {
+    const value = window.localStorage.getItem(storageKey);
+    return value && available.has(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function LessonPlanHome({ lessons, name }: { lessons: GroupLesson[]; name?: string | null }) {
   const [now, setNow] = useState(() => Date.now());
-  const [month, setMonth] = useState('all');
+  const currentMonth = monthKey(new Date().toISOString());
+  const storageKey = `${STUDENT_HOME_MONTH_KEY}:${[...new Set(lessons.map((lesson) => lesson.group_id))].sort((a, b) => a - b).join(',')}`;
+  const [month, setMonth] = useState(() => savedMonth(
+    storageKey,
+    new Set([currentMonth, ...lessons.map((lesson) => monthKey(lesson.lesson_at))]),
+    currentMonth,
+  ));
   const [pickedId, setPickedId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -51,18 +67,36 @@ export function LessonPlanHome({ lessons, name }: { lessons: GroupLesson[]; name
     return (started.at(-1) ?? sorted.find((lesson) => lesson.items.length > 0) ?? sorted[0])?.id ?? null;
   }, [sorted, now]);
 
-  const selected = sorted.find((lesson) => lesson.id === (pickedId ?? currentId)) ?? sorted[0];
-
   const months = useMemo(() => {
     const seen = new Map<string, string>();
     sorted.forEach((lesson) => {
       const key = monthKey(lesson.lesson_at);
       if (!seen.has(key)) seen.set(key, monthLabel(lesson.lesson_at));
     });
-    return [{ key: 'all', label: 'Все' }, ...[...seen].map(([key, label]) => ({ key, label }))];
-  }, [sorted]);
+    if (!seen.has(currentMonth)) seen.set(currentMonth, monthLabel(new Date().toISOString()));
+    const showYear = new Set([...seen.keys()].map((key) => key.slice(0, 4))).size > 1;
+    return [...seen]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, label]) => ({ key, label: showYear ? `${label} ${key.slice(0, 4)}` : label }));
+  }, [currentMonth, sorted]);
 
-  const visible = sorted.filter((lesson) => month === 'all' || monthKey(lesson.lesson_at) === month);
+  const visible = useMemo(
+    () => sorted.filter((lesson) => monthKey(lesson.lesson_at) === month),
+    [month, sorted],
+  );
+  const selected = visible.find((lesson) => lesson.id === pickedId)
+    ?? visible.find((lesson) => lesson.id === currentId)
+    ?? visible[0];
+
+  const selectMonth = (key: string) => {
+    setMonth(key);
+    setPickedId(null);
+    try {
+      window.localStorage.setItem(storageKey, key);
+    } catch {
+      // The filter still works for the current session when storage is unavailable.
+    }
+  };
 
   const debts = useMemo(() => {
     const rows: { lesson: GroupLesson; title: string; overdue: string; days: number }[] = [];
@@ -91,16 +125,17 @@ export function LessonPlanHome({ lessons, name }: { lessons: GroupLesson[]; name
         <section className="lesson-home__card" aria-label="Мои уроки">
           <div className="lesson-home__bar">
             <h2>Мои уроки</h2>
-            {months.length > 2 && (
+            {months.length > 0 && (
               <div className="lesson-home__months" role="group" aria-label="Месяц">
                 {months.map((item) => (
-                  <button key={item.key} type="button" aria-pressed={month === item.key} onClick={() => setMonth(item.key)}>{item.label}</button>
+                  <button key={item.key} type="button" aria-pressed={month === item.key} onClick={() => selectMonth(item.key)}>{item.label}</button>
                 ))}
               </div>
             )}
           </div>
 
           <div className="lesson-home__chips">
+            {visible.length === 0 && <p className="lesson-home__empty-month">В этом месяце занятий пока нет.</p>}
             {visible.map((lesson) => {
               const states = orderedItems(lesson).map((item) => stepState({ lesson, item }, now));
               const left = states.filter((value) => value !== 'done').length;
@@ -127,7 +162,10 @@ export function LessonPlanHome({ lessons, name }: { lessons: GroupLesson[]; name
             <div className="lesson-home__debts">
               <div className="lesson-home__debts-title"><span>Нужно доделать</span><b>{debts.length}</b></div>
               {debts.map((debt, index) => (
-                <button key={`${debt.lesson.id}:${index}`} type="button" className="lesson-home__debt" onClick={() => setPickedId(debt.lesson.id)}>
+                <button key={`${debt.lesson.id}:${index}`} type="button" className="lesson-home__debt" onClick={() => {
+                  selectMonth(monthKey(debt.lesson.lesson_at));
+                  setPickedId(debt.lesson.id);
+                }}>
                   <strong>{debt.title}</strong>
                   <span>{shortDate(debt.lesson.lesson_at)}</span>
                   <em>{debt.overdue}</em>

@@ -47,6 +47,7 @@ class TaskResult(BaseModel):
     points: int
     max_points: int = 1
     auto_checked: bool = True
+    has_solution: bool = False
     code_solution: str | None = None
     file_solution_url: str | None = None
 

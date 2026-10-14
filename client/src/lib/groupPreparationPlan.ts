@@ -4,8 +4,11 @@ export type PlanRow = { lesson: GroupLesson; item: GroupLessonItem };
 export const PLAN_SECTION_LABELS = { theory: 'Теория', testing: 'Тестирование', lesson: 'На уроке', homework: 'Домашняя работа' } as const;
 const SECTION_ORDER = { theory: 0, testing: 1, lesson: 2, homework: 3 };
 
-export function planItemTypeLabel(item: GroupLessonItem) {
-  if (item.section === 'homework') return item.resource_type === 'quiz' ? 'ДЗ · тест' : item.resource_type === 'article' ? 'ДЗ · теория' : 'ДЗ';
+export function planItemTypeLabel(item: Pick<GroupLessonItem, 'section'> & Partial<Pick<GroupLessonItem, 'resource_type' | 'topic_category'>>) {
+  if (item.topic_category === 'control') return 'Контрольная';
+  if (item.topic_category === 'homework' || item.section === 'homework') return 'Домашка';
+  if (item.topic_category === 'variants') return 'Вариант';
+  if (item.topic_category === 'mock') return 'Пробник';
   if (item.resource_type === 'quiz') return 'Тестирование';
   if (item.resource_type === 'article') return 'Теория';
   return PLAN_SECTION_LABELS[item.section];

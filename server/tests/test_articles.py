@@ -185,7 +185,7 @@ class ArticleIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_four_lesson_sections_multiple_topics_and_separate_quiz_progress(self):
         article = await self.create()
         async with self.sessions() as db:
-            db.add_all([Topic(id=1, title="Topic one"), Topic(id=2, title="Topic two")])
+            db.add_all([Topic(id=1, title="Topic one", category="control"), Topic(id=2, title="Topic two")])
             await db.commit()
         items = [
             {"section": "theory", "article_id": article["id"]},
@@ -200,6 +200,8 @@ class ArticleIntegrationTests(unittest.IsolatedAsyncioTestCase):
         lesson = response.json()
         self.assertEqual(len(lesson["items"]), 7)
         self.assertEqual([item["resource_type"] for item in lesson["items"]], ["article", "quiz", "topic", "topic", "topic", "topic", "quiz"])
+        self.assertIsNone(lesson["items"][0]["topic_category"])
+        self.assertEqual(lesson["items"][2]["topic_category"], "control")
         self.assertIn("mode=theory", lesson["items"][0]["href"])
         self.assertIn("mode=quiz", lesson["items"][1]["href"])
         resources = (await self.request("GET", "/admin/group-plan/resources")).json()

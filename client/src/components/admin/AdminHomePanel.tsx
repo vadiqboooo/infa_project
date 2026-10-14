@@ -10,6 +10,7 @@ import type {
   LessonProgressStudent,
   StudentOut,
 } from '../../api/types';
+import { planItemTypeLabel } from '../../lib/groupPreparationPlan';
 import './AdminHomePanel.css';
 
 export type AdminHomeSection = 'topics' | 'articles' | 'students' | 'subscriptions' | 'metrics' | 'settings';
@@ -29,14 +30,9 @@ type Status = 'done' | 'prog' | 'none';
 
 const DAY = 24 * 60 * 60 * 1000;
 const ONLINE_MS = 5 * 60 * 1000;
+const LIVE_RESULTS_REFRESH_MS = 3000;
+const ADMIN_HOME_GROUP_KEY = 'infa.admin-home.group-id';
 const COLORS = ['#21B66F', '#3B82C4', '#8B6FD6', '#D9783F', '#C2547A', '#2E9CA6', '#B58A1C', '#5D7BD6'];
-const SECTION_LABEL: Record<string, string> = {
-  theory: 'Теория',
-  testing: 'Тестирование',
-  lesson: 'На уроке',
-  homework: 'Домашка',
-};
-
 const plural = (n: number, one: string, few: string, many: string) => {
   const m = n % 10;
   const h = n % 100;
@@ -54,6 +50,15 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { d
 const longDate = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const colorOf = (id: number) => COLORS[id % COLORS.length];
+
+function savedGroupId(): number | null {
+  try {
+    const value = Number(window.localStorage.getItem(ADMIN_HOME_GROUP_KEY));
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 function statusOf(value: string | undefined): Status {
   if (value === 'completed') return 'done';
@@ -83,7 +88,7 @@ function overdueDays(lesson: LessonProgressLesson, item: LessonProgressItem, now
 export function AdminHomePanel({ groups, students, loading, loadProgress, loadResults }: Props) {
   const [now, setNow] = useState(() => Date.now());
   const [kind, setKind] = useState<Kind>('group');
-  const [groupId, setGroupId] = useState<number | null>(null);
+  const [groupId, setGroupId] = useState<number | null>(savedGroupId);
   const [studentId, setStudentId] = useState<number | null>(null);
   const [lessonId, setLessonId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>('today');
@@ -100,14 +105,23 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
     return () => window.clearInterval(timer);
   }, []);
 
-  const activeGroupId = groupId ?? groups[0]?.id ?? null;
+  const activeGroup = groups.find((g) => g.id === groupId) ?? groups[0] ?? null;
+  const activeGroupId = activeGroup?.id ?? null;
   const sortedStudents = useMemo(
     () => students.filter((s) => s.role !== 'admin' || s.group_ids.length > 0).sort((a, b) => a.name.localeCompare(b.name, 'ru')),
     [students],
   );
   const activeStudent = kind === 'student' ? sortedStudents.find((s) => s.id === studentId) ?? sortedStudents[0] ?? null : null;
-  const activeGroup = groups.find((g) => g.id === activeGroupId) ?? null;
   const groupById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+
+  useEffect(() => {
+    if (activeGroupId === null) return;
+    try {
+      window.localStorage.setItem(ADMIN_HOME_GROUP_KEY, String(activeGroupId));
+    } catch {
+      // The selection still works for this session when storage is unavailable.
+    }
+  }, [activeGroupId]);
 
   // which backend requests the current selection needs
   const requests = useMemo(() => {
@@ -183,13 +197,44 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
   const resultsLessonId = tab === 'stats' && sub === 'tasks' ? currentLesson?.id ?? null : null;
 
   useEffect(() => {
-    if (resultsLessonId === null) return;
+    if (resultsLessonId === null) {
+      setResults(null);
+      return;
+    }
     let cancelled = false;
-    setResults(null);
-    loadResults(resultsLessonId)
-      .then((res) => { if (!cancelled) setResults(res); })
-      .catch(() => { if (!cancelled) setResults({ lesson_id: resultsLessonId, steps: [] }); });
-    return () => { cancelled = true; };
+    let requestInFlight = false;
+
+    setResults((current) => current?.lesson_id === resultsLessonId ? current : null);
+
+    const refreshResults = async () => {
+      if (cancelled || requestInFlight || document.visibilityState === 'hidden') return;
+      requestInFlight = true;
+      try {
+        const next = await loadResults(resultsLessonId);
+        if (!cancelled) setResults(next);
+      } catch {
+        if (!cancelled) {
+          setResults((current) => current?.lesson_id === resultsLessonId
+            ? current
+            : { lesson_id: resultsLessonId, steps: [] });
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void refreshResults();
+    const timer = window.setInterval(() => void refreshResults(), LIVE_RESULTS_REFRESH_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshResults();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [resultsLessonId, loadResults, version]);
   const roster = view.roster;
   const online = roster.filter((p) => now - Date.parse(p.last_active_at) < ONLINE_MS);
@@ -441,7 +486,7 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
                     return (
                       <div key={item.id} className="ah-step" data-bad={late}>
                         <span className="ah-step-n" data-s={s}>{index + 1}</span>
-                        <div className="ah-step-main"><span className="ah-eyebrow">{SECTION_LABEL[item.section] ?? item.section}</span><b>{item.title}</b><span className="ah-muted">{item.subtitle}</span></div>
+                        <div className="ah-step-main"><span className="ah-eyebrow">{planItemTypeLabel(item)}</span><b>{item.title}</b><span className="ah-muted">{item.subtitle}</span></div>
                         <div className="ah-step-prog">
                           <div className="ah-bar"><span data-bad={late} style={{ width: `${total ? (solved / total) * 100 : s === 'done' ? 100 : 0}%` }} /></div>
                           <span className="ah-cap" data-bad={late}>{s === 'none' ? 'Не начато' : `Решено ${solved} из ${total}`}{late ? ` · просрочено на ${over} дн.` : ''}</span>
@@ -455,7 +500,7 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
                   return (
                     <div key={item.id} className="ah-step" data-bad={late}>
                       <span className="ah-step-n" data-s={groupStatus(item)}>{index + 1}</span>
-                      <div className="ah-step-main"><span className="ah-eyebrow">{SECTION_LABEL[item.section] ?? item.section}</span><b>{item.title}</b><span className="ah-muted">{item.subtitle}</span></div>
+                      <div className="ah-step-main"><span className="ah-eyebrow">{planItemTypeLabel(item)}</span><b>{item.title}</b><span className="ah-muted">{item.subtitle}</span></div>
                       <div className="ah-step-prog">
                         <div className="ah-bar">
                           <span style={{ width: `${c.total ? (c.done / c.total) * 100 : 0}%` }} />
@@ -609,7 +654,7 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
                     return (
                       <div key={st.item_id} className="ah-step ah-step-student">
                         <div className="ah-step-student-head">
-                          <div className="ah-step-main"><span className="ah-eyebrow">{SECTION_LABEL[st.section] ?? st.section}</span><b>{st.title}</b></div>
+                          <div className="ah-step-main"><span className="ah-eyebrow">{planItemTypeLabel(st)}</span><b>{st.title}</b></div>
                           <span className="ah-pill" data-s={state}>{state === 'done' ? 'Сделано' : state === 'prog' ? `В процессе · ${answered} из ${st.tasks.length}` : 'Не начато'}</span>
                         </div>
                         <div className="ah-tcells">
