@@ -667,7 +667,7 @@ export interface GroupLessonProgress {
 }
 
 export interface TaskResultCell {
-    state: "none" | "ok" | "bad";
+    state: "none" | "ok" | "bad" | "draft";
     answer: string;
 }
 

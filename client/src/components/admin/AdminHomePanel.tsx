@@ -621,7 +621,7 @@ export function AdminHomePanel({ groups, students, loading, loadProgress, loadRe
                               const cell = cells[index] ?? { state: 'none', answer: '' };
                               return (
                                 <td key={t.task_id}>
-                                  <span className="ah-cell" data-s={cell.state} title={cell.state === 'none' ? `Задача ${t.number}: не решал` : `Задача ${t.number}: ${cell.state === 'ok' ? 'верно' : `ответил ${cell.answer}, верно ${t.correct}`}`}>{cell.answer}</span>
+                                  <span className="ah-cell" data-s={cell.state} title={cell.state === 'none' ? `Задача ${t.number}: не решал` : `Задача ${t.number}: ${cell.state === 'ok' ? 'верно' : cell.state === 'draft' ? `ответ ${cell.answer} (ещё не проверен)` : `ответил ${cell.answer}, верно ${t.correct}`}`}>{cell.answer}</span>
                                 </td>
                               );
                             })}

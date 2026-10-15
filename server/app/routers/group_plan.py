@@ -7,6 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_current_user, get_db, verify_parser_api_key
 from app.models.group import Group, user_groups
+from app.models.exam import Exam
+from app.models.exam_attempt import ExamAttempt
 from app.models.group_plan import GroupLesson, GroupLessonItem
 from app.models.article import Article, ArticleProgress
 from app.models.progress import ProgressStatus, UserProgress
@@ -345,6 +347,15 @@ async def get_lesson_task_results(lesson_id: int, db: AsyncSession = Depends(get
         for uid in member_ids:
             cells = []
             for task in tasks:
+                exam_cell = exam_cells.get((uid, task.id))
+                if exam_cell is not None:
+                    answer, is_correct, submitted = exam_cell
+                    if is_correct is None:
+                        state = "draft"
+                    else:
+                        state = "ok" if is_correct else "bad"
+                    cells.append(TaskResultCell(state=state, answer=answer))
+                    continue
                 row = progress.get((uid, task.id))
                 if row is None or (row.last_answer is None and row.status != ProgressStatus.solved):
                     cells.append(TaskResultCell())

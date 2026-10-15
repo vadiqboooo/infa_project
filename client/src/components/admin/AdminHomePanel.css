@@ -252,4 +252,6 @@
 .ah-tcell small { font-size: 10px; font-weight: 600; opacity: 0.8; }
 .ah-tcell .ah-ans { color: var(--ah-em-text); opacity: 1; }
 .ah-tcell[data-s='ok'] { border: 1px solid var(--ah-em-border); background: var(--ah-em-bg); color: var(--ah-em-text); }
+.ah-tcell[data-s='draft'] { border: 1px solid var(--ah-sky-border); background: var(--ah-sky-bg); color: var(--ah-sky-text); }
+.ah-tcell[data-s='draft'] { border: 1px solid var(--ah-sky-border); background: var(--ah-sky-bg); color: var(--ah-sky-text); }
 .ah-tcell[data-s='bad'] { border: 1px solid var(--ah-bad-border); background: var(--ah-bad-bg); color: var(--ah-bad-text); }

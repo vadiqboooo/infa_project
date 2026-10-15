@@ -127,7 +127,7 @@ class GroupLessonProgressOut(BaseModel):
 
 
 class TaskResultCell(BaseModel):
-    state: Literal["none", "ok", "bad"] = "none"
+    state: Literal["none", "ok", "bad", "draft"] = "none"
     answer: str = ""
 
 
