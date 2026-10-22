@@ -2248,7 +2248,13 @@ async def enable_guest_link(topic_id: int, db: AsyncSession = Depends(get_db)):
     """Turn the public link on (idempotent: keeps the existing token)."""
     topic = await _get_topic_or_404(topic_id, db)
     if topic.guest_token is None:
-        topic.guest_token = secrets.token_urlsafe(12)
+        alphabet = string.ascii_lowercase + string.digits
+        while True:
+            token = "".join(secrets.choice(alphabet) for _ in range(6))
+            taken = await db.scalar(select(Topic.id).where(Topic.guest_token == token))
+            if taken is None:
+                break
+        topic.guest_token = token
         await db.commit()
     return await _guest_link_state(topic, db)
 
