@@ -353,6 +353,15 @@ export default function ExamPage() {
         }
     };
 
+    // Guests already read the rules on the entry screen: open their variant straight in exam mode.
+    const guestAutoStartedRef = useRef(false);
+    useEffect(() => {
+        if (user?.role !== "guest" || !examInfo || guestAutoStartedRef.current) return;
+        if (examInfo.active_attempt || examInfo.finished_attempt) return;
+        guestAutoStartedRef.current = true;
+        void handleStart("exam");
+    }, [user?.role, examInfo?.id, examInfo?.active_attempt?.id, examInfo?.finished_attempt?.id]);
+
     // Controls keep the existing quick start. Training variants now wait for a mode choice.
     useEffect(() => {
         if (!examInfo || isMock || isSelectableVariant || examInfo.finished_attempt) return;
