@@ -7,6 +7,7 @@ import { ArrowLeft, Send, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircl
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { useAuth } from "../context/AuthContext";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
 import TaskView from "../components/TaskView";
@@ -23,6 +24,7 @@ export default function ExamPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
+    const { user, logout } = useAuth();
     const { data: allTopics, isLoading: navLoading } = useNavigation();
     
     const queryClient = useQueryClient();
@@ -42,6 +44,15 @@ export default function ExamPage() {
         });
         return `/exams?${params.toString()}`;
     }, [currentTopic]);
+    // Guests have no exams list: leaving the variant returns them to the name + number entry screen.
+    const leaveExam = () => {
+        if (user?.role === "guest") {
+            logout();
+            navigate("/", { replace: true });
+            return;
+        }
+        navigate(examsReturnPath);
+    };
 
     const tasks: TaskNav[] = currentTopic?.tasks ?? [];
     const [taskIndex, setTaskIndex] = useState(0);
@@ -635,7 +646,7 @@ export default function ExamPage() {
                 </div>
                 <h1 className="text-xl font-bold text-gray-900 mb-2">Вариант не найден</h1>
                 <p className="text-gray-500 mb-6 text-sm max-w-xs">Данный вариант еще не настроен или был удален администратором.</p>
-                <button onClick={() => navigate(examsReturnPath)} className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
+                <button onClick={() => leaveExam()} className="px-6 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
                     К списку вариантов
                 </button>
             </div>
@@ -675,7 +686,7 @@ export default function ExamPage() {
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className="mx-auto flex max-w-[1240px] items-center gap-4 px-4 py-4 md:py-5">
-                        <button onClick={() => navigate(examsReturnPath)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                        <button onClick={() => leaveExam()} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                             <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
@@ -1065,7 +1076,7 @@ export default function ExamPage() {
                 {/* Header */}
                 <div className="bg-white border-b border-gray-200 shadow-sm">
                     <div className={clsx("mx-auto flex items-center gap-3 px-4 py-3 md:px-6", isControl ? "max-w-[1240px] overflow-x-auto" : "max-w-6xl md:py-5")}>
-                        <button onClick={() => navigate(examsReturnPath)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
+                        <button onClick={() => leaveExam()} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0">
                             <ArrowLeft size={22} strokeWidth={2.5} />
                         </button>
 
@@ -1315,7 +1326,7 @@ export default function ExamPage() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => navigate(examsReturnPath)}
+                                    onClick={() => leaveExam()}
                                     className="min-h-12 flex-1 rounded-[14px] bg-[#00AD50] px-5 text-sm font-bold text-white transition hover:bg-[#009F49]"
                                 >
                                     К вариантам
@@ -1578,7 +1589,7 @@ export default function ExamPage() {
                     <header className="border-b border-gray-200 bg-white">
                         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4 md:px-6">
                             <button
-                                onClick={() => navigate(examsReturnPath)}
+                                onClick={() => leaveExam()}
                                 className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
                             >
                                 <ArrowLeft size={17} />
@@ -1707,7 +1718,7 @@ export default function ExamPage() {
                             {startExamMutation.isPending ? "Подготовка..." : "Начать вариант"}
                         </button>
                         <button
-                            onClick={() => navigate(examsReturnPath)}
+                            onClick={() => leaveExam()}
                             className="w-full py-3.5 text-gray-500 hover:text-gray-700 font-bold transition-all"
                         >
                             Отмена
@@ -1725,7 +1736,7 @@ export default function ExamPage() {
             <div className={clsx("flex items-center justify-between gap-3 bg-white px-3 md:px-6 shrink-0 border-b border-gray-100", isControl ? "min-h-16 overflow-hidden py-2" : "h-14")}>
                 <div className={clsx("flex h-full items-center gap-3 md:gap-4 min-w-0", isControl ? "flex-1" : "shrink-0")}>
                     <button
-                        onClick={() => navigate(examsReturnPath)}
+                        onClick={() => leaveExam()}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
                         title="К выбору варианта"
                     >
