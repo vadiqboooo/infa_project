@@ -1002,3 +1002,53 @@
 .light .task-solve-page .task-solution-panel-dark .solution-panel-header .text-emerald-200 {
   color: #a7f3d0 !important;
 }
+
+/* Exam navigation: current task and tasks with a saved answer must stay visible in both themes */
+.exam-dark .exam-nav-btn {
+  position: relative;
+}
+
+.exam-dark .exam-nav-btn[data-answered="true"] {
+  background: rgba(63, 140, 98, 0.22) !important;
+  border-color: #3f8c62 !important;
+  color: #6ee7a8 !important;
+}
+
+.exam-dark .exam-nav-btn[data-answered="true"]::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: #3f8c62;
+  border: 2px solid #151515;
+}
+
+.exam-dark .exam-nav-btn[data-active="true"] {
+  background: #3f8c62 !important;
+  border-color: #3f8c62 !important;
+  color: #fff !important;
+  outline: 2px solid #3f8c62;
+  outline-offset: 2px;
+  transform: scale(1.1);
+}
+
+.exam-dark .exam-nav-btn[data-active="true"]::after {
+  border-color: #fff;
+  background: #fff;
+}
+
+.light .exam-dark .exam-nav-btn[data-answered="true"] {
+  background: rgba(63, 140, 98, 0.16) !important;
+  color: #2f7a52 !important;
+}
+
+.light .exam-dark .exam-nav-btn[data-answered="true"]::after {
+  border-color: #f8f7f4;
+}
+
+.light .exam-dark .exam-nav-btn[data-active="true"] {
+  color: #fff !important;
+}

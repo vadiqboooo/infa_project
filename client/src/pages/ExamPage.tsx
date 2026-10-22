@@ -1743,8 +1743,12 @@ export default function ExamPage() {
                                     <button
                                         key={t.id}
                                         onClick={() => selectExamTask(idx)}
+                                        data-active={isActive}
+                                        data-answered={hasAnswer}
+                                        aria-current={isActive ? "step" : undefined}
+                                        title={hasAnswer ? "Ответ сохранён" : undefined}
                                         className={clsx(
-                                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black transition",
+                                            "exam-nav-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black transition",
                                             hasAnswer
                                                 ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
                                                 : "border-gray-200 bg-gray-100 text-gray-400",
@@ -1793,11 +1797,6 @@ export default function ExamPage() {
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                    {tasks.length > 0 && (
-                        <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-500 whitespace-nowrap" aria-live="polite">
-                            Задание {taskIndex + 1} из {tasks.length}
-                        </span>
-                    )}
                     <ThemeToggle compact />
                     {isControl && (
                         <>
@@ -2008,14 +2007,18 @@ export default function ExamPage() {
                                 btnClass = 'bg-emerald-50 border-emerald-300 text-[#3F8C62]';
                             }
                             const activeClass = isActive
-                                ? 'ring-2 ring-[#3F8C62] ring-offset-2 ring-offset-[#F8F7F4] shadow-sm'
+                                ? ''
                                 : '';
                             return (
                                 <button
                                     key={t.id}
                                     onClick={() => selectExamTask(idx)}
+                                    data-active={isActive}
+                                    data-answered={hasAnswer && !(showImmediateFeedback && score)}
+                                    aria-current={isActive ? "step" : undefined}
+                                    title={hasAnswer ? "Ответ сохранён" : undefined}
                                     className={clsx(
-                                        'w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border',
+                                        'exam-nav-btn w-10 h-10 shrink-0 rounded-xl text-sm font-bold transition-all flex items-center justify-center border',
                                         btnClass,
                                         activeClass
                                     )}
