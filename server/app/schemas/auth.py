@@ -48,9 +48,16 @@ class UserSchema(BaseModel):
     login: str | None = None
     group_ids: list[int] = []
     can_edit_real_name: bool = False
+    guest_topic_id: int | None = None
 
     class Config:
         from_attributes = True
+
+
+class GuestAuthData(BaseModel):
+    token: str
+    first_name: str
+    last_name: str
 
 
 class UserUpdate(BaseModel):

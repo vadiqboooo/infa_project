@@ -889,6 +889,7 @@ export interface User {
     subscription_expires_at?: string | null;
     group_ids?: number[];
     can_edit_real_name?: boolean;
+    guest_topic_id?: number | null;
 }
 
 /* ── Password auth ─────────────────────────────────── */

@@ -56,6 +56,7 @@ const BACKGROUND_PRESETS: { url: string; label: string }[] = [
 import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
+import GuestLinkControl from './GuestLinkControl';
 import './TopicDetail.css';
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string
@@ -765,6 +766,10 @@ export function TopicDetail({
                   </label>
                 </div>
               </section>
+
+              {editingTopic.id > 0 && ['variants', 'math', 'mock', 'control'].includes(String(editingTopic.category)) && (
+                <GuestLinkControl topicId={editingTopic.id} />
+              )}
 
               <section className="border-t border-gray-100 pt-6 dark:border-white/10">
                 <div className="mb-4">

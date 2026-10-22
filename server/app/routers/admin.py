@@ -2222,6 +2222,46 @@ async def get_attempt_results(attempt_id: int, db: AsyncSession = Depends(get_db
     }
 
 
+# ── Guest links ───────────────────────────────────────────────
+
+async def _guest_link_state(topic: Topic, db: AsyncSession) -> dict:
+    guests = await db.scalar(
+        select(func.count(User.id)).where(User.role == "guest", User.guest_topic_id == topic.id)
+    )
+    return {"enabled": topic.guest_token is not None, "token": topic.guest_token, "guests_count": guests or 0}
+
+
+async def _get_topic_or_404(topic_id: int, db: AsyncSession) -> Topic:
+    topic = (await db.execute(select(Topic).where(Topic.id == topic_id))).scalar_one_or_none()
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+    return topic
+
+
+@router.get("/topics/{topic_id}/guest-link")
+async def get_guest_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    return await _guest_link_state(await _get_topic_or_404(topic_id, db), db)
+
+
+@router.post("/topics/{topic_id}/guest-link")
+async def enable_guest_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    """Turn the public link on (idempotent: keeps the existing token)."""
+    topic = await _get_topic_or_404(topic_id, db)
+    if topic.guest_token is None:
+        topic.guest_token = secrets.token_urlsafe(12)
+        await db.commit()
+    return await _guest_link_state(topic, db)
+
+
+@router.delete("/topics/{topic_id}/guest-link")
+async def disable_guest_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    """Turn the link off: no new guests can join; existing guests keep their attempts."""
+    topic = await _get_topic_or_404(topic_id, db)
+    topic.guest_token = None
+    await db.commit()
+    return await _guest_link_state(topic, db)
+
+
 # ── Exams ─────────────────────────────────────────────────────
 
 @router.get("/topics/{topic_id}/exam")

@@ -18,6 +18,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import TaskBankPage from "./pages/TaskBankPage";
 import WorksheetPage from "./pages/WorksheetPage";
 import ArticlePage from "./pages/ArticlePage";
+import GuestVariantPage from "./pages/GuestVariantPage";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -97,8 +98,14 @@ function AnalyticsTracker() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { loggedIn, loading } = useAuth();
+  const { loggedIn, loading, user } = useAuth();
+  const { pathname } = useLocation();
   if (loading) return <div role="status" className="flex h-full items-center justify-center">Загрузка профиля…</div>;
+  // Guests (variant link) may only see their own variant.
+  if (user?.role === "guest" && user.guest_topic_id != null) {
+    const examPath = `/exams/${user.guest_topic_id}`;
+    if (pathname !== examPath) return <Navigate to={examPath} replace />;
+  }
   return loggedIn ? <>{children}</> : <LandingPage />;
 }
 
@@ -120,6 +127,7 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/terms" element={<TermsPage />} />
+              <Route path="/v/:token" element={<GuestVariantPage />} />
 
               {/* Routes with MainLayout (Sidebar) */}
               <Route

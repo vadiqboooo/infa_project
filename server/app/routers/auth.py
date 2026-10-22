@@ -14,7 +14,10 @@ from app.config import settings
 from app.dependencies import get_current_user, get_db
 from app.models.group import user_groups
 from app.models.user import User
+from app.models.exam import Exam
+from app.models.topic import Topic
 from app.schemas.auth import (
+    GuestAuthData,
     LoginAuthData,
     PasswordChangeIn,
     RegisterAuthData,
@@ -59,6 +62,7 @@ async def _user_schema(user: User, db: AsyncSession) -> UserSchema:
         login=user.login,
         group_ids=group_ids,
         can_edit_real_name=bool(group_ids),
+        guest_topic_id=user.guest_topic_id,
     )
 
 
@@ -181,6 +185,51 @@ async def auth_login(body: LoginAuthData, db: AsyncSession = Depends(get_db)):
 
     token = _create_jwt(user.id)
     return TokenResponse(access_token=token)
+
+
+async def _topic_by_guest_token(token: str, db: AsyncSession) -> Topic:
+    result = await db.execute(select(Topic).where(Topic.guest_token == token))
+    topic = result.scalar_one_or_none()
+    if not token or topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ссылка недействительна или отключена")
+    return topic
+
+
+@router.get("/guest-link/{token}")
+async def guest_link_info(token: str, db: AsyncSession = Depends(get_db)):
+    """Public info about the variant behind a guest link (shown on the entry screen)."""
+    topic = await _topic_by_guest_token(token, db)
+    exam = (await db.execute(select(Exam).where(Exam.topic_id == topic.id))).scalar_one_or_none()
+    return {
+        "topic_id": topic.id,
+        "title": topic.title,
+        "task_count": len(topic.tasks),
+        "time_limit_minutes": exam.time_limit_minutes if exam else 235,
+    }
+
+
+@router.post("/guest", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def auth_guest(body: GuestAuthData, db: AsyncSession = Depends(get_db)):
+    """Create a guest (name + surname only) bound to the variant behind the link."""
+    topic = await _topic_by_guest_token(body.token, db)
+    first_name = " ".join(body.first_name.split())
+    last_name = " ".join(body.last_name.split())
+    if not first_name or not last_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите фамилию и имя")
+    if len(first_name) > 60 or len(last_name) > 60:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Слишком длинное имя или фамилия")
+
+    user = User(
+        first_name=first_name,
+        first_name_real=first_name,
+        last_name_real=last_name,
+        role="guest",
+        guest_topic_id=topic.id,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return TokenResponse(access_token=_create_jwt(user.id))
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

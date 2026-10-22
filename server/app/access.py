@@ -28,6 +28,8 @@ class ContentAccess:
     assigned_topic_ids: set[int]
     assigned_task_ids: set[int]
     can_access_all: bool = False
+    # Guests joined via a variant link: they see only that one topic.
+    is_guest: bool = False
 
 
 COMMON_TOPIC_COURSE_TYPES = {"common", "all"}
@@ -101,6 +103,17 @@ async def active_content_course_type(user: User, db: AsyncSession, subscription_
 
 
 async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
+    if user.role == "guest":
+        return ContentAccess(
+            subscription_plan="none",
+            course_type="summer",
+            has_subscription=False,
+            has_group_access=False,
+            trial_task_ids=set(),
+            assigned_topic_ids={user.guest_topic_id} if user.guest_topic_id is not None else set(),
+            assigned_task_ids=set(),
+            is_guest=True,
+        )
     plan = active_subscription_plan(user)
     course_type = await active_content_course_type(user, db, plan)
     has_subscription = plan in {"summer", "year"}
@@ -187,6 +200,8 @@ def can_access_task(task_id: int, access: ContentAccess, topic: Topic | None = N
 
 
 def can_access_topic_course(topic: Topic, access: ContentAccess) -> bool:
+    if access.is_guest:
+        return topic.id in access.assigned_topic_ids
     if access.can_access_all:
         return True
     if topic.id in access.assigned_topic_ids or any(task.id in access.assigned_task_ids for task in topic.tasks):

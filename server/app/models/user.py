@@ -1,7 +1,7 @@
 """User model — supports Telegram-based auth and login/password auth."""
 
 from datetime import datetime
-from sqlalchemy import BigInteger, Integer, String, DateTime, func
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -23,6 +23,16 @@ class User(Base):
     subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Guests (role="guest") joined via a variant link and may only open this topic.
+    guest_topic_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+
+    # Guests (role="guest") joined via a variant link and may only open this topic.
+    guest_topic_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, default=None
+    )
 
     # Login/password auth (for students without Telegram)
     login: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True, index=True)

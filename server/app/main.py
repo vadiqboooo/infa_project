@@ -117,6 +117,9 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS subject VARCHAR(50) NOT NULL DEFAULT 'informatics'"))
             await conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS exam_type VARCHAR(10) NOT NULL DEFAULT 'ege'"))
             await conn.execute(text("ALTER TABLE tasks ALTER COLUMN topic_id DROP NOT NULL"))
+            await conn.execute(text("ALTER TABLE topics ADD COLUMN IF NOT EXISTS guest_token VARCHAR(32)"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_topics_guest_token ON topics (guest_token)"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS guest_topic_id INTEGER REFERENCES topics(id) ON DELETE SET NULL"))
         logger.info("exam_analyses, groups, user_groups, user_topic_seen, user_task_solutions tables ensured.")
     except Exception as e:
         logger.warning("Table creation failed: %s", e)
