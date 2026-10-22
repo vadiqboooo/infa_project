@@ -29,11 +29,6 @@ class User(Base):
         Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, default=None
     )
 
-    # Guests (role="guest") joined via a variant link and may only open this topic.
-    guest_topic_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, default=None
-    )
-
     # Login/password auth (for students without Telegram)
     login: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)

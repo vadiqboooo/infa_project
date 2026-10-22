@@ -19,6 +19,10 @@ import TaskBankPage from "./pages/TaskBankPage";
 import WorksheetPage from "./pages/WorksheetPage";
 import ArticlePage from "./pages/ArticlePage";
 import GuestVariantPage from "./pages/GuestVariantPage";
+import ExamEntryPage from "./pages/ExamEntryPage";
+
+// On exam.<domain> unauthenticated visitors get the name + variant-number entry instead of the landing page.
+const IS_EXAM_HOST = window.location.hostname.startsWith("exam.");
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -106,7 +110,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const examPath = `/exams/${user.guest_topic_id}`;
     if (pathname !== examPath) return <Navigate to={examPath} replace />;
   }
-  return loggedIn ? <>{children}</> : <LandingPage />;
+  if (loggedIn) return <>{children}</>;
+  return IS_EXAM_HOST ? <ExamEntryPage /> : <LandingPage />;
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {

@@ -2231,6 +2231,15 @@ async def _guest_link_state(topic: Topic, db: AsyncSession) -> dict:
     return {"enabled": topic.guest_token is not None, "token": topic.guest_token, "guests_count": guests or 0}
 
 
+async def _new_variant_code(db: AsyncSession) -> str:
+    """Unique 8-digit variant number students type in on the exam domain."""
+    for _ in range(20):
+        code = f"{secrets.randbelow(10**8):08d}"
+        if code[0] != "0" and await db.scalar(select(Topic.id).where(Topic.guest_token == code)) is None:
+            return code
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Не удалось создать номер варианта")
+
+
 async def _get_topic_or_404(topic_id: int, db: AsyncSession) -> Topic:
     topic = (await db.execute(select(Topic).where(Topic.id == topic_id))).scalar_one_or_none()
     if topic is None:
@@ -2248,13 +2257,7 @@ async def enable_guest_link(topic_id: int, db: AsyncSession = Depends(get_db)):
     """Turn the public link on (idempotent: keeps the existing token)."""
     topic = await _get_topic_or_404(topic_id, db)
     if topic.guest_token is None:
-        alphabet = string.ascii_lowercase + string.digits
-        while True:
-            token = "".join(secrets.choice(alphabet) for _ in range(6))
-            taken = await db.scalar(select(Topic.id).where(Topic.guest_token == token))
-            if taken is None:
-                break
-        topic.guest_token = token
+        topic.guest_token = await _new_variant_code(db)
         await db.commit()
     return await _guest_link_state(topic, db)
 

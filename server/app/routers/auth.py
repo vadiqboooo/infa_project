@@ -191,7 +191,7 @@ async def _topic_by_guest_token(token: str, db: AsyncSession) -> Topic:
     result = await db.execute(select(Topic).where(Topic.guest_token == token))
     topic = result.scalar_one_or_none()
     if not token or topic is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ссылка недействительна или отключена")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Вариант с таким номером не найден или отключён")
     return topic
 
 
