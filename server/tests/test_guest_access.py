@@ -39,3 +39,14 @@ def test_guest_cannot_open_other_topics_even_common_ones():
 def test_guest_without_topic_sees_nothing():
     access = _access(None)
     assert not can_access_topic_course(_topic(5), access)
+
+
+def test_returning_guest_is_found_by_name_ignoring_case_and_spaces():
+    from app.routers.auth import find_returning_guest
+
+    first = SimpleNamespace(id=1, first_name_real="Анна", last_name_real="Иванова")
+    other = SimpleNamespace(id=2, first_name_real="Пётр", last_name_real="Петров")
+    assert find_returning_guest([first, other], "  анна ", "ИВАНОВА") is first
+    assert find_returning_guest([first, other], "Пётр", "Петров") is other
+    assert find_returning_guest([first, other], "Анна", "Петрова") is None
+    assert find_returning_guest([], "Анна", "Иванова") is None

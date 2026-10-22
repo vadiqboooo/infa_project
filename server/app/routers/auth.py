@@ -195,6 +195,19 @@ async def _topic_by_guest_token(token: str, db: AsyncSession) -> Topic:
     return topic
 
 
+def _name_key(value: str | None) -> str:
+    return " ".join((value or "").split()).casefold()
+
+
+def find_returning_guest(guests, first_name: str, last_name: str):
+    """The earliest guest with the same surname and name (case and extra spaces ignored), or None."""
+    key = (_name_key(first_name), _name_key(last_name))
+    for guest in guests:
+        if (_name_key(guest.first_name_real), _name_key(guest.last_name_real)) == key:
+            return guest
+    return None
+
+
 @router.get("/guest-link/{token}")
 async def guest_link_info(token: str, db: AsyncSession = Depends(get_db)):
     """Public info about the variant behind a guest link (shown on the entry screen)."""
@@ -219,16 +232,22 @@ async def auth_guest(body: GuestAuthData, db: AsyncSession = Depends(get_db)):
     if len(first_name) > 60 or len(last_name) > 60:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Слишком длинное имя или фамилия")
 
-    user = User(
-        first_name=first_name,
-        first_name_real=first_name,
-        last_name_real=last_name,
-        role="guest",
-        guest_topic_id=topic.id,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    # Same name + same variant = the same student coming back (closed tab, other device): resume their attempt.
+    guests = (
+        await db.execute(select(User).where(User.role == "guest", User.guest_topic_id == topic.id).order_by(User.id))
+    ).scalars().all()
+    user = find_returning_guest(guests, first_name, last_name)
+    if user is None:
+        user = User(
+            first_name=first_name,
+            first_name_real=first_name,
+            last_name_real=last_name,
+            role="guest",
+            guest_topic_id=topic.id,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
     return TokenResponse(access_token=_create_jwt(user.id))
 
 

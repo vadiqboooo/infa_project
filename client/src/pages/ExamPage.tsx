@@ -1773,13 +1773,16 @@ export default function ExamPage() {
             {/* Header */}
             <div className={clsx("flex items-center justify-between gap-3 bg-white px-3 md:px-6 shrink-0 border-b border-gray-100", isControl ? "min-h-16 overflow-hidden py-2" : "h-14")}>
                 <div className={clsx("flex h-full items-center gap-3 md:gap-4 min-w-0", isControl ? "flex-1" : "shrink-0")}>
-                    <button
-                        onClick={() => leaveExam()}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
-                        title="К выбору варианта"
-                    >
-                        <ArrowLeft size={18} />
-                    </button>
+                    {/* A guest can't walk out of a running variant: it ends only via «Завершить» or the timer. */}
+                    {user?.role !== "guest" && (
+                        <button
+                            onClick={() => leaveExam()}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                            title="К выбору варианта"
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                    )}
                     {isControl ? (
                         <div ref={questionsScrollRef} className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1 py-2 no-scrollbar" style={{ scrollbarWidth: "none" }}>
                             {tasks.map((t, idx) => {
