@@ -1,16 +1,13 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   Check,
   Clock,
-  EyeOff,
+  Code,
   GraduationCap,
-  LayoutGrid,
   Moon,
-  Paperclip,
-  Pencil,
+  Save,
   Sparkles,
   Sun,
   User,
@@ -82,7 +79,9 @@ export default function ExamEntryPage() {
   const [step, setStep] = useState<Step>("name");
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
-  const [code, setCode] = useState("");
+  const [digits, setDigits] = useState<string[]>(() => Array(CODE_LENGTH).fill(""));
+  const cellRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const code = digits.join("");
   const [info, setInfo] = useState<VariantInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [agree, setAgree] = useState(false);
@@ -118,6 +117,45 @@ export default function ExamEntryPage() {
       cancelled = true;
     };
   }, [code]);
+
+  const focusCell = (index: number) => {
+    const el = cellRefs.current[index];
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  };
+
+  const changeDigit = (index: number, raw: string) => {
+    const digit = raw.replace(/\D/g, "").slice(-1);
+    setDigits((prev) => prev.map((d, i) => (i === index ? digit : d)));
+    setError(null);
+    if (digit && index < CODE_LENGTH - 1) focusCell(index + 1);
+  };
+
+  const keyDigit = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && !digits[index] && index > 0) {
+      event.preventDefault();
+      setDigits((prev) => prev.map((d, i) => (i === index - 1 ? "" : d)));
+      focusCell(index - 1);
+    } else if (event.key === "ArrowLeft" && index > 0) {
+      event.preventDefault();
+      focusCell(index - 1);
+    } else if (event.key === "ArrowRight" && index < CODE_LENGTH - 1) {
+      event.preventDefault();
+      focusCell(index + 1);
+    }
+  };
+
+  // Pasting the whole number spreads the digits over the cells.
+  const pasteDigits = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, CODE_LENGTH);
+    if (!pasted) return;
+    event.preventDefault();
+    setDigits(Array.from({ length: CODE_LENGTH }, (_, i) => pasted.charAt(i)));
+    setError(null);
+    focusCell(Math.min(pasted.length, CODE_LENGTH - 1));
+  };
 
   const handleName = (event: FormEvent) => {
     event.preventDefault();
@@ -259,23 +297,33 @@ export default function ExamEntryPage() {
               <h1 className="ee-h1 ee-hl">{first || "Здравствуйте"}, введите номер варианта</h1>
               <p className="ee-lead">Восемь цифр — они указаны в задании от преподавателя.</p>
             </div>
-            <label className="ee-label" style={{ gap: 8 }}>
-              Номер варианта
-              <input
-                className="ee-inp ee-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                autoFocus
-                maxLength={CODE_LENGTH}
-                placeholder="00000000"
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH));
-                  setError(null);
-                }}
-              />
-            </label>
+            <div className="ee-field">
+              <span className="ee-label-text">Номер варианта</span>
+              <div role="group" aria-label="Номер варианта, 8 цифр" className="ee-digits">
+                {digits.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => {
+                      cellRefs.current[i] = el;
+                    }}
+                    className={`ee-inp ee-dg${i === 4 ? " gap" : ""}`}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    autoFocus={i === 0}
+                    maxLength={1}
+                    placeholder="·"
+                    aria-label={`Цифра ${i + 1} из ${CODE_LENGTH}`}
+                    value={digit}
+                    onChange={(e) => changeDigit(i, e.target.value)}
+                    onKeyDown={(e) => keyDigit(i, e)}
+                    onPaste={pasteDigits}
+                    onFocus={(e) => e.target.select()}
+                  />
+                ))}
+              </div>
+              <span className="ee-hint">Можно вставить номер целиком — цифры разойдутся по клеткам.</span>
+            </div>
             {info && (
               <div role="status" className="ee-found">
                 <span className="ee-found-ico"><Check size={18} strokeWidth={2.6} aria-hidden="true" /></span>
@@ -346,43 +394,37 @@ export default function ExamEntryPage() {
 
               <div className="ee-right">
                 <div className="ee-right-head">
-                  <h2>Три правила настоящего экзамена</h2>
+                  <h2>Правила экзамена</h2>
                   <span>Прочитайте до старта — после него таймер уже не остановить.</span>
                 </div>
                 <div className="ee-rules">
                   <div className="ee-rule">
-                    <span className="ee-rule-ico" style={{ background: "linear-gradient(135deg, rgba(167,139,250,.25), rgba(167,139,250,.08))", color: "#A78BFA" }}>
-                      <Bot size={22} aria-hidden="true" />
+                    <span className="ee-rule-ico" style={{ background: "linear-gradient(135deg, rgba(16,185,129,.25), rgba(16,185,129,.08))", color: "#10B981" }}>
+                      <Save size={22} aria-hidden="true" />
                     </span>
                     <span className="ee-rule-text">
-                      <b>Без ИИ-помощника</b>
-                      <span>Пока идёт экзамен, подсказки отключены — рассчитывайте на себя.</span>
+                      <b>Ответы сохраняем</b>
+                      <span>Каждый ответ записывается сразу. К любому заданию можно вернуться и поправить, пока идёт время.</span>
                     </span>
                   </div>
                   <div className="ee-rule">
                     <span className="ee-rule-ico" style={{ background: "linear-gradient(135deg, rgba(56,189,248,.25), rgba(56,189,248,.08))", color: "#38BDF8" }}>
-                      <EyeOff size={22} aria-hidden="true" />
+                      <Code size={22} aria-hidden="true" />
                     </span>
                     <span className="ee-rule-text">
-                      <b>Ответы проверим в конце</b>
-                      <span>Верно или нет, вы узнаете после сдачи — работу проверит преподаватель.</span>
+                      <b>Прикрепляйте решения</b>
+                      <span>К заданиям, где нужен ход решения, добавьте программу — вставьте код текстом или загрузите файл.</span>
                     </span>
                   </div>
                   <div className="ee-rule">
-                    <span className="ee-rule-ico" style={{ background: "linear-gradient(135deg, rgba(251,191,36,.28), rgba(251,191,36,.08))", color: "#FBBF24" }}>
+                    <span className="ee-rule-ico" style={{ background: "linear-gradient(135deg, rgba(251,191,36,.25), rgba(251,191,36,.08))", color: "#FBBF24" }}>
                       <Clock size={22} aria-hidden="true" />
                     </span>
                     <span className="ee-rule-text">
-                      <b>Время не остановить</b>
-                      <span>Паузы нет, как на настоящем экзамене. Закончили раньше — жмите «Завершить».</span>
+                      <b>Время идёт без пауз</b>
+                      <span>Работа сдаётся сама, когда таймер дойдёт до нуля. Закончили раньше — нажмите «Завершить».</span>
                     </span>
                   </div>
-                </div>
-                <div className="ee-tools">
-                  <span>Под рукой:</span>
-                  <span className="ee-tool"><Pencil size={14} aria-hidden="true" />Черновик</span>
-                  <span className="ee-tool"><Paperclip size={14} aria-hidden="true" />Прикрепить решение</span>
-                  <span className="ee-tool"><LayoutGrid size={14} aria-hidden="true" />Навигация по номерам</span>
                 </div>
                 <button
                   type="button"
