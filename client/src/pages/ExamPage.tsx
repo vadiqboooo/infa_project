@@ -6,6 +6,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Send, ChevronRight, Clock, CheckCircle2, XCircle, AlertCircle, Save, Check, Code, Paperclip, X, FileText, Eye, Upload, Loader2, Sparkles, MessageSquare, PenLine, LockKeyhole, List } from "lucide-react";
 import { clsx } from "clsx";
 import ReactMarkdown from "react-markdown";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { useTask, useNavigation, useExamByTopic, useStartExam, useSubmitExam, useSaveCodeSolution, useCheckCode } from "../hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
 import TaskView from "../components/TaskView";
@@ -1792,6 +1793,12 @@ export default function ExamPage() {
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
+                    {tasks.length > 0 && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-500 whitespace-nowrap" aria-live="polite">
+                            Задание {taskIndex + 1} из {tasks.length}
+                        </span>
+                    )}
+                    <ThemeToggle compact />
                     {isControl && (
                         <>
                             <span className="hidden items-center gap-1.5 rounded-full border border-sky-400/35 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-300 md:inline-flex">
