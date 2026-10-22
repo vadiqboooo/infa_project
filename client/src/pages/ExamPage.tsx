@@ -355,6 +355,7 @@ export default function ExamPage() {
 
     // Guests already read the rules on the entry screen: open their variant straight in exam mode.
     const guestAutoStartedRef = useRef(false);
+    const [guestStartFailed, setGuestStartFailed] = useState(false);
     useEffect(() => {
         if (user?.role !== "guest" || !examInfo || guestAutoStartedRef.current) return;
         if (examInfo.active_attempt || examInfo.finished_attempt) return;
@@ -547,7 +548,8 @@ export default function ExamPage() {
             setForceModeSelection(false);
             queryClient.invalidateQueries({ queryKey: ["navigation"] });
         } catch (err) {
-            alert("Не удалось начать работу");
+            if (user?.role === "guest") setGuestStartFailed(true);
+            else alert("Не удалось начать работу");
         }
     };
 
@@ -1537,6 +1539,33 @@ export default function ExamPage() {
                 );
             })()}
 
+            </div>
+        );
+    }
+
+    // Guests start automatically (rules were shown on the entry screen): never flash the old intro.
+    if (user?.role === "guest" && !examInfo.active_attempt && !examInfo.finished_attempt) {
+        return (
+            <div className="exam-dark flex min-h-full flex-col items-center justify-center bg-[#F8F7F4] gap-4">
+                {guestStartFailed ? (
+                    <>
+                        <p className="text-gray-500 font-medium">Не удалось начать вариант</p>
+                        <button
+                            onClick={() => {
+                                setGuestStartFailed(false);
+                                void handleStart("exam");
+                            }}
+                            className="rounded-xl bg-[#3F8C62] px-6 py-3 text-sm font-black text-white hover:opacity-90"
+                        >
+                            Попробовать снова
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <div className="w-12 h-12 border-4 border-[#3F8C62] border-t-transparent rounded-full animate-spin" />
+                        <p className="text-gray-500 font-medium">Готовим вариант...</p>
+                    </>
+                )}
             </div>
         );
     }
