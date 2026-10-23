@@ -274,8 +274,12 @@ export function TopicCard({
             locked
               ? "bg-slate-950/70 text-slate-200 ring-white/10"
               : trial
-                ? "bg-sky-400/18 text-sky-100 ring-sky-300/20"
-                : "bg-emerald-400/18 text-emerald-100 ring-emerald-300/20",
+                ? isLight
+                  ? "bg-sky-500/15 text-sky-800 ring-sky-600/25"
+                  : "bg-sky-400/18 text-sky-100 ring-sky-300/20"
+                : isLight
+                  ? "bg-emerald-500/15 text-emerald-800 ring-emerald-600/25"
+                  : "bg-emerald-400/18 text-emerald-100 ring-emerald-300/20",
           )}>
             {locked ? <Lock size={11} /> : <Sparkles size={11} />}
             {locked ? "Подписка" : trial ? "Пробный доступ" : planCurrent ? "по плану" : `+${newTasksCount}`}
