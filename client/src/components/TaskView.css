@@ -676,6 +676,25 @@
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
+.light .task-files {
+    border-top-color: rgba(57, 79, 66, 0.15);
+}
+
+.light .task-files-label {
+    color: #5f7066;
+}
+
+.light .task-file-link {
+    color: #1f7a4a;
+    background: rgba(33, 182, 111, 0.1);
+    border-color: rgba(31, 122, 74, 0.28);
+}
+
+.light .task-file-link:hover {
+    background: rgba(33, 182, 111, 0.2);
+    color: #0f5132;
+}
+
 /* Better KaTeX formula styling */
 .task-body .katex-display {
     margin: var(--sp-5) 0;
