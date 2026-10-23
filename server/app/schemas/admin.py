@@ -108,6 +108,7 @@ class TaskAdminOut(BaseModel):
     full_solution_code: str | None = None
     order_index: int = 0
     sub_tasks: list | None = None
+    media_resources: dict | list | None = None
 
     model_config = {"from_attributes": True}
 

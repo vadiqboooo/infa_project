@@ -304,6 +304,7 @@ export interface TaskAdmin {
     full_solution_code: string | null;
     order_index: number;
     sub_tasks?: AdminSubTask[] | null;
+    media_resources?: { files?: TaskFile[] } | null;
 }
 
 export interface TaskBankItem extends TaskAdmin {

@@ -54,7 +54,7 @@ const BACKGROUND_PRESETS: { url: string; label: string }[] = [
   { url: '/character/фон 2.png', label: 'Фон 2' },
 ];
 import { clsx } from 'clsx';
-import type { TopicAdmin, TaskAdmin, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
+import type { TopicAdmin, TaskAdmin, TaskFile, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
 import GuestLinkControl from './GuestLinkControl';
 import './TopicDetail.css';
@@ -1406,6 +1406,12 @@ export function TaskEditPanel({
   const [generateError, setGenerateError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [taskFiles, setTaskFiles] = useState<TaskFile[]>(
+    Array.isArray(task.media_resources) ? [] : (task.media_resources?.files ?? []),
+  );
+  const [taskFilesTouched, setTaskFilesTouched] = useState(false);
+  const [uploadingTaskFile, setUploadingTaskFile] = useState(false);
+  const [taskFileError, setTaskFileError] = useState('');
   const [graphEditorOpen, setGraphEditorOpen] = useState(false);
   const [geometryEditorOpen, setGeometryEditorOpen] = useState(false);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -1443,7 +1449,43 @@ export function TaskEditPanel({
     });
   };
 
+  const uploadTaskFile = async (file: File) => {
+    setUploadingTaskFile(true);
+    setTaskFileError('');
+    try {
+      const token = localStorage.getItem('jwt_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (apiKey) headers['X-API-Key'] = apiKey;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/admin/import-pdf/upload-file', { method: 'POST', headers, body: fd });
+      if (!res.ok) throw new Error('Не удалось загрузить файл');
+      const data: TaskFile = await res.json();
+      setTaskFiles(prev => [...prev, data]);
+      setTaskFilesTouched(true);
+    } catch (err) {
+      setTaskFileError(err instanceof Error ? err.message : 'Не удалось загрузить файл');
+    } finally {
+      setUploadingTaskFile(false);
+    }
+  };
+
+  const removeTaskFile = (idx: number) => {
+    setTaskFiles(prev => prev.filter((_, i) => i !== idx));
+    setTaskFilesTouched(true);
+  };
+
   const handleSave = async () => {
+    // Keep other media_resources keys untouched; only replace `files` when the editor changed them.
+    const mediaPayload = taskFilesTouched
+      ? (() => {
+          const rest = Array.isArray(task.media_resources) ? {} : { ...(task.media_resources ?? {}) };
+          delete (rest as { files?: TaskFile[] }).files;
+          const next = taskFiles.length > 0 ? { ...rest, files: taskFiles } : rest;
+          return Object.keys(next).length > 0 ? next : null;
+        })()
+      : undefined;
     const subTasksPayload = form.sub_tasks.length > 0
       ? form.sub_tasks.map(s => ({
           number: s.number,
@@ -1460,6 +1502,7 @@ export function TaskEditPanel({
         ...form,
         correct_answer: parseAnswerInput(form.correct_answer ?? '', form.answer_type),
         sub_tasks: subTasksPayload,
+        ...(mediaPayload !== undefined ? { media_resources: mediaPayload } : {}),
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить задачу');
@@ -1646,6 +1689,38 @@ export function TaskEditPanel({
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="Напр: Теория игр, Базы данных"
             className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Файлы к заданию (ученики смогут скачать)</label>
+          {taskFiles.length > 0 && (
+            <ul className="mb-2 space-y-1">
+              {taskFiles.map((f, idx) => (
+                <li key={`${f.url}-${idx}`} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm">
+                  <FileDown size={14} className="shrink-0 text-gray-400" />
+                  <a href={`/api${f.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-blue-600 hover:underline">{f.name}</a>
+                  <button type="button" onClick={() => removeTaskFile(idx)} title="Убрать файл"
+                    className="shrink-0 text-gray-400 hover:text-red-500">
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className={clsx(
+            'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50',
+            uploadingTaskFile && 'cursor-not-allowed opacity-50',
+          )}>
+            {uploadingTaskFile ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            Прикрепить файл
+            <input type="file" className="hidden" disabled={uploadingTaskFile}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) uploadTaskFile(f);
+              }} />
+          </label>
+          {taskFileError && <span className="ml-2 text-xs text-red-500">{taskFileError}</span>}
+          <p className="mt-1 text-[11px] text-gray-400">Файл хранится на вашем сервере, ссылка не пропадёт. Сохраните задание, чтобы изменения применились.</p>
         </div>
       </div>
 
