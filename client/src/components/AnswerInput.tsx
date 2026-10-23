@@ -14,7 +14,13 @@ interface Props {
     // pair (26): boolean[] of length 2
     // table (27): boolean[][] shape 2x2
     feedback?: boolean[] | boolean[][] | null;
+    // File answers: the value is the uploaded file URL; the parent performs the upload
+    onFileUpload?: (file: File) => void;
+    fileUploading?: boolean;
+    fileError?: string | null;
 }
+
+const ANSWER_FILE_ACCEPT = ".py,.txt,.doc,.docx,.pdf,.xlsx,.xls,.csv,.ods,.odt,.zip,.png,.jpg,.jpeg,.pas,.cpp,.c,.java,.cs";
 
 const parseInputValue = (s: string): number | string => {
     if (s === "") return "";
@@ -76,8 +82,43 @@ const getArrayValue = (value: AnswerVal, size: number): (number | string)[] => {
     return Array.from({ length: size }, (_, index) => source[index] ?? "");
 };
 
-export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, examType, feedback }: Props) {
+export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, examType, feedback, onFileUpload, fileUploading, fileError }: Props) {
     const formatValue = (v: any) => (v === null || v === undefined ? "" : String(v));
+
+    if (type === 'file') {
+        const fileUrl = typeof value === "string" ? value : "";
+        const fileName = fileUrl ? decodeURIComponent(fileUrl.split("/").pop() || "") : "";
+        return (
+            <div className="flex flex-col gap-2 w-full">
+                {fileUrl && (
+                    <a
+                        href={`/api${fileUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm font-semibold text-[#3F8C62] break-all hover:underline"
+                    >
+                        Прикреплён файл: {fileName}
+                    </a>
+                )}
+                <label className={`input answer-file-picker cursor-pointer text-center ${disabled || fileUploading || !onFileUpload ? "opacity-50 cursor-not-allowed" : ""}`}>
+                    {fileUploading ? "Загрузка..." : fileUrl ? "Заменить файл" : "Прикрепить файл"}
+                    <input
+                        type="file"
+                        className="hidden"
+                        accept={ANSWER_FILE_ACCEPT}
+                        disabled={disabled || fileUploading || !onFileUpload}
+                        onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = "";
+                            if (f && onFileUpload) onFileUpload(f);
+                        }}
+                    />
+                </label>
+                {fileError && <span className="text-xs text-red-500">{fileError}</span>}
+                <span className="text-xs opacity-70">До 10 МБ. Файл проверит учитель.</span>
+            </div>
+        );
+    }
 
     // Tailwind classes for per-cell feedback color
     const cellCls = (ok: boolean | undefined) =>

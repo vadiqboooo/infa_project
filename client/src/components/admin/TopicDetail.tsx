@@ -1629,6 +1629,7 @@ export function TaskEditPanel({
               <option value="math_expression">Математическое выражение</option>
               <option value="pair">Пара чисел</option>
               <option value="table">Таблица</option>
+              <option value="file">Файл (прикрепить)</option>
             </select>
           </div>
           <div>

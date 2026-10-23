@@ -73,6 +73,7 @@ const ANSWER_TYPES = [
     { value: 'table', label: 'Таблица' },
     { value: 'text', label: 'Текст' },
     { value: 'math_expression', label: 'Математическое выражение' },
+    { value: 'file', label: 'Файл (прикрепить)' },
 ];
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string

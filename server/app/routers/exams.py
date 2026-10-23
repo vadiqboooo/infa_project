@@ -19,7 +19,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.exam import Exam, exam_tasks
 from app.models.exam_analysis import ExamAnalysis
 from app.models.exam_attempt import ExamAttempt
-from app.models.task import Task
+from app.models.task import AnswerType, Task
 from app.models.user import User
 from app.schemas.exam import ExamResult, ExamStartResponse, ExamSubmitIn
 
@@ -482,6 +482,11 @@ async def submit_exam(
         primary_score += task_points
 
         max_points = 2 if (task.ege_number and task.ege_number >= 26) else 1
+        attached_file_url = None
+        if task.answer_type == AnswerType.file and user_answer and isinstance(user_answer.val, str):
+            # Only accept files uploaded to this very attempt via the answer-file endpoint.
+            if user_answer.val.startswith(f"/uploads/exam_answers/{attempt.id}/") and ".." not in user_answer.val:
+                attached_file_url = user_answer.val
         timing = timings_map.get(task.id)
         time_spent_seconds = None
         if timing and timing.time_spent_ms is not None:
@@ -499,7 +504,7 @@ async def submit_exam(
             "auto_checked": has_correct_answer,
             "has_solution": bool(task.solution_steps or task.full_solution_code),
             "code_solution": code_solutions_map.get(task.id),
-            "file_solution_url": None,
+            "file_solution_url": attached_file_url,
             "opened_at_ms": timing.opened_at_ms if timing else None,
             "answered_at_ms": timing.answered_at_ms if timing else None,
             "time_spent_seconds": time_spent_seconds,
@@ -561,6 +566,70 @@ async def submit_exam(
 
 
 ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv", ".ods"}
+ALLOWED_ANSWER_FILE_EXTENSIONS = {
+    ".py", ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".ods", ".odt", ".zip",
+    ".png", ".jpg", ".jpeg", ".pas", ".cpp", ".c", ".java", ".cs",
+}
+MAX_ANSWER_FILE_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/attempt/{attempt_id}/answer-file/{task_id}")
+async def upload_task_answer_file(
+    attempt_id: int,
+    task_id: int,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Attach a file as the answer to a `file` task during an active attempt."""
+    attempt_result = await db.execute(
+        select(ExamAttempt).where(
+            ExamAttempt.id == attempt_id,
+            ExamAttempt.user_id == user.id,
+            ExamAttempt.finished_at.is_(None),
+        )
+    )
+    attempt = attempt_result.scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active attempt not found")
+    await _require_attempt_exam_access(attempt, user, db)
+
+    task_result = await db.execute(
+        select(Task)
+        .join(exam_tasks, exam_tasks.c.task_id == Task.id)
+        .where(exam_tasks.c.exam_id == attempt.exam_id, Task.id == task_id)
+    )
+    task = task_result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this exam")
+    if task.answer_type != AnswerType.file:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task does not accept files")
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_ANSWER_FILE_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
+    if len(data) > MAX_ANSWER_FILE_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is too large")
+
+    upload_dir = Path(f"uploads/exam_answers/{attempt_id}")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    for old in upload_dir.glob(f"{task_id}.*"):
+        old.unlink()
+    (upload_dir / f"{task_id}{suffix}").write_bytes(data)
+    file_url = f"/uploads/exam_answers/{attempt_id}/{task_id}{suffix}"
+
+    results = dict(attempt.results_json or {})
+    drafts = dict(results.get("draft_answers", {}))
+    drafts[str(task_id)] = {"val": file_url, "filename": Path(file.filename or "").name}
+    results["draft_answers"] = drafts
+    attempt.results_json = results
+    flag_modified(attempt, "results_json")
+    await db.commit()
+
+    return {"file_url": file_url, "filename": Path(file.filename or "").name}
 
 
 @router.post("/attempt/{attempt_id}/upload/{task_id}")

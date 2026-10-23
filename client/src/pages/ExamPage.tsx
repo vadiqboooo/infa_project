@@ -373,6 +373,41 @@ export default function ExamPage() {
         }
     }, [examInfo?.id, examInfo?.finished_attempt?.id, isMock, isSelectableVariant]);
 
+    const [answerFileUploading, setAnswerFileUploading] = useState(false);
+    const [answerFileError, setAnswerFileError] = useState<string | null>(null);
+
+    const handleAnswerFileUpload = async (file: File) => {
+        const attemptId = examInfo?.active_attempt?.id;
+        if (!task || !attemptId) return;
+        const taskId = task.id;
+        setAnswerFileUploading(true);
+        setAnswerFileError(null);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await authFetch(`/api/exams/attempt/${attemptId}/answer-file/${taskId}`, {
+                method: "POST",
+                body: formData,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => null);
+                setAnswerFileError(err?.detail === "File type not allowed"
+                    ? "Этот тип файла не поддерживается"
+                    : err?.detail === "File is too large"
+                        ? "Файл больше 10 МБ"
+                        : "Не удалось загрузить файл");
+                return;
+            }
+            const data = await res.json();
+            setExamAnswers(prev => ({ ...prev, [taskId]: data.file_url }));
+            setCurrentAnswer(data.file_url);
+        } catch {
+            setAnswerFileError("Не удалось загрузить файл");
+        } finally {
+            setAnswerFileUploading(false);
+        }
+    };
+
     const handleSaveAnswer = () => {
         if (task) {
             // Freeze task time — add current session, stop counting
@@ -2185,6 +2220,9 @@ export default function ExamPage() {
                                         egeNumber={task?.ege_number}
                                         isMath={isMathTask}
                                         examType={taskExamType}
+                                        onFileUpload={handleAnswerFileUpload}
+                                        fileUploading={answerFileUploading}
+                                        fileError={answerFileError}
                                     />
                                     {task && isEgeMathTask && (task.ege_number === 14 || task.ege_number === 17) && (
                                         <div className="grid grid-cols-1 gap-2">
@@ -2209,6 +2247,7 @@ export default function ExamPage() {
                                         </div>
                                     )}
 
+                                    {(task?.answer_type as string) !== "file" && (
                                     <button
                                         onClick={handleSaveAnswer}
                                         disabled={isSubmitting || !isAnswerChanged}
@@ -2239,6 +2278,7 @@ export default function ExamPage() {
                                             </>
                                         )}
                                     </button>
+                                    )}
                                     {isControl && isAnswerSaved && !isAnswerChanged && (
                                         <div className="flex items-center gap-2 rounded-xl border border-sky-400/35 bg-sky-500/10 px-3 py-2.5 text-xs font-bold text-sky-300 md:col-span-2">
                                             <Check size={15} />

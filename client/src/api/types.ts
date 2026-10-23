@@ -5,7 +5,8 @@ export enum AnswerType {
     pair = "pair",
     table = "table",
     text = "text",
-    math_expression = "math_expression"
+    math_expression = "math_expression",
+    file = "file"
 }
 
 export enum ProgressStatus {
