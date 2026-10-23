@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { Upload } from "lucide-react";
 import type { AnswerType, AnswerVal } from "../api/types";
 import "./AnswerInput.css";
 
@@ -100,8 +101,9 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
                         Прикреплён файл: {fileName}
                     </a>
                 )}
-                <label className={`input answer-file-picker cursor-pointer text-center ${disabled || fileUploading || !onFileUpload ? "opacity-50 cursor-not-allowed" : ""}`}>
-                    {fileUploading ? "Загрузка..." : fileUrl ? "Заменить файл" : "Прикрепить файл"}
+                <label className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-500/50 bg-emerald-500/5 px-4 py-4 text-sm font-bold text-emerald-500 transition hover:bg-emerald-500/10 ${disabled || fileUploading || !onFileUpload ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                    <Upload size={16} />
+                    {fileUploading ? "Загрузка..." : fileUrl ? "Заменить файл" : "Прикрепить файл с ответом"}
                     <input
                         type="file"
                         className="hidden"

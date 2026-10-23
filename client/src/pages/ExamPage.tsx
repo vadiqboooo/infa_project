@@ -2155,7 +2155,7 @@ export default function ExamPage() {
                                                 </button>
                                             )
                                         )}
-                                        {isControl && task && (
+                                        {isControl && task && (task.answer_type as string) !== "file" && (
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -2286,8 +2286,8 @@ export default function ExamPage() {
                                         </div>
                                     )}
                                     
-                                    {/* Solution attachment button */}
-                                    {task && !isControl && (
+                                    {/* Solution attachment button (not for file-answer tasks: the answer is the file itself) */}
+                                    {task && !isControl && (task.answer_type as string) !== "file" && (
                                         <button
                                             onClick={() => {
                                                 setSolutionPanelInitialTab("code");
