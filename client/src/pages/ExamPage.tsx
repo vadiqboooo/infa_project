@@ -277,8 +277,8 @@ export default function ExamPage() {
     }, [currentPrimaryScore]);
 
     const selectExamTask = (index: number) => {
-        // Do not lose a typed answer when the student switches tasks in a control.
-        if (isControl && task && isAnswerChanged) {
+        // Do not lose a typed answer when the student switches tasks.
+        if (task && isAnswerChanged) {
             handleSaveAnswer();
         }
         const currentTaskParam = new URLSearchParams(location.search).get("task");
