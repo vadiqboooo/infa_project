@@ -447,8 +447,15 @@ async def submit_exam(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
     topic = await _require_exam_course_access(exam, user, db)
 
-    # Build task lookup
-    task_map: dict[int, Task] = {t.id: t for t in exam.tasks}
+    # Build task lookup. Some variants have tasks attached only to the topic (empty exam_tasks):
+    # fall back to them, otherwise the attempt would be closed with nothing recorded.
+    exam_tasks_list = list(exam.tasks)
+    if not exam_tasks_list:
+        topic_tasks_result = await db.execute(
+            select(Task).where(Task.topic_id == exam.topic_id).order_by(Task.order_index, Task.id)
+        )
+        exam_tasks_list = list(topic_tasks_result.scalars().all())
+    task_map: dict[int, Task] = {t.id: t for t in exam_tasks_list}
     total = len(task_map)
     correct_count = 0
     primary_score = 0
