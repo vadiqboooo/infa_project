@@ -2234,6 +2234,55 @@ async def get_attempt_results(attempt_id: int, db: AsyncSession = Depends(get_db
 
 # ── Guest links ───────────────────────────────────────────────
 
+@router.get("/guest-results")
+async def list_guest_results(topic_id: int | None = None, db: AsyncSession = Depends(get_db)):
+    """All attempts made by guests who joined through variant links, newest first."""
+    query = (
+        select(ExamAttempt, User, Topic, Exam)
+        .join(User, User.id == ExamAttempt.user_id)
+        .join(Exam, Exam.id == ExamAttempt.exam_id)
+        .join(Topic, Topic.id == Exam.topic_id)
+        .where(User.role == "guest")
+        .order_by(ExamAttempt.started_at.desc(), ExamAttempt.id.desc())
+    )
+    if topic_id is not None:
+        query = query.where(Topic.id == topic_id)
+    rows = (await db.execute(query)).all()
+
+    task_counts = {
+        exam_id: count
+        for exam_id, count in (
+            await db.execute(select(exam_tasks.c.exam_id, func.count()).group_by(exam_tasks.c.exam_id))
+        ).all()
+    }
+
+    items = []
+    for attempt, guest, topic, exam in rows:
+        results = attempt.results_json or {}
+        task_results = results.get("task_results") or []
+        drafts = results.get("draft_answers") or {}
+        answered = (
+            sum(1 for tr in task_results if (tr.get("user_answer") or {}).get("val") not in (None, "", [], [[]]))
+            if attempt.finished_at
+            else sum(1 for d in drafts.values() if isinstance(d, dict) and d.get("val") not in (None, "", [], [[]]))
+        )
+        name = f"{guest.last_name_real or ''} {guest.first_name_real or ''}".strip() or guest.first_name or f"Гость {guest.id}"
+        items.append({
+            "attempt_id": attempt.id,
+            "guest_id": guest.id,
+            "guest_name": name,
+            "topic_id": topic.id,
+            "topic_title": topic.title,
+            "started_at": attempt.started_at,
+            "finished_at": attempt.finished_at,
+            "primary_score": attempt.primary_score,
+            "score": attempt.score,
+            "answered_count": answered,
+            "total_tasks": len(task_results) if attempt.finished_at and task_results else task_counts.get(exam.id, 0),
+        })
+    return items
+
+
 async def _guest_link_state(topic: Topic, db: AsyncSession) -> dict:
     guests = await db.scalar(
         select(func.count(User.id)).where(User.role == "guest", User.guest_topic_id == topic.id)

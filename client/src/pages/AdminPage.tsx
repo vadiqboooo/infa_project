@@ -21,6 +21,7 @@ import {
     ChevronRight,
     Eye,
     EyeOff,
+    UserCheck,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { Routes, Route, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -50,6 +51,7 @@ import AdminImportPdfPage from "./AdminImportPdfPage";
 import { GroupPlanEditor } from "../components/admin/GroupPlanEditor";
 import { SubjectSettingsPanel } from "../components/admin/SubjectSettingsPanel";
 import { ArticlesPanel } from "../components/admin/ArticlesPanel";
+import { GuestResultsPanel } from "../components/admin/GuestResultsPanel";
 import { useAuth } from "../context/AuthContext";
 import "./AdminPage.css";
 
@@ -59,7 +61,7 @@ const API_BASE = "/api";
 const ADMIN_DASHBOARD_STATE_KEY = "admin_dashboard_state";
 
 type AdminDashboardState = {
-    activeTab?: 'home' | 'topics' | 'articles' | 'students' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
+    activeTab?: 'home' | 'topics' | 'articles' | 'students' | 'guests' | 'subscriptions' | 'plans' | 'metrics' | 'settings';
     search?: string;
     filter?: FilterCategory;
     egeNumberFilter?: string;
@@ -112,7 +114,7 @@ function adminFetch<T>(path: string, apiKey?: string, options: RequestInit = {})
     });
 }
 
-type AdminSection = 'topics' | 'articles' | 'students' | 'subscriptions' | 'metrics' | 'settings';
+type AdminSection = 'topics' | 'articles' | 'students' | 'guests' | 'subscriptions' | 'metrics' | 'settings';
 
 type FilterCategory = 'все' | 'learning' | 'tutorial' | 'homework' | 'control' | 'variants' | 'math' | 'mock';
 
@@ -324,7 +326,7 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
     useEffect(() => {
         if (loading) return;
         const state = readAdminDashboardState();
-        if (activeTab === 'subscriptions' || activeTab === 'metrics' || activeTab === 'settings') return;
+        if (activeTab === 'subscriptions' || activeTab === 'metrics' || activeTab === 'settings' || activeTab === 'guests') return;
         const scrollTop = activeTab === 'students' ? state.studentsScrollTop : state.topicsScrollTop;
         requestAnimationFrame(() => {
             const target = activeTab === 'students' ? studentsScrollRef.current : topicsScrollRef.current;
@@ -535,6 +537,16 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                     Ученики
                 </button>
                 <button
+                    onClick={() => setActiveTab('guests')}
+                    className={clsx(
+                        'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
+                        activeTab === 'guests' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    )}
+                >
+                    <UserCheck size={16} />
+                    Гости
+                </button>
+                <button
                     onClick={() => setActiveTab('subscriptions')}
                     className={clsx(
                         'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all',
@@ -603,6 +615,8 @@ function AdminDashboard({ apiKey }: { apiKey: string }) {
                         onViewStudent={(id) => navigate(`students/${id}`)}
                     />
                 </div>
+            ) : activeTab === "guests" ? (
+                <GuestResultsPanel apiKey={apiKey} />
             ) : activeTab === "subscriptions" ? (
                 <SubscriptionsPanel groups={groups} students={students} apiKey={apiKey} onRefresh={loadData} />
             ) : activeTab === "settings" ? (
