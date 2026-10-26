@@ -1830,7 +1830,17 @@ async def get_topic_stats(topic_id: int, group_id: int | None = None, include_un
             select(user_groups.c.user_id).where(user_groups.c.group_id == group_id)
         )
         member_ids = {row[0] for row in members_res.all()}
-        user_ids = sorted(member_ids) if include_unstarted else [uid for uid in all_user_ids if uid in member_ids]
+        # Guests joined via the variant link belong to no group but must stay visible.
+        guests_res = await db.execute(
+            select(User.id).where(User.role == "guest", User.guest_topic_id == topic_id)
+        )
+        guest_ids = {row[0] for row in guests_res.all()}
+        visible_ids = member_ids | guest_ids
+        user_ids = (
+            sorted(member_ids | (guest_ids & set(all_user_ids)))
+            if include_unstarted
+            else [uid for uid in all_user_ids if uid in visible_ids]
+        )
     else:
         user_ids = all_user_ids
 

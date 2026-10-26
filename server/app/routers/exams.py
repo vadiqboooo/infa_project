@@ -459,6 +459,28 @@ async def submit_exam(
     task_results = []
     user_answers_map = {a.task_id: a.answer for a in body.answers}
     code_solutions_map = {item.task_id: item.code for item in body.code_solutions}
+
+    # The client may submit empty values for tasks whose answer it no longer holds in state
+    # (reload, resumed attempt); fall back to what was autosaved so answers aren't lost.
+    from app.schemas.task import AnswerIn
+    saved = attempt.results_json or {}
+    for key, draft in (saved.get("draft_answers") or {}).items():
+        try:
+            tid = int(key)
+        except (TypeError, ValueError):
+            continue
+        current = user_answers_map.get(tid)
+        draft_val = draft.get("val") if isinstance(draft, dict) else None
+        if (current is None or current.val in (None, "", [], [[]])) and draft_val not in (None, "", [], [[]]):
+            user_answers_map[tid] = AnswerIn(val=draft_val)
+    for key, code in (saved.get("draft_codes") or {}).items():
+        try:
+            tid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if code and not code_solutions_map.get(tid):
+            code_solutions_map[tid] = code
+
     timings_map = {t.task_id: t for t in body.task_timings}
 
     for task_id, task in task_map.items():
