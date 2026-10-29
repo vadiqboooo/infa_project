@@ -9,6 +9,7 @@ export function MainLayout() {
   const { user } = useAuth();
   const isGuest = user?.role === "guest";
   const isExamWorkspace = /^\/exams\/\d+/.test(location.pathname);
+  const isTelegramTask = /^\/tasks\/\d+/.test(location.pathname) && Boolean(window.Telegram?.WebApp?.initData);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem("main-sidebar-collapsed") === "1";
@@ -24,18 +25,18 @@ export function MainLayout() {
   }, [sidebarCollapsed]);
 
   return (
-    <div className="app-shell flex h-screen bg-[#151515] transition-colors">
+    <div className={`app-shell flex h-screen bg-[#151515] transition-colors ${isTelegramTask ? 'telegram-task-shell' : ''}`}>
       {/* Sidebar — hidden on mobile, visible on md+ */}
       {!isGuest && (
         <div className="hidden md:flex">
           <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
         </div>
       )}
-      <main className={`min-w-0 flex-1 overflow-y-auto relative ${isExamWorkspace ? 'pb-0' : 'pb-16 md:pb-0'}`}>
+      <main className={`min-w-0 flex-1 overflow-y-auto relative ${isExamWorkspace || isTelegramTask ? 'pb-0' : 'pb-16 md:pb-0'}`}>
         <Outlet />
       </main>
       {/* Bottom nav — visible only on mobile */}
-      {!isExamWorkspace && !isGuest && <BottomNav />}
+      {!isExamWorkspace && !isTelegramTask && !isGuest && <BottomNav />}
     </div>
   );
 }

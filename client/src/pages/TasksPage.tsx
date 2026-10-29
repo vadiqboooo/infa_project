@@ -73,6 +73,7 @@ function CategoryTab({
 
 export default function TasksPage() {
     const { user } = useAuth();
+    const isTelegramMiniApp = Boolean(window.Telegram?.WebApp?.initData);
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -1090,10 +1091,10 @@ export default function TasksPage() {
                                                     "task-condition-card mb-6 w-full min-w-0 rounded-[18px] border border-white/10 bg-[radial-gradient(circle_at_100%_100%,rgba(16,185,129,0.10),transparent_34%),#08131D] p-5",
                                                     drawingPanelOpen && "draft-open"
                                                 )}>
-                                                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                                    <div className="task-condition-toolbar mb-4 flex flex-wrap items-center justify-between gap-3">
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <div className="task-condition-heading text-xs font-black uppercase tracking-[0.12em] text-slate-400">Условие задачи</div>
-                                                            {renderBreakdownButton()}
+                                                            {!isTelegramMiniApp && renderBreakdownButton()}
                                                             {attachSolutionOpen && (
                                                                 <button
                                                                     type="button"
@@ -1105,9 +1106,19 @@ export default function TasksPage() {
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        <div className="flex flex-wrap items-center justify-end gap-2">
-                                                            {renderTaskActionButtons()}
-                                                        </div>
+                                                        {isTelegramMiniApp ? (
+                                                            <details className="telegram-task-tools">
+                                                                <summary>Инструменты</summary>
+                                                                <div className="telegram-task-tools-content">
+                                                                    {renderBreakdownButton()}
+                                                                    {renderTaskActionButtons()}
+                                                                </div>
+                                                            </details>
+                                                        ) : (
+                                                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                                                {renderTaskActionButtons()}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="prose prose-invert max-w-none leading-relaxed text-slate-200">
                                                         <TaskView
@@ -1143,7 +1154,7 @@ export default function TasksPage() {
                                                                                         ? (reviewExamAnswers[task.id] ?? 0)
                                                                                         : isVariant && examInfo?.active_attempt
                                                                                             ? (examAnswers[task.id] ?? 0)
-                                                                                            : (savedAnswers[task.id] ?? 0)
+                                                                                            : (savedAnswers[task.id] ?? "")
                                                                                 }
                                                                                 onChange={(val) => {
                                                                                     if (isVariant && examInfo?.active_attempt) {
