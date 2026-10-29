@@ -8,6 +8,7 @@ import './VerticalTaskList.css';
 
 interface Props {
     topic: TopicNav;
+    hideHeading?: boolean;
     answers: Record<number, AnswerVal>;
     subAnswers: Record<string, AnswerVal>;
     onAnswerChange: (taskId: number, value: AnswerVal) => void;
@@ -130,17 +131,17 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
 }
 
 export default function VerticalTaskList(props: Props) {
-    const { topic, scrollToTaskId } = props;
+    const { topic, scrollToTaskId, hideHeading = false } = props;
     useEffect(() => {
         if (scrollToTaskId) document.getElementById(`vertical-task-${scrollToTaskId}`)?.scrollIntoView({ block: 'start' });
     }, [topic.id, scrollToTaskId]);
 
     return (
         <div className="vertical-task-list">
-            <div className="vertical-task-list-heading">
+            {!hideHeading && <div className="vertical-task-list-heading">
                 <h1>{topic.title}</h1>
                 <span>Решено {topic.tasks.filter(task => task.status === 'solved').length} из {topic.tasks.length}</span>
-            </div>
+            </div>}
             {topic.tasks.length === 0 && <p className="vertical-task-empty">В этом топике пока нет задач.</p>}
             {topic.tasks.map((nav, index) => <TaskCard key={nav.id} {...props} nav={nav} number={index + 1} />)}
         </div>

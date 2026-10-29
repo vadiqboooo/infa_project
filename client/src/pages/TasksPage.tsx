@@ -792,16 +792,17 @@ export default function TasksPage() {
     if (showVerticalList) {
         return (
             <div className="vertical-tasks-page">
-                <header className="vertical-tasks-header">
+                {!isTelegramMiniApp && <header className="vertical-tasks-header">
                     <button type="button" className="vertical-task-link" onClick={() => navigate(backPath)}><ArrowLeft size={16} /> Назад</button>
                     {showModeTabs && modeOptions.length > 1 && <nav className="vertical-tasks-modes" aria-label="Топики">
                         {modeOptions.map(({ topic, path, label }) => <button key={topic.id} type="button" aria-current={topic.id === currentTopic.id ? 'page' : undefined} onClick={() => navigate(path)}>{label}</button>)}
                     </nav>}
-                </header>
+                </header>}
                 <main className="vertical-tasks-scroll">
                     <VerticalTaskList
                         key={currentTopic.id}
                         topic={currentTopic}
+                        hideHeading={isTelegramMiniApp}
                         answers={savedAnswers}
                         subAnswers={savedSubAnswers}
                         onAnswerChange={(taskId, value) => setSavedAnswers(prev => ({ ...prev, [taskId]: value }))}

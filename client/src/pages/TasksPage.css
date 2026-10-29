@@ -567,6 +567,14 @@
         padding-top: max(80px, var(--tg-content-safe-area-inset-top, 0px));
     }
 
+    .telegram-task-shell:has(.vertical-tasks-page) {
+        padding-top: 0;
+    }
+
+    .telegram-task-shell .vertical-task-list {
+        padding-top: 8px;
+    }
+
     .telegram-task-shell > main {
         min-height: 0;
         overflow: hidden;
