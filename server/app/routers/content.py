@@ -18,7 +18,7 @@ from app.models.progress import UserProgress
 from app.models.task_solution import UserTaskSolution
 from app.models.task_solution_comment import UserTaskSolutionComment
 from app.schemas.navigation import TaskNav, TopicNav
-from app.schemas.task import TaskOut, TaskSyncIn, TaskSyncResult
+from app.schemas.task import TaskOut, TaskSyncIn, TaskSyncResult, answer_table_shape
 
 router = APIRouter(tags=["content"])
 
@@ -378,10 +378,14 @@ async def get_task(
         content_html=task.content_html,
         media_resources=task.media_resources,
         answer_type=task.answer_type,
+        table=answer_table_shape(task.answer_type, task.correct_answer),
         difficulty=task.difficulty,
         solution_steps=None if answer_feedback_locked else task.solution_steps,
         full_solution_code=None if answer_feedback_locked else task.full_solution_code,
-        sub_tasks=task.sub_tasks,
+        sub_tasks=[
+            {**sub, "table": answer_table_shape(sub.get("answer_type"), sub.get("correct_answer")) or sub.get("table")}
+            for sub in task.sub_tasks
+        ] if task.sub_tasks else task.sub_tasks,
         has_own_solution=bool(solution and (solution.code or solution.file_url or solution.image_url or solution.board_data)),
         solution_comments_count=comments_count,
         is_trial=task_id in access.trial_task_ids,

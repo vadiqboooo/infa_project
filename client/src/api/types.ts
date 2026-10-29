@@ -119,6 +119,7 @@ export interface TaskOut {
     content_html: string;
     media_resources: { files?: TaskFile[] } | null;
     answer_type: AnswerType;
+    table?: { cols: number; rows: number } | null;
     difficulty: TaskDifficulty;
     title?: string | null;
     description?: string | null;

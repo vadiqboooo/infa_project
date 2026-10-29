@@ -178,6 +178,44 @@ class TopicTaskTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(restored["last_answer"], {"answers": answers})
             self.assertEqual(restored["last_correct"], all(expected))
 
+    async def test_three_column_subtask_shape_and_checking(self):
+        async with self.sessions() as db:
+            task = await db.get(Task, 10)
+            task.correct_answer = {"val": 7}
+            task.sub_tasks = [
+                {"number": 20, "content_html": "Three numbers", "answer_type": "table", "correct_answer": {"val": [[8, 22, 23]]}},
+                {"number": 21, "content_html": "One number", "answer_type": "single_number", "correct_answer": {"val": 30}},
+            ]
+            await db.commit()
+        response = await self.client.get("/tasks/10")
+        self.assertEqual(response.status_code, 200, response.text)
+        sub = response.json()["sub_tasks"][0]
+        self.assertEqual(sub["table"], {"cols": 3, "rows": 1})
+        self.assertNotIn("correct_answer", sub)
+        for table, expected in [([[8, 22, 23]], True), ([[8, 22], [23, ""]], False), ([[8, 22, 24]], False)]:
+            answers = [7, table, 30]
+            response = await self.client.post("/tasks/10/check", json={"answers": answers})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["sub_results"], [True, expected, True])
+            restored = (await self.client.get("/tasks/10")).json()
+            self.assertEqual(restored["last_answer"], {"answers": answers})
+
+    async def test_table_shape_for_main_tasks(self):
+        for number, values in [(17, [[8, 22, 23]]), (26, [[1, 2], [3, 4]]), (27, [[1, 2], [3, 4]])]:
+            async with self.sessions() as db:
+                task = await db.get(Task, 10)
+                task.ege_number = number
+                task.answer_type = "table"
+                task.correct_answer = {"val": values}
+                await db.commit()
+            detail = await self.client.get("/tasks/10")
+            self.assertEqual(detail.status_code, 200, detail.text)
+            self.assertEqual(detail.json()["table"], {"cols": len(values[0]), "rows": len(values)})
+            self.assertNotIn("correct_answer", detail.json())
+            response = await self.client.post("/tasks/10/check", json={"val": values})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue(response.json()["correct"])
+
 
 if __name__ == "__main__":
     unittest.main()

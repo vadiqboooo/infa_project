@@ -2214,6 +2214,7 @@ export default function ExamPage() {
                                 <div className={clsx(isControl ? "grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" : "space-y-4")}>
                                     <AnswerInput
                                         type={task?.answer_type || 'single_number'}
+                                        table={task?.table}
                                         value={currentAnswer}
                                         onChange={setCurrentAnswer}
                                         disabled={isSubmitting}

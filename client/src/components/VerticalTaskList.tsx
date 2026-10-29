@@ -79,6 +79,7 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
                                     <span className="vertical-task-answer-label">{task.sub_tasks?.length ? `Ответ ${task.ege_number ?? number}` : 'Ответ'}</span>
                                     <AnswerInput
                                         type={task.answer_type}
+                                        table={task.table}
                                         value={value}
                                         onChange={next => { check.reset(); onAnswerChange(nav.id, next); }}
                                         disabled={check.isPending}
@@ -99,6 +100,7 @@ function TaskCard({ nav, number, topic, answers, subAnswers, onAnswerChange, onS
                                         <span className="vertical-task-answer-label">Ответ {sub.number ?? i + 2}</span>
                                         <AnswerInput
                                             type={sub.answer_type}
+                                            table={sub.table}
                                             value={subAnswers[`${nav.id}:${i}`] ?? ''}
                                             onChange={next => { check.reset(); onSubAnswerChange(`${nav.id}:${i}`, next); }}
                                             disabled={check.isPending}

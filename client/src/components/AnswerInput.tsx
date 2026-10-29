@@ -1,11 +1,13 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Upload } from "lucide-react";
 import type { AnswerType, AnswerVal } from "../api/types";
 import "./AnswerInput.css";
+import { parseTableString } from "../lib/tableAnswer";
 
 interface Props {
     type: AnswerType;
     value: AnswerVal;
+    table?: { cols: number; rows: number } | null;
     onChange: (val: AnswerVal) => void;
     disabled?: boolean;
     egeNumber?: number;
@@ -34,42 +36,6 @@ const parseInputValue = (s: string): number | string => {
     return isNaN(parsed) ? s : parsed;
 };
 
-const parseTableString = (val: any, egeNumber?: number): (number | string)[][] => {
-    let rows: (number | string)[][] = [];
-    
-    if (Array.isArray(val) && Array.isArray(val[0])) {
-        rows = JSON.parse(JSON.stringify(val));
-    } else if (typeof val === 'string' && val.trim()) {
-        rows = val.trim().split('\n').map(row => 
-            row.trim().split(/\s+/).map(cell => cell.trim())
-        );
-    }
-
-    if (rows.length === 0) {
-        if (egeNumber === 27) {
-            rows = [["", ""], ["", ""]];
-        } else {
-            rows = [["", ""]];
-        }
-    }
-
-    if (rows[0] && rows[0].length === 1) {
-        rows = rows.map(r => [r[0], ""]);
-    }
-
-    if (egeNumber !== 27) {
-        const lastRow = rows[rows.length - 1];
-        const isLastRowNotEmpty = lastRow && lastRow.some(cell => String(cell).trim() !== "");
-        if (isLastRowNotEmpty) {
-            rows.push(new Array(lastRow.length).fill(""));
-        }
-    } else {
-        while (rows.length < 2) rows.push(["", ""]);
-    }
-
-    return rows;
-};
-
 const stringifyTable = (arr: (number | string)[][]): string => {
     const trimmed = [...arr];
     while (trimmed.length > 1 && trimmed[trimmed.length - 1].every(cell => String(cell).trim() === "")) {
@@ -83,7 +49,14 @@ const getArrayValue = (value: AnswerVal, size: number): (number | string)[] => {
     return Array.from({ length: size }, (_, index) => source[index] ?? "");
 };
 
-export default function AnswerInput({ type, value, onChange, disabled, egeNumber, isMath, examType, feedback, onFileUpload, fileUploading, fileError }: Props) {
+export default function AnswerInput({ type, table, value, onChange, disabled, egeNumber, isMath, examType, feedback, onFileUpload, fileUploading, fileError }: Props) {
+    useEffect(() => {
+        const hasMathParts = isMath && examType === 'ege' && [13, 14, 17, 19].includes(egeNumber ?? 0);
+        if (disabled || hasMathParts || type !== "table" || egeNumber === 27 || !table || table.cols === 2) return;
+        const normalized = parseTableString(value, egeNumber, table);
+        if (JSON.stringify(value) !== JSON.stringify(normalized)) onChange(normalized);
+    }, [type, value, egeNumber, table, onChange, disabled, isMath, examType]);
+
     const formatValue = (v: any) => (v === null || v === undefined ? "" : String(v));
 
     if (type === 'file') {
@@ -264,7 +237,7 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
     }
 
     if (type === "table") {
-        const tableData = useMemo(() => parseTableString(value, egeNumber), [value, egeNumber]);
+        const tableData = useMemo(() => parseTableString(value, egeNumber, table), [value, egeNumber, table]);
         const fb = Array.isArray(feedback) && Array.isArray(feedback[0]) ? feedback as boolean[][] : null;
 
         if (egeNumber === 27) {
@@ -314,35 +287,25 @@ export default function AnswerInput({ type, value, onChange, disabled, egeNumber
             <div className="table-grid-wrapper">
                 {tableData.map((row, rIdx) => (
                     <div key={rIdx} className="table-row-dynamic">
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            className={`input table-input ${cellCls(fb?.[rIdx]?.[0])}`}
-                            value={formatValue(row[0])}
-                            onChange={(e) => {
-                                const newVal = tableData.map((r, ri) =>
-                                    r.map((c, ci) => (ri === rIdx && ci === 0 ? parseInputValue(e.target.value) : c))
-                                );
-                                onChange(newVal);
-                            }}
-                            disabled={disabled}
-                            placeholder=""
-                        />
-                        <div className="input-separator">•</div>
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            className={`input table-input ${cellCls(fb?.[rIdx]?.[1])}`}
-                            value={formatValue(row[1])}
-                            onChange={(e) => {
-                                const newVal = tableData.map((r, ri) =>
-                                    r.map((c, ci) => (ri === rIdx && ci === 1 ? parseInputValue(e.target.value) : c))
-                                );
-                                onChange(newVal);
-                            }}
-                            disabled={disabled}
-                            placeholder=""
-                        />
+                        {row.map((cell, cIdx) => (
+                            <React.Fragment key={cIdx}>
+                                {cIdx > 0 && <div className="input-separator">•</div>}
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className={`input table-input ${cellCls(fb?.[rIdx]?.[cIdx])}`}
+                                    value={formatValue(cell)}
+                                    onChange={(e) => {
+                                        const newVal = tableData.map((r, ri) =>
+                                            r.map((c, ci) => (ri === rIdx && ci === cIdx ? parseInputValue(e.target.value) : c))
+                                        );
+                                        onChange(newVal);
+                                    }}
+                                    disabled={disabled}
+                                    placeholder=""
+                                />
+                            </React.Fragment>
+                        ))}
                     </div>
                 ))}
             </div>

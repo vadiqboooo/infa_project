@@ -9,6 +9,19 @@ from app.models.task import AnswerType
 
 # ── Read ──────────────────────────────────────────────────────
 
+def answer_table_shape(answer_type, correct_answer):
+    """Expose matrix dimensions without exposing the expected cell values."""
+    if answer_type != "table" or not isinstance(correct_answer, dict):
+        return None
+    value = correct_answer.get("val")
+    if not isinstance(value, list) or not value or not all(isinstance(row, list) and row for row in value):
+        return None
+    cols = len(value[0])
+    if any(len(row) != cols for row in value):
+        return None
+    return {"cols": cols, "rows": len(value)}
+
+
 class SubTaskOut(BaseModel):
     number: int | None = None
     content_html: str
@@ -28,6 +41,7 @@ class TaskOut(BaseModel):
     content_html: str
     media_resources: list | dict | None = None
     answer_type: AnswerType
+    table: dict | None = None
     difficulty: str = "easy"
     solution_steps: list | None = None
     full_solution_code: str | None = None

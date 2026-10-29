@@ -1134,6 +1134,7 @@ export default function TasksPage() {
                                                                         <span className="min-w-[180px] flex-1">
                                                                             <AnswerInput
                                                                                 type={task.answer_type || 'single_number'}
+                                                                                table={task.table}
                                                                                 egeNumber={task.ege_number}
                                                                                 isMath={isMathTask}
                                                                                 examType={taskExamType}
@@ -1227,6 +1228,7 @@ export default function TasksPage() {
                                                                         </div>
                                                                         <AnswerInput
                                                                             type={sub.answer_type || 'single_number'}
+                                                                            table={sub.table}
                                                                             egeNumber={sub.number ?? undefined}
                                                                             isMath={isMathTask}
                                                                             examType={taskExamType}
@@ -1272,6 +1274,7 @@ export default function TasksPage() {
                                                                 <span className="min-w-[180px] flex-1">
                                                                     <AnswerInput
                                                                         type={task.answer_type || 'single_number'}
+                                                                        table={task.table}
                                                                         egeNumber={task.ege_number}
                                                                         isMath={isMathTask}
                                                                         examType={taskExamType}
