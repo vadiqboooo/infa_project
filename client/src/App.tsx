@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainLayout } from "./layouts/MainLayout";
@@ -20,6 +20,7 @@ import WorksheetPage from "./pages/WorksheetPage";
 import ArticlePage from "./pages/ArticlePage";
 import GuestVariantPage from "./pages/GuestVariantPage";
 import ExamEntryPage from "./pages/ExamEntryPage";
+import TelegramTopicPage from "./pages/TelegramTopicPage";
 
 // On exam.<domain> unauthenticated visitors get the name + variant-number entry instead of the landing page.
 const IS_EXAM_HOST = window.location.hostname.startsWith("exam.");
@@ -60,6 +61,18 @@ function PageTitle() {
       ? (match.title === DEFAULT_SEO_TITLE ? match.title : `Инфа ЕГЭ — ${match.title}`)
       : DEFAULT_SEO_TITLE;
   }, [pathname]);
+  return null;
+}
+
+function TelegramLaunchRedirect() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const start = new URLSearchParams(location.search).get('tgWebAppStartParam');
+    if (start && location.pathname !== '/telegram') {
+      navigate(`/telegram?topic=${encodeURIComponent(start)}`, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
   return null;
 }
 
@@ -127,9 +140,11 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <PageTitle />
+            <TelegramLaunchRedirect />
             <AnalyticsTracker />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/telegram" element={<TelegramTopicPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/v/:token" element={<GuestVariantPage />} />

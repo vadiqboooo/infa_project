@@ -19,6 +19,8 @@ export default function LoginPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const sessionExpired = searchParams.get("expired") === "1";
+    const requestedNext = searchParams.get("next");
+    const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
     const [loading, setLoading] = useState(false);
     const [authMode, setAuthMode] = useState<"telegram" | "password">("telegram");
 
@@ -29,8 +31,8 @@ export default function LoginPage() {
     const [loginError, setLoginError] = useState("");
 
     useEffect(() => {
-        if (loggedIn) navigate("/");
-    }, [loggedIn, navigate]);
+        if (loggedIn) navigate(next);
+    }, [loggedIn, navigate, next]);
 
     useEffect(() => {
         if (authMode !== "telegram") return;
@@ -43,7 +45,7 @@ export default function LoginPage() {
                     body: JSON.stringify(user),
                 });
                 login(res.access_token);
-                navigate("/");
+                navigate(next);
             } catch (err: any) {
                 console.error("Auth error:", err);
                 alert("Ошибка авторизации: " + (err.message || "Неизвестная ошибка"));
@@ -57,7 +59,7 @@ export default function LoginPage() {
         if (container) container.innerHTML = "";
 
         // Append Telegram Widget Script
-        const botName = import.meta.env.VITE_BOT_USERNAME || "game_easy2026_bot";
+        const botName = import.meta.env.VITE_BOT_USERNAME || "easymath26_bot";
         const script = document.createElement("script");
         script.src = "https://telegram.org/js/telegram-widget.js?22";
         script.setAttribute("data-telegram-login", botName);
@@ -81,7 +83,7 @@ export default function LoginPage() {
                 body: JSON.stringify({ login: loginInput.trim(), password: passwordInput }),
             });
             login(res.access_token);
-            navigate("/");
+                navigate(next);
         } catch (err: any) {
             setLoginError(err.message || "Неверный логин или пароль");
         } finally {

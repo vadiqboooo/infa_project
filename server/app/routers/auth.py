@@ -2,7 +2,9 @@
 
 import hashlib
 import hmac
+import json
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import jwt
@@ -16,12 +18,14 @@ from app.models.group import user_groups
 from app.models.user import User
 from app.models.exam import Exam
 from app.models.topic import Topic
+from app.models.topic_share import user_topic_shares
 from app.schemas.auth import (
     GuestAuthData,
     LoginAuthData,
     PasswordChangeIn,
     RegisterAuthData,
     TelegramAuthData,
+    TelegramMiniAppAuthData,
     TokenResponse,
     UserSchema,
     UserUpdate,
@@ -133,6 +137,95 @@ def _create_jwt(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _verified_mini_app_user(init_data: str) -> dict:
+    """Verify Telegram Mini App launch data and return its user object."""
+    if not settings.BOT_TOKEN or len(init_data) > 8192:
+        raise HTTPException(status_code=401, detail="Telegram Mini App is unavailable")
+    try:
+        pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=True)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Telegram data")
+    fields = dict(pairs)
+    if len(fields) != len(pairs) or not fields.get("hash") or not fields.get("user"):
+        raise HTTPException(status_code=401, detail="Invalid Telegram data")
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()) if key != "hash")
+    secret = hmac.new(b"WebAppData", settings.BOT_TOKEN.encode(), hashlib.sha256).digest()
+    expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, fields["hash"]):
+        raise HTTPException(status_code=401, detail="Invalid Telegram signature")
+    try:
+        auth_date = int(fields["auth_date"])
+        telegram_user = json.loads(fields["user"])
+        tg_id = int(telegram_user["id"])
+    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid Telegram user data")
+    age = datetime.now(timezone.utc).timestamp() - auth_date
+    if age < -60 or age > 3600 or tg_id <= 0:
+        raise HTTPException(status_code=401, detail="Telegram session expired")
+    return telegram_user
+
+
+@router.post("/telegram-mini-app", response_model=TokenResponse)
+async def auth_telegram_mini_app(body: TelegramMiniAppAuthData, db: AsyncSession = Depends(get_db)):
+    telegram_user = _verified_mini_app_user(body.init_data)
+    tg_id = int(telegram_user["id"])
+    user = (await db.execute(select(User).where(User.tg_id == tg_id))).scalar_one_or_none()
+    if user is None:
+        user = User(tg_id=tg_id)
+        db.add(user)
+    user.username = telegram_user.get("username")
+    user.first_name = telegram_user.get("first_name")
+    user.photo_url = telegram_user.get("photo_url")
+    await db.commit()
+    await db.refresh(user)
+    return TokenResponse(access_token=_create_jwt(user.id))
+
+
+@router.post("/telegram-mini-app/link", response_model=UserSchema)
+async def link_telegram_mini_app(
+    body: TelegramMiniAppAuthData,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    telegram_user = _verified_mini_app_user(body.init_data)
+    tg_id = int(telegram_user["id"])
+    owner = (await db.execute(select(User).where(User.tg_id == tg_id))).scalar_one_or_none()
+    if owner is not None and owner.id != user.id:
+        raise HTTPException(status_code=409, detail="Этот Telegram уже привязан к другому аккаунту")
+    if user.tg_id is not None and user.tg_id != tg_id:
+        raise HTTPException(status_code=409, detail="Аккаунт уже привязан к другому Telegram")
+    user.tg_id = tg_id
+    user.username = telegram_user.get("username")
+    user.first_name = telegram_user.get("first_name")
+    user.photo_url = telegram_user.get("photo_url")
+    await db.commit()
+    return await _user_schema(user, db)
+
+
+@router.post("/telegram-topic/{topic_id}/{share_token}")
+async def grant_telegram_topic(
+    topic_id: int,
+    share_token: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    topic = (await db.execute(
+        select(Topic).where(Topic.id == topic_id, Topic.telegram_share_token == share_token)
+    )).scalar_one_or_none()
+    if topic is None or not share_token or user.role == "guest":
+        raise HTTPException(status_code=404, detail="Ссылка на топик недействительна")
+    existing = await db.scalar(
+        select(user_topic_shares.c.topic_id).where(
+            user_topic_shares.c.user_id == user.id,
+            user_topic_shares.c.topic_id == topic_id,
+        )
+    )
+    if existing is None:
+        await db.execute(user_topic_shares.insert().values(user_id=user.id, topic_id=topic_id))
+        await db.commit()
+    return {"topic_id": topic_id}
 
 
 @router.post("/telegram", response_model=TokenResponse)

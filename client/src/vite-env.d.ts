@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_BOT_USERNAME?: string;
   readonly VITE_SELF_EMPLOYED_NAME?: string;
   readonly VITE_SELF_EMPLOYED_INN?: string;
 }

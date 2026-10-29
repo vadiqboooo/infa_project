@@ -31,6 +31,7 @@ from app.models.exam import Exam, exam_tasks
 from app.models.exam_subject_settings import ExamSubjectSettings
 from app.models.task import AnswerType, Task
 from app.models.topic import Topic
+from app.models.topic_share import user_topic_shares
 from app.models.user import User
 from app.models.progress import UserProgress, ProgressStatus
 from app.models.exam_attempt import ExamAttempt
@@ -2233,6 +2234,33 @@ async def get_attempt_results(attempt_id: int, db: AsyncSession = Depends(get_db
 
 
 # ── Guest links ───────────────────────────────────────────────
+
+@router.get("/topics/{topic_id}/telegram-link")
+async def get_telegram_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    topic = await _get_topic_or_404(topic_id, db)
+    return {"token": topic.telegram_share_token}
+
+
+@router.post("/topics/{topic_id}/telegram-link")
+async def enable_telegram_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    topic = await _get_topic_or_404(topic_id, db)
+    if topic.category not in {"tutorial", "homework", "math"}:
+        raise HTTPException(status_code=400, detail="Ссылка доступна только для обычных топиков")
+    if not topic.tasks:
+        raise HTTPException(status_code=400, detail="Добавьте в топик хотя бы одно задание перед публикацией ссылки")
+    if not topic.telegram_share_token:
+        topic.telegram_share_token = secrets.token_urlsafe(18)
+        await db.commit()
+    return {"token": topic.telegram_share_token}
+
+
+@router.delete("/topics/{topic_id}/telegram-link")
+async def disable_telegram_link(topic_id: int, db: AsyncSession = Depends(get_db)):
+    topic = await _get_topic_or_404(topic_id, db)
+    topic.telegram_share_token = None
+    await db.execute(delete(user_topic_shares).where(user_topic_shares.c.topic_id == topic_id))
+    await db.commit()
+    return {"token": None}
 
 @router.get("/guest-results")
 async def list_guest_results(topic_id: int | None = None, db: AsyncSession = Depends(get_db)):

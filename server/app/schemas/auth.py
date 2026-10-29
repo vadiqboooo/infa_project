@@ -16,6 +16,11 @@ class TelegramAuthData(BaseModel):
     hash: str
 
 
+class TelegramMiniAppAuthData(BaseModel):
+    """Raw Telegram.WebApp.initData, verified only on the server."""
+    init_data: str
+
+
 class LoginAuthData(BaseModel):
     """Data for login/password authentication."""
     login: str

@@ -57,6 +57,7 @@ import { clsx } from 'clsx';
 import type { TopicAdmin, TaskAdmin, TaskFile, TopicCategory, TopicSubject, TaskDifficulty, AnswerType } from '../../api/types';
 import { useGenerateSteps } from '../../hooks/useApi';
 import GuestLinkControl from './GuestLinkControl';
+import TelegramPostLink from './TelegramPostLink';
 import './TopicDetail.css';
 
 // Format the stored correct_answer ({val: x} or x) into a human-editable string
@@ -769,6 +770,10 @@ export function TopicDetail({
 
               {editingTopic.id > 0 && ['variants', 'math', 'mock', 'control'].includes(String(editingTopic.category)) && (
                 <GuestLinkControl topicId={editingTopic.id} />
+              )}
+
+              {editingTopic.id > 0 && ['tutorial', 'homework', 'math'].includes(String(editingTopic.category)) && (
+                <TelegramPostLink topicId={editingTopic.id} title={editingTopic.title} />
               )}
 
               <section className="border-t border-gray-100 pt-6 dark:border-white/10">

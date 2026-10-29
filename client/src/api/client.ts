@@ -25,7 +25,9 @@ export function handleSessionExpired() {
     sessionExpiredHandled = true;
     clearToken();
     // Skip redirect if already on /login (e.g. login attempt itself failed)
-    if (window.location.pathname !== "/login") {
+    const telegramLaunch = window.location.pathname === "/telegram"
+        || new URLSearchParams(window.location.search).has("tgWebAppStartParam");
+    if (window.location.pathname !== "/login" && !telegramLaunch) {
         window.location.replace("/login?expired=1");
     }
 }

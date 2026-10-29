@@ -13,6 +13,7 @@ from app.models.exam import Exam
 from app.models.exam_attempt import ExamAttempt
 from app.models.task import Task
 from app.models.topic import Topic
+from app.models.topic_share import user_topic_shares
 from app.models.user import User
 from app.models.group import user_groups
 from app.models.group_plan import GroupLesson, GroupLessonItem
@@ -124,6 +125,11 @@ async def get_content_access(user: User, db: AsyncSession) -> ContentAccess:
     trial_task_ids: set[int] = set()
     assigned_topic_ids: set[int] = set()
     assigned_task_ids: set[int] = set()
+
+    shared_result = await db.execute(
+        select(user_topic_shares.c.topic_id).where(user_topic_shares.c.user_id == user.id)
+    )
+    assigned_topic_ids.update(row[0] for row in shared_result.all())
 
     assignments_result = await db.execute(
         select(GroupLessonItem.topic_id, GroupLessonItem.task_id)

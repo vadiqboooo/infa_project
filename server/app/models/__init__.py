@@ -1,4 +1,5 @@
 from app.models.topic import Topic
+from app.models.topic_share import user_topic_shares
 from app.models.article import Article, ArticleProgress
 from app.models.task import Task
 from app.models.exam import Exam, exam_tasks
@@ -26,6 +27,7 @@ from app.models.exam_subject_settings import ExamSubjectSettings
 
 __all__ = [
     "Topic",
+    "user_topic_shares",
     "Task",
     "Exam",
     "exam_tasks",
