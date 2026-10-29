@@ -1150,6 +1150,7 @@ export default function TasksPage() {
                                                                                     } else {
                                                                                         setSavedAnswers(prev => ({ ...prev, [task.id]: val }));
                                                                                         setCheckResult(null);
+                                                                                        setSubResults(null);
                                                                                         setPartialCorrect(null);
                                                                                         setExpectedAnswer(null);
                                                                                     }
@@ -1169,6 +1170,11 @@ export default function TasksPage() {
                                                                         </button>
                                                                     )}
                                                                 </div>
+                                                                {subResults && subResults[0] !== undefined && (
+                                                                    <div className={clsx("mt-1.5 text-xs font-medium", subResults[0] ? "text-emerald-600" : "text-red-500")}>
+                                                                        {subResults[0] ? "✓ Верно" : "✕ Неверно"}
+                                                                    </div>
+                                                                )}
                                                                 {checkResult === 'correct' && (
                                                                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
                                                                         <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>
@@ -1194,6 +1200,66 @@ export default function TasksPage() {
                                                             />
                                                         )}
                                                     </div>
+                                                    {task.sub_tasks && task.sub_tasks.length > 0 && (
+                                                        <div className="mt-6 space-y-6">
+                                                            {task.sub_tasks.map((sub, sIdx) => {
+                                                                const key = `${task.id}:${sIdx}`;
+                                                                const subOk = subResults?.[sIdx + 1];
+                                                                return (
+                                                                    <div key={sIdx} className="border-t border-white/10 pt-5">
+                                                                        <div className="prose prose-invert prose-sm mb-3 max-w-none leading-relaxed text-slate-200">
+                                                                            {sub.number != null && (
+                                                                                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                                                    Задание {sub.number}
+                                                                                </div>
+                                                                            )}
+                                                                            <TaskView
+                                                                                content={sub.content_html}
+                                                                                annotatable={canAnnotateTask}
+                                                                                annotationKey={`task:${task.id}:sub:${sIdx}`}
+                                                                                annotationTaskId={task.id}
+                                                                                annotationRefreshKey={annotationRefreshKey}
+                                                                                onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
+                                                                            />
+                                                                        </div>
+                                                                        <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+                                                                            Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
+                                                                        </div>
+                                                                        <AnswerInput
+                                                                            type={sub.answer_type || 'single_number'}
+                                                                            egeNumber={sub.number ?? undefined}
+                                                                            isMath={isMathTask}
+                                                                            examType={taskExamType}
+                                                                            value={savedSubAnswers[key] ?? 0}
+                                                                            onChange={(val) => {
+                                                                                setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
+                                                                                setCheckResult(null);
+                                                                                setSubResults(null);
+                                                                            }}
+                                                                            disabled={check.isPending || viewingFinishedExam}
+                                                                        />
+                                                                        {subOk !== undefined && (
+                                                                            <div className={clsx(
+                                                                                "mt-1.5 text-xs font-medium",
+                                                                                subOk ? "text-emerald-600" : "text-red-500"
+                                                                            )}>
+                                                                                {subOk ? "✓ Верно" : "✕ Неверно"}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                            {!viewingFinishedExam && (
+                                                                <button
+                                                                    onClick={handleCheck}
+                                                                    disabled={check.isPending}
+                                                                    className="px-5 py-2.5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all"
+                                                                >
+                                                                    {check.isPending ? "Проверяю..." : "Проверить все ответы"}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     {false && (
                                                     <div className="mt-5 w-full max-w-[620px]">
                                                         <div className="flex flex-wrap items-end gap-3">
@@ -1275,66 +1341,6 @@ export default function TasksPage() {
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        {task.sub_tasks && task.sub_tasks.length > 0 && (
-                                                            <div className="mt-6 space-y-6">
-                                                                {task.sub_tasks.map((sub, sIdx) => {
-                                                                    const key = `${task.id}:${sIdx}`;
-                                                                    const subOk = subResults?.[sIdx + 1];
-                                                                    return (
-                                                                        <div key={sIdx} className="border-t border-white/10 pt-5">
-                                                                            <div className="prose prose-invert prose-sm mb-3 max-w-none leading-relaxed text-slate-200">
-                                                                                {sub.number != null && (
-                                                                                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                                                        Задание {sub.number}
-                                                                                    </div>
-                                                                                )}
-                                                                                <TaskView
-                                                                                    content={sub.content_html}
-                                                                                    annotatable={canAnnotateTask}
-                                                                                    annotationKey={`task:${task.id}:sub:${sIdx}`}
-                                                                                    annotationTaskId={task.id}
-                                                                                    annotationRefreshKey={annotationRefreshKey}
-                                                                                    onDrawingRecognized={canAnnotateTask ? openRecognizedDrawingSolution : undefined}
-                                                                                />
-                                                                            </div>
-                                                                            <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
-                                                                                Ответ{sub.number ? ` к заданию ${sub.number}` : ''}
-                                                                            </div>
-                                                                            <AnswerInput
-                                                                                type={sub.answer_type || 'single_number'}
-                                                                                egeNumber={sub.number ?? undefined}
-                                                                                isMath={isMathTask}
-                                                                                examType={taskExamType}
-                                                                                value={savedSubAnswers[key] ?? 0}
-                                                                                onChange={(val) => {
-                                                                                    setSavedSubAnswers(prev => ({ ...prev, [key]: val }));
-                                                                                    setCheckResult(null);
-                                                                                    setSubResults(null);
-                                                                                }}
-                                                                                disabled={check.isPending || viewingFinishedExam}
-                                                                            />
-                                                                            {subOk !== undefined && (
-                                                                                <div className={clsx(
-                                                                                    "mt-1.5 text-xs font-medium",
-                                                                                    subOk ? "text-emerald-600" : "text-red-500"
-                                                                                )}>
-                                                                                    {subOk ? "✓ Верно" : "✕ Неверно"}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                                {!viewingFinishedExam && (
-                                                                    <button
-                                                                        onClick={handleCheck}
-                                                                        disabled={check.isPending}
-                                                                        className="px-5 py-2.5 bg-[#4e8c5a] hover:bg-[#62aa78] disabled:opacity-50 text-white rounded-full text-sm font-bold shadow-[0_10px_22px_rgba(78,140,90,0.2)] transition-all"
-                                                                    >
-                                                                        {check.isPending ? "Проверяю..." : "Проверить все ответы"}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
                                                         {checkResult === 'correct' && (
                                                             <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2.5 text-sm font-medium text-emerald-200">
                                                                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-xs">✓</div>

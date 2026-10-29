@@ -17,7 +17,7 @@ from app.models.task import Task
 from app.models.task_solution import UserTaskSolution
 from app.models.topic import Topic
 from app.models.user import User
-from app.routers import admin, content
+from app.routers import admin, content, solving
 
 
 @compiles(JSONB, "sqlite")
@@ -64,6 +64,7 @@ class TopicTaskTests(unittest.IsolatedAsyncioTestCase):
         self.app.dependency_overrides[verify_parser_api_key] = lambda: None
         self.app.include_router(admin.router)
         self.app.include_router(content.router)
+        self.app.include_router(solving.router)
         self.client = AsyncClient(transport=ASGITransport(app=self.app), base_url="http://test")
 
     async def asyncTearDown(self):
@@ -136,6 +137,46 @@ class TopicTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 403, response.text)
         async with self.sessions() as db:
             self.assertEqual((await db.get(Task, 10)).topic_id, 1)
+
+    async def test_composite_19_21_conditions_and_independent_answers(self):
+        async with self.sessions() as db:
+            topic = await db.get(Topic, 1)
+            topic.subject = "informatics"
+            topic.exam_type = "ege"
+            task = await db.get(Task, 10)
+            task.ege_number = 19
+            task.content_html = "Condition 19"
+            task.correct_answer = {"val": 8}
+            task.sub_tasks = [
+                {"number": 20, "content_html": "Condition 20", "answer_type": "single_number", "correct_answer": {"val": 15}},
+                {"number": 21, "content_html": "Condition 21", "answer_type": "single_number", "correct_answer": {"val": 24}},
+            ]
+            await db.commit()
+
+        navigation = (await self.client.get("/navigation")).json()
+        topic = next(t for t in navigation if t["id"] == 1)
+        self.assertEqual([t["id"] for t in topic["tasks"]], [10])
+        self.assertEqual(topic["tasks"][0]["ege_number_max"], 21)
+        detail = await self.client.get("/tasks/10")
+        self.assertEqual(detail.status_code, 200, detail.text)
+        self.assertEqual(detail.json()["content_html"], "Condition 19")
+        self.assertEqual([s["content_html"] for s in detail.json()["sub_tasks"]], ["Condition 20", "Condition 21"])
+        self.assertNotIn("correct_answer", detail.json()["sub_tasks"][0])
+
+        # Change one answer at a time; the other two must survive unchanged.
+        for answers, expected in [
+            ([8, 15, 24], [True, True, True]),
+            ([9, 15, 24], [False, True, True]),
+            ([8, 16, 24], [True, False, True]),
+            ([8, 15, 25], [True, True, False]),
+        ]:
+            response = await self.client.post("/tasks/10/check", json={"answers": answers})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["sub_results"], expected)
+            self.assertEqual(response.json()["correct"], all(expected))
+            restored = (await self.client.get("/tasks/10")).json()
+            self.assertEqual(restored["last_answer"], {"answers": answers})
+            self.assertEqual(restored["last_correct"], all(expected))
 
 
 if __name__ == "__main__":
