@@ -19,7 +19,7 @@ export default function TelegramTopicPage() {
   const start = params.get('tgWebAppStartParam') ?? params.get('topic') ?? '';
   const match = /^(?:topic_)?([1-9]\d*)(?:_([A-Za-z0-9_-]{20,48}))?$/.exec(start);
   const topicId = match ? Number(match[1]) : null;
-  const target = topicId ? `/tasks/${topicId}` : null;
+  const target = topicId ? `/tasks/${topicId}` : start ? null : '/tasks';
   const shareToken = match?.[2] ?? null;
   const initData = window.Telegram?.WebApp?.initData ?? '';
 
@@ -109,7 +109,7 @@ export default function TelegramTopicPage() {
   return <main className="flex min-h-screen items-center justify-center bg-[#f6f8f5] p-5 dark:bg-[#151716]">
     <div className="w-full max-w-md rounded-3xl bg-white p-7 text-gray-900 shadow-lg dark:bg-[#242725] dark:text-white">
       <h1 className="text-xl font-black">Решение задач</h1>
-      {!target && <p className="mt-3">В ссылке не указан топик. Откройте ссылку из поста ещё раз.</p>}
+      {!target && <p className="mt-3">Ссылка на топик недействительна. Откройте ссылку из поста ещё раз.</p>}
       {target && !user && !error && <p className="mt-3">Загружаем ваш профиль…</p>}
       {target && user && initData && telegramId !== user.tg_id && <>
         <p className="mt-3 text-sm">Вы вошли в аккаунт сайта. Привяжите к нему Telegram, чтобы сохранить прогресс в этом профиле.</p>

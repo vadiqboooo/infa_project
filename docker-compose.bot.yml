@@ -1,0 +1,7 @@
+services:
+  telegram-bot:
+    build: ./server
+    restart: unless-stopped
+    volumes:
+      - ./server:/app
+    command: python -m app.telegram_bot
