@@ -368,6 +368,16 @@ function normalizeStackedFractions(html: string): string {
     });
 }
 
+function renderInlineFormula(formula: string): string {
+    const rendered = katex.renderToString(decodeHtmlEntitiesInFormula(fixConcatenatedCommands(formula)), {
+        displayMode: false,
+        throwOnError: false,
+    });
+    return formula.replace(/\s/g, "").length >= 45
+        ? `<span class="task-long-formula" tabindex="0" role="group" aria-label="Длинная формула, прокрутите по горизонтали">${rendered}</span>`
+        : rendered;
+}
+
 // Функция для рендеринга LaTeX-формул
 function renderLatex(text: string): string {
     text = normalizeStackedFractions(text);
@@ -385,7 +395,7 @@ function renderLatex(text: string): string {
     // Обрабатываем inline-формулы $...$
     text = text.replace(/\$([^\$\n]+?)\$/g, (match, formula) => {
         try {
-            return katex.renderToString(decodeHtmlEntitiesInFormula(fixConcatenatedCommands(formula)), { displayMode: false, throwOnError: false });
+            return renderInlineFormula(formula);
         } catch (e) {
             return match;
         }
@@ -394,7 +404,7 @@ function renderLatex(text: string): string {
     // Обрабатываем формулы в нотации \(...\) для inline
     text = text.replace(/\\\(([\s\S]+?)\\\)/g, (match, formula) => {
         try {
-            return katex.renderToString(decodeHtmlEntitiesInFormula(formula), { displayMode: false, throwOnError: false });
+            return renderInlineFormula(formula);
         } catch (e) {
             return match;
         }
